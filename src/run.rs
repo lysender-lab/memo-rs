@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
-use axum::extract::FromRef;
 use axum::Router;
+use axum::extract::FromRef;
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 use tower_cookies::CookieManagerLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
-use tracing::{info, Level};
+use tracing::{Level, info};
 
+use crate::Result;
 use crate::config::Config;
 use crate::web::{assets_routes, private_routes, public_routes, routes_fallback};
-use crate::Result;
 
 #[derive(Clone, FromRef)]
 pub struct AppState {

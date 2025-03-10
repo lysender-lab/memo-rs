@@ -1,6 +1,6 @@
 use axum::extract::DefaultBodyLimit;
-use axum::routing::{get, get_service, post};
-use axum::{middleware, Router};
+use axum::routing::{any, get, get_service, post};
+use axum::{Router, middleware};
 use std::path::PathBuf;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::services::{ServeDir, ServeFile};
@@ -54,7 +54,7 @@ fn album_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/listing", get(album_listing_handler))
         .route("/new", get(new_album_handler).post(post_new_album_handler))
-        .nest("/:album_id", album_inner_routes(state.clone()))
+        .nest("/{album_id}", album_inner_routes(state.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             album_listing_middleware,
@@ -76,7 +76,7 @@ fn album_inner_routes(state: AppState) -> Router<AppState> {
         )
         .route("/photo-grid", get(photo_listing_handler))
         .nest("/upload", upload_route(state.clone()))
-        .nest("/photos/:photo_id", photo_routes(state.clone()))
+        .nest("/photos/{photo_id}", photo_routes(state.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             album_middleware,
@@ -115,5 +115,5 @@ pub fn public_routes(state: AppState) -> Router {
 
 pub fn routes_fallback(state: AppState) -> Router {
     // 404 handler
-    Router::new().nest_service("/", get(error_handler).with_state(state))
+    Router::new().route("/", any(error_handler).with_state(state))
 }

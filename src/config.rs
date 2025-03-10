@@ -10,7 +10,7 @@ pub const PORT: &str = "PORT";
 pub const SSL: &str = "SSL";
 pub const FRONTEND_DIR: &str = "FRONTEND_DIR";
 pub const CAPTCHA_SITE_KEY: &str = "CAPTCHA_SITE_KEY";
-pub const CAPTCHA_SITE_SECRET: &str = "CAPTCHA_SITE_SECRET";
+pub const CAPTCHA_API_KEY: &str = "CAPTCHA_API_KEY";
 pub const API_URL: &str = "API_URL";
 pub const JWT_SECRET: &str = "JWT_SECRET";
 pub const GA_TAG_ID: &str = "GA_TAG_ID";
@@ -21,7 +21,7 @@ pub struct Config {
     pub ssl: bool,
     pub frontend_dir: PathBuf,
     pub captcha_site_key: String,
-    pub captcha_site_secret: String,
+    pub captcha_api_key: String,
     pub api_url: String,
     pub jwt_secret: String,
     pub ga_tag_id: Option<String>,
@@ -55,8 +55,8 @@ impl Config {
         let frontend_dir = PathBuf::from(env_frontend_dir);
         let captcha_site_key: String =
             env::var(CAPTCHA_SITE_KEY).expect("CAPTCHA_SITE_KEY is not set");
-        let captcha_site_secret: String =
-            env::var(CAPTCHA_SITE_SECRET).expect("CAPTCHA_SITE_SECRET is not set");
+        let captcha_api_key: String =
+            env::var(CAPTCHA_API_KEY).expect("CAPTCHA_API_KEY is not set");
         let api_url: String = env::var(API_URL).expect("API_URL is not set");
         let jwt_secret: String = env::var(JWT_SECRET).expect("JWT_SECRET is not set");
         let ga_tag_id: Option<String> = env::var(GA_TAG_ID).ok();
@@ -72,7 +72,7 @@ impl Config {
             ssl,
             frontend_dir,
             captcha_site_key,
-            captcha_site_secret,
+            captcha_api_key,
             api_url,
             jwt_secret,
             ga_tag_id,

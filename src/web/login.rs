@@ -39,9 +39,7 @@ pub async fn login_handler(State(state): State<AppState>) -> impl IntoResponse {
     let actor: Option<Actor> = None;
     let mut t = TemplateData::new(&state, actor, &pref);
     t.title = String::from("Login");
-    t.async_scripts = vec![String::from(
-        "https://www.google.com/recaptcha/api.js?onload=onloadCallbackRecaptcha&render=explicit",
-    )];
+    t.async_scripts = vec!["https://www.google.com/recaptcha/enterprise.js".to_string()];
 
     let config = state.config.clone();
     let captcha_key = config.captcha_site_key.clone();
@@ -72,7 +70,6 @@ pub async fn post_login_handler(
 ) -> impl IntoResponse {
     let config = state.config.clone();
     let captcha_key = config.captcha_site_key.clone();
-    let captcha_secret = config.captcha_site_secret.clone();
 
     // Validate data
     if let Err(err) = login_payload.validate() {
@@ -84,7 +81,7 @@ pub async fn post_login_handler(
                 other => other.to_string(),
             })
             .collect();
-        let mut error_message = "Invalid username or password.".to_string();
+        let mut error_message = "Complete the form.".to_string();
         if errors.contains(&"captcha".to_string()) {
             error_message = "Click the I'm not a robot checkbox.".to_string();
         }
@@ -92,8 +89,12 @@ pub async fn post_login_handler(
     }
 
     // Validate captcha
-    if let Err(captcha_err) =
-        validate_catpcha(&captcha_secret, login_payload.g_recaptcha_response.as_str()).await
+    if let Err(captcha_err) = validate_catpcha(
+        &config.captcha_site_key,
+        &config.captcha_api_key,
+        login_payload.g_recaptcha_response.as_str(),
+    )
+    .await
     {
         return handle_error(state, captcha_err);
     }
