@@ -1,19 +1,21 @@
 use clap::{Parser, Subcommand};
-use dotenvy::dotenv;
 use serde::Deserialize;
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::{env, fs};
 
 use crate::Result;
 
-pub const PORT: &str = "PORT";
-pub const SSL: &str = "SSL";
-pub const FRONTEND_DIR: &str = "FRONTEND_DIR";
-pub const CAPTCHA_SITE_KEY: &str = "CAPTCHA_SITE_KEY";
-pub const CAPTCHA_API_KEY: &str = "CAPTCHA_API_KEY";
-pub const API_URL: &str = "API_URL";
-pub const JWT_SECRET: &str = "JWT_SECRET";
-pub const GA_TAG_ID: &str = "GA_TAG_ID";
+#[derive(Clone, Deserialize)]
+pub struct AppConfig {
+    pub port: u16,
+    pub ssl: bool,
+    pub frontend_dir: PathBuf,
+    pub captcha_site_key: String,
+    pub captcha_api_key: String,
+    pub api_url: String,
+    pub jwt_secret: String,
+    pub ga_tag_id: Option<String>,
+}
 
 #[derive(Clone, Deserialize)]
 pub struct Config {
@@ -44,38 +46,53 @@ struct BundleConfig {
 }
 
 impl Config {
-    pub fn build() -> Result<Config> {
-        dotenv().ok();
+    pub fn build(filename: &PathBuf) -> Result<Config> {
+        let toml_string = match fs::read_to_string(filename) {
+            Ok(str) => str,
+            Err(e) => {
+                return Err(format!("Error reading config file: {}", e).into());
+            }
+        };
 
-        let env_port = env::var(PORT).expect("PORT is not set");
-        let port: u16 = env_port.parse().expect("PORT is not a valid number");
-        let env_ssl = env::var(SSL).expect("SSL is not set");
-        let ssl = env_ssl.as_str() == "1";
-        let env_frontend_dir = env::var(FRONTEND_DIR).expect("FRONTEND_DIR is not set");
-        let frontend_dir = PathBuf::from(env_frontend_dir);
-        let captcha_site_key: String =
-            env::var(CAPTCHA_SITE_KEY).expect("CAPTCHA_SITE_KEY is not set");
-        let captcha_api_key: String =
-            env::var(CAPTCHA_API_KEY).expect("CAPTCHA_API_KEY is not set");
-        let api_url: String = env::var(API_URL).expect("API_URL is not set");
-        let jwt_secret: String = env::var(JWT_SECRET).expect("JWT_SECRET is not set");
-        let ga_tag_id: Option<String> = env::var(GA_TAG_ID).ok();
+        let config: AppConfig = match toml::from_str(toml_string.as_str()) {
+            Ok(value) => value,
+            Err(e) => {
+                return Err(format!("Error parsing config file: {}", e).into());
+            }
+        };
 
-        if !frontend_dir.exists() {
-            return Err("Frontend dir does not exists.".into());
+        // Validate config values
+        if config.jwt_secret.len() == 0 {
+            return Err("JWT secret is required.".into());
+        }
+        if config.captcha_api_key.len() == 0 {
+            return Err("Captcha API key is required.".into());
+        }
+        if config.captcha_site_key.len() == 0 {
+            return Err("Captcha site key is required.".into());
+        }
+        if config.api_url.len() == 0 {
+            return Err("API URL is required.".into());
+        }
+        if config.port == 0 {
+            return Err("Server port is required.".into());
         }
 
-        let assets = AssetManifest::build(&frontend_dir)?;
+        if !config.frontend_dir.exists() {
+            return Err("Frontend directory does not exist.".into());
+        }
+
+        let assets = AssetManifest::build(&config.frontend_dir)?;
 
         Ok(Config {
-            port,
-            ssl,
-            frontend_dir,
-            captcha_site_key,
-            captcha_api_key,
-            api_url,
-            jwt_secret,
-            ga_tag_id,
+            port: config.port,
+            ssl: config.ssl,
+            frontend_dir: config.frontend_dir,
+            captcha_site_key: config.captcha_site_key,
+            captcha_api_key: config.captcha_api_key,
+            api_url: config.api_url,
+            jwt_secret: config.jwt_secret,
+            ga_tag_id: config.ga_tag_id,
             assets,
         })
     }
@@ -109,6 +126,9 @@ impl AssetManifest {
 pub struct Args {
     #[command(subcommand)]
     pub command: Commands,
+
+    #[arg(short, long, value_name = "config.toml")]
+    pub config: PathBuf,
 }
 
 #[derive(Subcommand, Debug)]

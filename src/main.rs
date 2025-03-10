@@ -33,7 +33,7 @@ async fn main() {
 async fn run_command(arg: Args) -> Result<()> {
     match arg.command {
         Commands::Server => {
-            let config = Config::build()?;
+            let config = Config::build(&arg.config)?;
             run(config).await?;
             Ok(())
         }
