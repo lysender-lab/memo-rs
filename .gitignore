@@ -12,3 +12,5 @@ target/
 # Dev env configs
 .cargo
 .env
+
+config.toml

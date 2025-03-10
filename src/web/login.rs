@@ -4,20 +4,20 @@ use axum::{
     http::Response,
     response::IntoResponse,
 };
-use tower_cookies::{cookie::time::Duration, Cookie, Cookies};
+use tower_cookies::{Cookie, Cookies, cookie::time::Duration};
 use validator::Validate;
 
+use crate::{
+    Error,
+    models::{LoginFormPayload, TemplateData},
+    services::{AuthPayload, authenticate, validate_catpcha},
+};
 use crate::{
     models::{Actor, Pref},
     run::AppState,
 };
-use crate::{
-    models::{LoginFormPayload, TemplateData},
-    services::{authenticate, validate_catpcha, AuthPayload},
-    Error,
-};
 
-use super::{ErrorInfo, AUTH_TOKEN_COOKIE};
+use super::{AUTH_TOKEN_COOKIE, ErrorInfo};
 
 #[derive(Template)]
 #[template(path = "pages/login.html")]
@@ -39,9 +39,7 @@ pub async fn login_handler(State(state): State<AppState>) -> impl IntoResponse {
     let actor: Option<Actor> = None;
     let mut t = TemplateData::new(&state, actor, &pref);
     t.title = String::from("Login");
-    t.async_scripts = vec![String::from(
-        "https://www.google.com/recaptcha/api.js?onload=onloadCallbackRecaptcha&render=explicit",
-    )];
+    t.async_scripts = vec!["https://www.google.com/recaptcha/enterprise.js".to_string()];
 
     let config = state.config.clone();
     let captcha_key = config.captcha_site_key.clone();
@@ -72,28 +70,31 @@ pub async fn post_login_handler(
 ) -> impl IntoResponse {
     let config = state.config.clone();
     let captcha_key = config.captcha_site_key.clone();
-    let captcha_secret = config.captcha_site_secret.clone();
 
     // Validate data
     if let Err(err) = login_payload.validate() {
-        let errors: Vec<&str> = err
+        let errors: Vec<String> = err
             .field_errors()
             .keys()
-            .map(|k| match *k {
-                "g-recaptcha-response" => "captcha",
-                other => other,
+            .map(|k| match k.as_ref() {
+                "g-recaptcha-response" => "captcha".to_string(),
+                other => other.to_string(),
             })
             .collect();
-        let mut error_message = "Invalid username or password.".to_string();
-        if errors.contains(&"captcha") {
+        let mut error_message = "Complete the form.".to_string();
+        if errors.contains(&"captcha".to_string()) {
             error_message = "Click the I'm not a robot checkbox.".to_string();
         }
         return handle_error(state, Error::ValidationError(error_message));
     }
 
     // Validate captcha
-    if let Err(captcha_err) =
-        validate_catpcha(&captcha_secret, login_payload.g_recaptcha_response.as_str()).await
+    if let Err(captcha_err) = validate_catpcha(
+        &config.captcha_site_key,
+        &config.captcha_api_key,
+        login_payload.g_recaptcha_response.as_str(),
+    )
+    .await
     {
         return handle_error(state, captcha_err);
     }

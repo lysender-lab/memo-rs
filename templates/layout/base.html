@@ -35,6 +35,12 @@
 <script async src="{{ script }}"></script>
 {% endfor %}
 
+<script>
+{% for line in t.script_vars %}
+{{ line|safe  }}
+{% endfor %}
+</script>
+
 {% match t.ga_tag_id %}
     {% when Some with (ga_tag_id) %}
         <script async src="https://www.googletagmanager.com/gtag/js?id={{ ga_tag_id }}"></script>

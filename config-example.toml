@@ -1,0 +1,7 @@
+port = 11000
+ssl = false
+frontend_dir = "/path/to/frontend"
+captcha_site_key = "site-key"
+captcha_api_key = "api-key"
+api_url = "http://127.0.0.1:11001"
+jwt_secret = "xx"

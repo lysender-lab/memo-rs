@@ -1,18 +1,18 @@
 use askama::Template;
 use axum::{
+    Extension,
     body::Body,
     extract::{Query, State},
     response::Response,
-    Extension,
 };
 use urlencoding::encode;
 
 use crate::{
+    Error,
     ctx::Ctx,
     models::{Album, ListAlbumsParams},
     services::list_albums,
-    web::{enforce_policy, Action, ErrorInfo, Resource},
-    Error,
+    web::{Action, ErrorInfo, Resource, enforce_policy},
 };
 use crate::{models::PaginationLinks, run::AppState};
 

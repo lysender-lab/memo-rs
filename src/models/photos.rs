@@ -3,11 +3,22 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Deserialize)]
 pub struct Album {
     pub id: String,
+
+    #[allow(dead_code)]
     pub bucket_id: String,
+
+    #[allow(dead_code)]
     pub name: String,
+
     pub label: String,
+
+    #[allow(dead_code)]
     pub file_count: i64,
+
+    #[allow(dead_code)]
     pub created_at: i64,
+
+    #[allow(dead_code)]
     pub updated_at: i64,
 }
 
@@ -55,6 +66,7 @@ pub struct FileObject {
     pub size: i64,
 
     // Only available on non-image files
+    #[allow(dead_code)]
     pub url: Option<String>,
 
     pub is_image: bool,

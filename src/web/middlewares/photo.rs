@@ -1,17 +1,17 @@
 use axum::{
+    Extension,
     extract::{Path, Request, State},
     middleware::Next,
     response::Response,
-    Extension,
 };
 
 use crate::{
+    Error,
     ctx::Ctx,
     models::{PhotoParams, Pref},
     run::AppState,
     services::get_photo,
-    web::{enforce_policy, handle_error, Action, Resource},
-    Error,
+    web::{Action, Resource, enforce_policy, handle_error},
 };
 
 pub async fn photo_middleware(

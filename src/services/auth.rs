@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::error;
 
-use crate::{models::Actor, Error, Result};
+use crate::{Error, Result, models::Actor};
 
 #[derive(Serialize)]
 pub struct AuthPayload {

@@ -1,36 +1,89 @@
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use crate::{Error, Result};
+use crate::Result;
 
-const VERIFY_URL: &str = "https://www.google.com/recaptcha/api/siteverify";
+const VERIFY_URL: &str =
+    "https://recaptchaenterprise.googleapis.com/v1/projects/lysender-misc-project/assessments?key=";
+
+#[derive(Serialize)]
+struct CaptchaEvent {
+    token: String,
+
+    #[serde(rename = "expectedAction")]
+    expected_token: String,
+
+    #[serde(rename = "siteKey")]
+    site_key: String,
+}
+
+#[derive(Serialize)]
+struct CaptchaPayload {
+    event: CaptchaEvent,
+}
 
 #[derive(Deserialize)]
 struct CaptchaResponse {
-    success: bool,
+    #[allow(dead_code)]
+    name: String,
+
+    #[allow(dead_code)]
+    event: CaptchaResponseEvent,
+
+    #[serde(rename = "riskAnalysis")]
+    #[allow(dead_code)]
+    risk_analysis: RiskAnalysis,
+
+    #[serde(rename = "tokenProperties")]
+    #[allow(dead_code)]
+    token_properties: TokenProperties,
 }
 
-pub async fn validate_catpcha(secret: &str, response: &str) -> Result<()> {
-    let post_body = [("secret", secret), ("response", response)];
+#[derive(Deserialize)]
+struct CaptchaResponseEvent {
+    #[allow(dead_code)]
+    token: String,
+}
 
-    let result = Client::new().post(VERIFY_URL).form(&post_body).send().await;
-    let Ok(response) = result else {
-        return Err("Unable to validate captcha. Try again later.".into());
+#[derive(Deserialize)]
+struct RiskAnalysis {
+    #[allow(dead_code)]
+    score: f64,
+
+    #[allow(dead_code)]
+    reasons: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct TokenProperties {
+    #[allow(dead_code)]
+    valid: bool,
+
+    #[serde(rename = "invalidReason")]
+    #[allow(dead_code)]
+    invalid_reason: String,
+}
+
+pub async fn validate_catpcha(site_key: &str, api_key: &str, response: &str) -> Result<()> {
+    let post_body = CaptchaPayload {
+        event: CaptchaEvent {
+            token: response.to_string(),
+            expected_token: "login".to_string(),
+            site_key: site_key.to_string(),
+        },
     };
-    if !response.status().is_success() {
-        return Err("Unable to validate captcha. Try again later.".into());
-    }
-    let captcha_res = response.json::<CaptchaResponse>().await;
-    match captcha_res {
-        Ok(captcha_res) => {
-            if captcha_res.success {
+
+    let url = format!("{}{}", VERIFY_URL, api_key);
+    let result = Client::new().post(url).json(&post_body).send().await;
+    match result {
+        Ok(response) => {
+            if response.status().is_success() {
                 Ok(())
             } else {
-                Err(Error::InvalidCaptcha("Invalid captcha.".to_string()))
+                let err_str = response.text().await.unwrap();
+                Err(format!("Unable to validate captcha: {}", err_str).into())
             }
         }
-        Err(_) => Err(Error::JsonParseError(
-            "Unable to validate captcha. Try again later.".to_string(),
-        )),
+        Err(err_response) => Err(format!("Validate captcha error: {}", err_response).into()),
     }
 }

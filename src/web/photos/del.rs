@@ -1,14 +1,13 @@
 use askama::Template;
-use axum::http::StatusCode;
 use axum::Form;
-use axum::{body::Body, extract::State, response::Response, Extension};
+use axum::{Extension, body::Body, extract::State, response::Response};
 
 use crate::models::{DeletePhotoForm, Photo};
 use crate::run::AppState;
 use crate::services::{create_csrf_token, delete_photo};
-use crate::{ctx::Ctx, models::Album, Error};
+use crate::{Error, ctx::Ctx, models::Album};
 
-use crate::web::{enforce_policy, handle_error_message, Action, ErrorInfo, Resource};
+use crate::web::{Action, ErrorInfo, Resource, enforce_policy, handle_error_message};
 
 #[derive(Template)]
 #[template(path = "widgets/pre_delete_photo_form.html")]
@@ -81,7 +80,7 @@ pub async fn exec_delete_photo_handler(
     Extension(album): Extension<Album>,
     Extension(photo): Extension<Photo>,
     State(state): State<AppState>,
-    payload: Option<Form<DeletePhotoForm>>,
+    payload: Form<DeletePhotoForm>,
 ) -> Response<Body> {
     let config = state.config.clone();
     let actor = ctx.actor();
@@ -100,32 +99,30 @@ pub async fn exec_delete_photo_handler(
         ));
     };
 
-    let mut status_code = StatusCode::BAD_REQUEST;
-    let mut error_message = Some("Invalid form data. Refresh the page and try again.".to_string());
+    let status_code;
+    let error_message;
 
-    if let Some(form) = payload {
-        let result = delete_photo(
-            &config,
-            ctx.token(),
-            &bucket_id,
-            &album.id,
-            &photo.id,
-            &form.token,
-        )
-        .await;
-        match result {
-            Ok(_) => {
-                return Response::builder()
-                    .status(204)
-                    .header("HX-Trigger", "PhotoDeletedEvent")
-                    .body(Body::from("".to_string()))
-                    .unwrap();
-            }
-            Err(err) => {
-                let error_info: ErrorInfo = err.into();
-                error_message = Some(error_info.message);
-                status_code = error_info.status_code;
-            }
+    let result = delete_photo(
+        &config,
+        ctx.token(),
+        &bucket_id,
+        &album.id,
+        &photo.id,
+        &payload.token,
+    )
+    .await;
+    match result {
+        Ok(_) => {
+            return Response::builder()
+                .status(204)
+                .header("HX-Trigger", "PhotoDeletedEvent")
+                .body(Body::from("".to_string()))
+                .unwrap();
+        }
+        Err(err) => {
+            let error_info: ErrorInfo = err.into();
+            error_message = Some(error_info.message);
+            status_code = error_info.status_code;
         }
     }
 

@@ -1,12 +1,12 @@
 use askama::Template;
-use axum::{body::Body, extract::State, response::Response, Extension, Form};
+use axum::{Extension, Form, body::Body, extract::State, response::Response};
 
 use crate::models::{Pref, UpdateAlbumForm};
 use crate::run::AppState;
 use crate::services::{create_csrf_token, update_album};
-use crate::{ctx::Ctx, models::Album, Error};
+use crate::{Error, ctx::Ctx, models::Album};
 
-use crate::web::{enforce_policy, handle_error, Action, ErrorInfo, Resource};
+use crate::web::{Action, ErrorInfo, Resource, enforce_policy, handle_error};
 
 #[derive(Template)]
 #[template(path = "widgets/edit_album_form.html")]
@@ -86,7 +86,7 @@ pub async fn post_edit_album_handler(
     Extension(pref): Extension<Pref>,
     Extension(album): Extension<Album>,
     State(state): State<AppState>,
-    payload: Option<Form<UpdateAlbumForm>>,
+    payload: Form<UpdateAlbumForm>,
 ) -> Response<Body> {
     let config = state.config.clone();
     let album_id = album.id.clone();
@@ -121,37 +121,29 @@ pub async fn post_edit_album_handler(
     };
 
     let mut status = 200;
-    match payload {
-        Some(form) => {
-            tpl.payload.label = form.label.clone();
+    tpl.payload.label = payload.label.clone();
 
-            let result = update_album(&config, ctx.token(), &bucket_id, &album_id, &form).await;
-            match result {
-                Ok(updated_album) => {
-                    tpl.album = updated_album;
-                    tpl.updated = true;
-                }
-                Err(err) => match err {
-                    Error::ValidationError(msg) => {
-                        status = 400;
-                        tpl.error_message = Some(msg);
-                    }
-                    Error::LoginRequired(msg) => {
-                        status = 401;
-                        tpl.error_message = Some(msg);
-                    }
-                    any_err => {
-                        status = 500;
-                        tpl.error_message = Some(any_err.to_string());
-                    }
-                },
+    let result = update_album(&config, ctx.token(), &bucket_id, &album_id, &payload).await;
+    match result {
+        Ok(updated_album) => {
+            tpl.album = updated_album;
+            tpl.updated = true;
+        }
+        Err(err) => match err {
+            Error::ValidationError(msg) => {
+                status = 400;
+                tpl.error_message = Some(msg);
             }
-        }
-        None => {
-            status = 400;
-            tpl.error_message = Some("Invalid form data.".to_string());
-        }
-    };
+            Error::LoginRequired(msg) => {
+                status = 401;
+                tpl.error_message = Some(msg);
+            }
+            any_err => {
+                status = 500;
+                tpl.error_message = Some(any_err.to_string());
+            }
+        },
+    }
 
     if tpl.updated {
         // Render the controls again with an out-of-bound swap for title
