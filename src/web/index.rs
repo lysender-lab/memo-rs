@@ -1,9 +1,9 @@
 use askama::Template;
 use axum::{
+    Extension,
     body::Body,
     extract::{Query, State},
     response::Response,
-    Extension,
 };
 
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
 };
 use crate::{models::Pref, run::AppState};
 
-use super::{enforce_policy, handle_error, Action, Resource};
+use super::{Action, Resource, enforce_policy, handle_error};
 
 #[derive(Template)]
 #[template(path = "pages/index.html")]

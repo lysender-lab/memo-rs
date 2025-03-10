@@ -1,6 +1,6 @@
 use askama::Template;
 use axum::{body::Body, extract::State, response::Response};
-use tower_cookies::{cookie::time::Duration, Cookie, Cookies};
+use tower_cookies::{Cookie, Cookies, cookie::time::Duration};
 
 use crate::run::AppState;
 

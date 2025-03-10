@@ -1,18 +1,18 @@
 use axum::{
+    Extension,
     extract::{Request, State},
     middleware::Next,
     response::{IntoResponse, Redirect, Response},
-    Extension,
 };
 use axum_extra::extract::CookieJar;
 
 use crate::{
+    Error,
     ctx::Ctx,
     models::Pref,
     run::AppState,
     services::authenticate_token,
-    web::{handle_error, AUTH_TOKEN_COOKIE},
-    Error,
+    web::{AUTH_TOKEN_COOKIE, handle_error},
 };
 
 pub async fn require_auth_middleware(

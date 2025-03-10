@@ -1,18 +1,18 @@
 use askama::Template;
 use axum::extract::Query;
-use axum::{body::Body, extract::State, response::Response, Extension};
+use axum::{Extension, body::Body, extract::State, response::Response};
 
 use crate::models::{ListPhotosParams, PaginatedMeta, Pref};
 use crate::run::AppState;
 use crate::web::ErrorInfo;
 use crate::{
+    Error,
     ctx::Ctx,
     models::{Album, Photo, TemplateData},
     services::list_photos,
-    Error,
 };
 
-use crate::web::policies::{enforce_policy, Action, Resource};
+use crate::web::policies::{Action, Resource, enforce_policy};
 
 #[derive(Template)]
 #[template(path = "pages/photos.html")]

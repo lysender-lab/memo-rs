@@ -2,19 +2,19 @@ use askama::Template;
 use axum::body::Bytes;
 use axum::extract::Query;
 use axum::http::HeaderMap;
-use axum::{body::Body, extract::State, response::Response, Extension};
+use axum::{Extension, body::Body, extract::State, response::Response};
 
+use crate::Error;
 use crate::models::{Pref, UploadParams};
 use crate::run::AppState;
 use crate::services::{create_csrf_token, upload_photo};
-use crate::web::{handle_error, handle_error_message, ErrorInfo};
-use crate::Error;
+use crate::web::{ErrorInfo, handle_error, handle_error_message};
 use crate::{
     ctx::Ctx,
     models::{Album, Photo, TemplateData},
 };
 
-use crate::web::policies::{enforce_policy, Action, Resource};
+use crate::web::policies::{Action, Resource, enforce_policy};
 
 #[derive(Template)]
 #[template(path = "pages/upload_photos.html")]
