@@ -4,20 +4,20 @@ use axum::{
     http::Response,
     response::IntoResponse,
 };
-use tower_cookies::{cookie::time::Duration, Cookie, Cookies};
+use tower_cookies::{Cookie, Cookies, cookie::time::Duration};
 use validator::Validate;
 
+use crate::{
+    Error,
+    models::{LoginFormPayload, TemplateData},
+    services::{AuthPayload, authenticate, validate_catpcha},
+};
 use crate::{
     models::{Actor, Pref},
     run::AppState,
 };
-use crate::{
-    models::{LoginFormPayload, TemplateData},
-    services::{authenticate, validate_catpcha, AuthPayload},
-    Error,
-};
 
-use super::{ErrorInfo, AUTH_TOKEN_COOKIE};
+use super::{AUTH_TOKEN_COOKIE, ErrorInfo};
 
 #[derive(Template)]
 #[template(path = "pages/login.html")]
@@ -76,16 +76,16 @@ pub async fn post_login_handler(
 
     // Validate data
     if let Err(err) = login_payload.validate() {
-        let errors: Vec<&str> = err
+        let errors: Vec<String> = err
             .field_errors()
             .keys()
-            .map(|k| match *k {
-                "g-recaptcha-response" => "captcha",
-                other => other,
+            .map(|k| match k.as_ref() {
+                "g-recaptcha-response" => "captcha".to_string(),
+                other => other.to_string(),
             })
             .collect();
         let mut error_message = "Invalid username or password.".to_string();
-        if errors.contains(&"captcha") {
+        if errors.contains(&"captcha".to_string()) {
             error_message = "Click the I'm not a robot checkbox.".to_string();
         }
         return handle_error(state, Error::ValidationError(error_message));

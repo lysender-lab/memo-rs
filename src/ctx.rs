@@ -19,10 +19,3 @@ impl Ctx {
         &self.actor
     }
 }
-
-pub fn extract_ctx_actor(ctx: &Option<Ctx>) -> Option<Actor> {
-    match ctx {
-        Some(node) => Some(node.actor.clone()),
-        None => None,
-    }
-}

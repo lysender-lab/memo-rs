@@ -1,15 +1,15 @@
 use askama::Template;
-use axum::http::{Method, StatusCode};
 use axum::Form;
-use axum::{body::Body, extract::State, response::Response, Extension};
+use axum::http::{Method, StatusCode};
+use axum::{Extension, body::Body, extract::State, response::Response};
 
+use crate::Error;
 use crate::models::{DeleteAlbumForm, Pref};
 use crate::run::AppState;
 use crate::services::{create_csrf_token, delete_album};
-use crate::Error;
 use crate::{ctx::Ctx, models::Album};
 
-use crate::web::{enforce_policy, handle_error, Action, ErrorInfo, Resource};
+use crate::web::{Action, ErrorInfo, Resource, enforce_policy, handle_error};
 
 #[derive(Template)]
 #[template(path = "widgets/delete_album_form.html")]
@@ -26,7 +26,7 @@ pub async fn delete_album_handler(
     Extension(album): Extension<Album>,
     State(state): State<AppState>,
     method: Method,
-    payload: Option<Form<DeleteAlbumForm>>,
+    payload: Form<DeleteAlbumForm>,
 ) -> Response<Body> {
     let config = state.config.clone();
     let actor = ctx.actor();
@@ -54,34 +54,29 @@ pub async fn delete_album_handler(
     let mut status_code: StatusCode = StatusCode::OK;
 
     if method == Method::POST {
-        if let Some(form) = payload {
-            let result =
-                delete_album(&config, ctx.token(), &bucket_id, &album.id, &form.token).await;
-            match result {
-                Ok(_) => {
-                    // Render same form but trigger a redirect to home
-                    let tpl = DeleteAlbumTemplate {
-                        album,
-                        payload: DeleteAlbumForm {
-                            token: "".to_string(),
-                        },
-                        error_message,
-                    };
-                    return Response::builder()
-                        .status(200)
-                        .header("HX-Redirect", "/")
-                        .body(Body::from(tpl.render().unwrap()))
-                        .unwrap();
-                }
-                Err(err) => {
-                    let error_info: ErrorInfo = err.into();
-                    error_message = Some(error_info.message);
-                    status_code = error_info.status_code;
-                }
+        let result =
+            delete_album(&config, ctx.token(), &bucket_id, &album.id, &payload.token).await;
+        match result {
+            Ok(_) => {
+                // Render same form but trigger a redirect to home
+                let tpl = DeleteAlbumTemplate {
+                    album,
+                    payload: DeleteAlbumForm {
+                        token: "".to_string(),
+                    },
+                    error_message,
+                };
+                return Response::builder()
+                    .status(200)
+                    .header("HX-Redirect", "/")
+                    .body(Body::from(tpl.render().unwrap()))
+                    .unwrap();
             }
-        } else {
-            status_code = StatusCode::BAD_REQUEST;
-            error_message = Some("Invalid form data. Refresh the page and try again.".to_string());
+            Err(err) => {
+                let error_info: ErrorInfo = err.into();
+                error_message = Some(error_info.message);
+                status_code = error_info.status_code;
+            }
         }
     }
 

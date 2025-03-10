@@ -1,14 +1,14 @@
 use askama::Template;
 use axum::http::StatusCode;
-use axum::{body::Body, extract::State, response::Response, Extension, Form};
+use axum::{Extension, Form, body::Body, extract::State, response::Response};
 
+use crate::Error;
 use crate::models::{NewAlbumForm, Pref};
 use crate::run::AppState;
 use crate::services::create_csrf_token;
-use crate::Error;
 use crate::{ctx::Ctx, models::TemplateData, services::create_album};
 
-use crate::web::{enforce_policy, handle_error, Action, ErrorInfo, Resource};
+use crate::web::{Action, ErrorInfo, Resource, enforce_policy, handle_error};
 
 #[derive(Template)]
 #[template(path = "pages/new_album.html")]
@@ -27,6 +27,7 @@ struct AlbumFormTemplate {
     error_message: Option<String>,
 }
 
+#[axum::debug_handler]
 pub async fn new_album_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(pref): Extension<Pref>,
@@ -64,11 +65,12 @@ pub async fn new_album_handler(
         .unwrap()
 }
 
+#[axum::debug_handler]
 pub async fn post_new_album_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(pref): Extension<Pref>,
     State(state): State<AppState>,
-    payload: Option<Form<NewAlbumForm>>,
+    payload: Form<NewAlbumForm>,
 ) -> Response<Body> {
     let config = state.config.clone();
     let actor = ctx.actor();
@@ -102,39 +104,35 @@ pub async fn post_new_album_handler(
         error_message: None,
     };
 
-    let mut status: StatusCode = StatusCode::INTERNAL_SERVER_ERROR;
+    let status: StatusCode;
 
-    if let Some(form) = payload {
-        let album = NewAlbumForm {
-            name: form.name.clone(),
-            label: form.label.clone(),
-            token: form.token.clone(),
-        };
+    let album = NewAlbumForm {
+        name: payload.name.clone(),
+        label: payload.label.clone(),
+        token: payload.token.clone(),
+    };
 
-        let result = create_album(&config, ctx.token(), &bucket_id, album).await;
+    let result = create_album(&config, ctx.token(), &bucket_id, album).await;
 
-        match result {
-            Ok(album) => {
-                let next_url = format!("/albums/{}", &album.id);
-                // Weird but can't do a redirect here, let htmx handle it
-                return Response::builder()
-                    .status(200)
-                    .header("HX-Redirect", next_url)
-                    .body(Body::from("".to_string()))
-                    .unwrap();
-            }
-            Err(err) => {
-                let error_info: ErrorInfo = err.into();
-                status = error_info.status_code;
-                tpl.error_message = Some(error_info.message);
-            }
+    match result {
+        Ok(album) => {
+            let next_url = format!("/albums/{}", &album.id);
+            // Weird but can't do a redirect here, let htmx handle it
+            return Response::builder()
+                .status(200)
+                .header("HX-Redirect", next_url)
+                .body(Body::from("".to_string()))
+                .unwrap();
         }
-
-        tpl.payload.name = form.name.clone();
-        tpl.payload.label = form.label.clone();
-    } else {
-        tpl.error_message = Some("Invalid form data. Refresh the page and try again.".to_string());
+        Err(err) => {
+            let error_info: ErrorInfo = err.into();
+            status = error_info.status_code;
+            tpl.error_message = Some(error_info.message);
+        }
     }
+
+    tpl.payload.name = payload.name.clone();
+    tpl.payload.label = payload.label.clone();
 
     // Will only arrive here on error
     Response::builder()

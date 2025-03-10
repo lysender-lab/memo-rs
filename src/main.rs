@@ -17,11 +17,6 @@ pub use error::{Error, Result};
 
 #[tokio::main]
 async fn main() {
-    // Set the RUST_LOG, if it hasn't been explicitly defined
-    if std::env::var("RUST_LOG").is_err() {
-        std::env::set_var("RUST_LOG", "memo_rs=info")
-    }
-
     tracing_subscriber::fmt()
         .with_target(false)
         .compact()

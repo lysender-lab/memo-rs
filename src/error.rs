@@ -27,8 +27,12 @@ pub enum Error {
 
 #[derive(Deserialize)]
 pub struct ErrorResponse {
+    #[allow(dead_code)]
     pub status_code: u16,
+
     pub message: String,
+
+    #[allow(dead_code)]
     pub error: String,
 }
 
