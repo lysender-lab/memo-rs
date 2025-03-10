@@ -1,8 +1,11 @@
+use std::collections::HashMap;
+
 use askama::Template;
 use axum::{
-    extract::{Form, State},
+    body::Body,
+    extract::{Form, Query, State},
     http::Response,
-    response::IntoResponse,
+    response::{IntoResponse, Redirect},
 };
 use tower_cookies::{Cookie, Cookies, cookie::time::Duration};
 use validator::Validate;
@@ -27,14 +30,11 @@ struct LoginTemplate {
     error_message: Option<String>,
 }
 
-#[derive(Template)]
-#[template(path = "widgets/login_form.html")]
-struct SubmitLoginData {
-    error_message: Option<String>,
-    captcha_key: String,
-}
-
-pub async fn login_handler(State(state): State<AppState>) -> impl IntoResponse {
+#[axum::debug_handler]
+pub async fn login_handler(
+    State(state): State<AppState>,
+    Query(query): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
     let pref = Pref::new();
     let actor: Option<Actor> = None;
     let mut t = TemplateData::new(&state, actor, &pref);
@@ -44,10 +44,15 @@ pub async fn login_handler(State(state): State<AppState>) -> impl IntoResponse {
     let config = state.config.clone();
     let captcha_key = config.captcha_site_key.clone();
 
+    let mut error_message = None;
+    if let Some(err) = query.get("error") {
+        error_message = Some(err.to_string());
+    }
+
     let tpl = LoginTemplate {
         t,
         captcha_key,
-        error_message: None,
+        error_message,
     };
 
     Response::builder()
@@ -63,13 +68,13 @@ pub async fn login_handler(State(state): State<AppState>) -> impl IntoResponse {
         .unwrap()
 }
 
+#[axum::debug_handler]
 pub async fn post_login_handler(
     cookies: Cookies,
     State(state): State<AppState>,
     Form(login_payload): Form<LoginFormPayload>,
 ) -> impl IntoResponse {
     let config = state.config.clone();
-    let captcha_key = config.captcha_site_key.clone();
 
     // Validate data
     if let Err(err) = login_payload.validate() {
@@ -85,7 +90,7 @@ pub async fn post_login_handler(
         if errors.contains(&"captcha".to_string()) {
             error_message = "Click the I'm not a robot checkbox.".to_string();
         }
-        return handle_error(state, Error::ValidationError(error_message));
+        return handle_error(Error::ValidationError(error_message));
     }
 
     // Validate captcha
@@ -96,7 +101,7 @@ pub async fn post_login_handler(
     )
     .await
     {
-        return handle_error(state, captcha_err);
+        return handle_error(captcha_err);
     }
 
     // Validate login information
@@ -108,13 +113,8 @@ pub async fn post_login_handler(
     let auth = match login_result {
         Ok(val) => val,
         Err(err) => {
-            return handle_error(state, err);
+            return handle_error(err);
         }
-    };
-
-    let tpl = SubmitLoginData {
-        captcha_key,
-        error_message: None,
     };
 
     let auth_cookie = Cookie::build((AUTH_TOKEN_COOKIE, auth.token.clone()))
@@ -126,22 +126,12 @@ pub async fn post_login_handler(
 
     cookies.add(auth_cookie);
 
-    Response::builder()
-        .status(200)
-        .header("HX-Redirect", "/")
-        .body(tpl.render().unwrap())
-        .unwrap()
+    Redirect::to("/").into_response()
 }
 
-fn handle_error(state: AppState, error: Error) -> Response<String> {
-    let config = state.config.clone();
+fn handle_error(error: Error) -> Response<Body> {
     let error_info: ErrorInfo = error.into();
-    let tpl = SubmitLoginData {
-        captcha_key: config.captcha_site_key.clone(),
-        error_message: Some(error_info.message),
-    };
-    Response::builder()
-        .status(error_info.status_code)
-        .body(tpl.render().unwrap())
-        .unwrap()
+
+    let url = format!("/login?error={}", error_info.message);
+    Redirect::to(url.as_str()).into_response()
 }
