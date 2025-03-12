@@ -1,0 +1,12 @@
+jwt_secret = "secret"
+upload_dir = "/path/to/upload/dir"
+
+[cloud]
+project_id = "google-cloud-project-id"
+credentials = "/path/to/google/credentials.json"
+
+[server]
+port = 42000 
+
+[db]
+url = "sqlite://db.sqlite3"
