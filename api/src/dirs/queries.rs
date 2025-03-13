@@ -9,10 +9,10 @@ use validator::Validate;
 use crate::dirs::{Dir, NewDir, UpdateDir};
 use crate::files::count_dir_files;
 use crate::schema::dirs::{self, dsl};
-use crate::util::generate_id;
-use crate::validators::flatten_errors;
 use crate::web::pagination::Paginated;
 use crate::{Error, Result};
+use memo::utils::generate_id;
+use memo::validators::flatten_errors;
 
 use super::ListDirsParams;
 

@@ -1,7 +1,7 @@
 use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 
-use super::error::ErrorResponse;
 use super::server::AppState;
+use memo::error::ErrorResponse;
 
 pub async fn not_found_handler(State(_state): State<AppState>) -> impl IntoResponse {
     (

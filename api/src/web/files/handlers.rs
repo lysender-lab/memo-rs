@@ -16,9 +16,9 @@ use crate::{
     },
     roles::Permission,
     storage::{delete_file_object, format_file, format_files},
-    util::slugify_prefixed,
     web::{pagination::Paginated, response::JsonResponse, server::AppState},
 };
+use memo::utils::slugify_prefixed;
 
 #[axum::debug_handler]
 pub async fn list_files_handler(

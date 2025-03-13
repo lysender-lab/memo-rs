@@ -16,7 +16,7 @@ pub struct Client {
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct NewClient {
     #[validate(length(min = 1, max = 50))]
-    #[validate(custom(function = "crate::validators::anyname"))]
+    #[validate(custom(function = "memo::validators::anyname"))]
     pub name: String,
 }
 

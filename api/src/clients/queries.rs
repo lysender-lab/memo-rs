@@ -9,9 +9,9 @@ use validator::Validate;
 use crate::buckets::{count_client_buckets, get_bucket};
 use crate::schema::clients::{self, dsl};
 use crate::users::count_client_users;
-use crate::util::generate_id;
-use crate::validators::flatten_errors;
 use crate::{Error, Result};
+use memo::utils::generate_id;
+use memo::validators::flatten_errors;
 
 use super::{Client, NewClient, UpdateClientBucket};
 

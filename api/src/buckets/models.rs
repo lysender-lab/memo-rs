@@ -25,7 +25,7 @@ pub struct BucketDto {
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct NewBucket {
     #[validate(length(min = 1, max = 50))]
-    #[validate(custom(function = "crate::validators::sluggable"))]
+    #[validate(custom(function = "memo::validators::sluggable"))]
     pub name: String,
 
     pub images_only: bool,

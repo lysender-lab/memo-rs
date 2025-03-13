@@ -48,13 +48,13 @@ impl From<User> for UserDto {
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct NewUser {
     #[validate(length(min = 1, max = 30))]
-    #[validate(custom(function = "crate::validators::alphanumeric"))]
+    #[validate(custom(function = "memo::validators::alphanumeric"))]
     pub username: String,
 
     #[validate(length(min = 8, max = 100))]
     pub password: String,
 
     #[validate(length(min = 1, max = 100))]
-    #[validate(custom(function = "crate::validators::csvname"))]
+    #[validate(custom(function = "memo::validators::csvname"))]
     pub roles: String,
 }

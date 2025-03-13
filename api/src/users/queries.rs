@@ -9,9 +9,9 @@ use validator::Validate;
 use crate::auth::hash_password;
 use crate::roles::to_roles;
 use crate::schema::users::{self, dsl};
-use crate::util::generate_id;
-use crate::validators::flatten_errors;
 use crate::{Error, Result};
+use memo::utils::generate_id;
+use memo::validators::flatten_errors;
 
 use super::{NewUser, User};
 

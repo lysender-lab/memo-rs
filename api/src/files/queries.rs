@@ -18,11 +18,11 @@ use crate::buckets::BucketDto;
 use crate::dirs::{Dir, update_dir_timestamp};
 use crate::schema::files::{self, dsl};
 use crate::storage::upload_object;
-use crate::util::generate_id;
-use crate::util::truncate_string;
-use crate::validators::flatten_errors;
 use crate::web::pagination::Paginated;
 use crate::{Error, Result};
+use memo::utils::generate_id;
+use memo::utils::truncate_string;
+use memo::validators::flatten_errors;
 
 use super::{
     ALLOWED_IMAGE_TYPES, FileDto, FileObject, FilePayload, ImgDimension, ImgVersion, ImgVersionDto,

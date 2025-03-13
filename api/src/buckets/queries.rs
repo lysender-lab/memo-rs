@@ -11,9 +11,9 @@ use crate::buckets::{Bucket, NewBucket};
 use crate::dirs::count_bucket_dirs;
 use crate::schema::buckets::{self, dsl};
 use crate::storage::read_bucket;
-use crate::util::generate_id;
-use crate::validators::flatten_errors;
 use crate::{Error, Result};
+use memo::utils::generate_id;
+use memo::validators::flatten_errors;
 
 use super::BucketDto;
 

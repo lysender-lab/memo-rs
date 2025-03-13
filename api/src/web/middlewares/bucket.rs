@@ -11,9 +11,9 @@ use crate::{
     auth::Actor,
     buckets::get_bucket,
     roles::Permission,
-    util::valid_id,
     web::{params::Params, response::create_error_response, server::AppState},
 };
+use memo::utils::valid_id;
 
 pub async fn bucket_middleware(
     State(state): State<AppState>,

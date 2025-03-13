@@ -9,9 +9,9 @@ use crate::{
     Error, Result,
     clients::get_client,
     users::{find_user_by_username, get_user},
-    validators::flatten_errors,
     web::server::AppState,
 };
+use memo::validators::flatten_errors;
 
 pub async fn authenticate(state: &AppState, credentials: &Credentials) -> Result<AuthResponse> {
     if let Err(errors) = credentials.validate() {

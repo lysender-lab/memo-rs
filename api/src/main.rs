@@ -9,7 +9,6 @@ mod clients;
 mod config;
 mod db;
 mod dirs;
-mod error;
 mod files;
 mod health;
 mod roles;
@@ -17,12 +16,10 @@ mod run;
 mod schema;
 mod storage;
 mod users;
-mod util;
-mod validators;
 mod web;
 
 // Re-export error types for convenience
-pub use self::error::{Error, Result};
+pub use memo::{Error, Result};
 
 #[tokio::main]
 async fn main() {
