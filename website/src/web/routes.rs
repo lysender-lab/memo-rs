@@ -1,6 +1,8 @@
 use axum::extract::DefaultBodyLimit;
+use axum::response::IntoResponse;
 use axum::routing::{any, get, get_service, post};
 use axum::{Router, middleware};
+use reqwest::StatusCode;
 use std::path::PathBuf;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::services::{ServeDir, ServeFile};
@@ -34,6 +36,11 @@ pub fn assets_routes(dir: &PathBuf) -> Router {
             "/assets",
             get_service(ServeDir::new(target_dir.join("assets"))),
         )
+        .fallback(file_not_found)
+}
+
+async fn file_not_found() -> impl IntoResponse {
+    (StatusCode::NOT_FOUND, "File not found")
 }
 
 pub fn private_routes(state: AppState) -> Router {
@@ -115,5 +122,8 @@ pub fn public_routes(state: AppState) -> Router {
 
 pub fn routes_fallback(state: AppState) -> Router {
     // 404 handler
-    Router::new().route("/", any(error_handler).with_state(state))
+    Router::new()
+        .route("/{*not_found}", any(error_handler))
+        .route_layer(middleware::from_fn(pref_middleware))
+        .with_state(state)
 }

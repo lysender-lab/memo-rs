@@ -1,8 +1,7 @@
 use askama::Template;
-use axum::{Extension, body::Body, extract::State, http::StatusCode, response::Response};
+use axum::{body::Body, extract::State, http::StatusCode, response::Response};
 
 use crate::{
-    ctx::Ctx,
     models::{Actor, Pref, TemplateData},
     run::AppState,
 };
@@ -154,8 +153,9 @@ impl From<Error> for ErrorInfo {
     }
 }
 
-pub async fn error_handler(ctx: Extension<Ctx>, State(state): State<AppState>) -> Response<Body> {
-    let actor = Some(ctx.actor().clone());
+#[axum::debug_handler]
+pub async fn error_handler(State(state): State<AppState>) -> Response<Body> {
+    let actor = None;
     let pref = Pref::new();
 
     handle_error(
