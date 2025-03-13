@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 
-members = [ "api", "website" ]
+members = [ "api", "memo", "website" ]
 
 [workspace.dependencies]
 askama = { version = "0.12.1", features = ["with-axum"] }
