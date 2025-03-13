@@ -41,7 +41,7 @@ pub async fn run(config: Config) -> Result<()> {
     // Setup the server
     let ip = "127.0.0.1";
     let addr = format!("{}:{}", ip, port);
-    info!("Listening on {}", addr);
+    info!("HTTP Server runnung on {}", addr);
 
     let listener = TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, routes_all.into_make_service())
@@ -49,10 +49,7 @@ pub async fn run(config: Config) -> Result<()> {
         .await
         .unwrap();
 
-    // Wait for a signal to shut down
-    tokio::signal::ctrl_c()
-        .await
-        .expect("Failed to listen for shutdown signal");
+    info!("HTTP Server stopped");
 
     Ok(())
 }

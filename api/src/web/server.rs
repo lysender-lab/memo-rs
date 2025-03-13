@@ -54,6 +54,8 @@ pub async fn run_web_server(config: &Config) -> Result<()> {
         .await
         .unwrap();
 
+    info!("HTTP server stopped");
+
     Ok(())
 }
 
