@@ -8,7 +8,7 @@ mod web;
 use clap::Parser;
 use std::process;
 
-use config::{Args, Commands, Config};
+use config::{Args, Config};
 use run::run;
 
 // Re-exports
@@ -30,11 +30,6 @@ async fn main() {
 }
 
 async fn run_command(arg: Args) -> Result<()> {
-    match arg.command {
-        Commands::Server => {
-            let config = Config::build(&arg.config)?;
-            run(config).await?;
-            Ok(())
-        }
-    }
+    let config = Config::build(&arg.config)?;
+    run(config).await
 }

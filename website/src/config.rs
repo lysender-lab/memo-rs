@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -120,19 +120,10 @@ impl AssetManifest {
     }
 }
 
-/// memo-rs A photo gallery app
+/// memo-webite Make memories
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
-    #[command(subcommand)]
-    pub command: Commands,
-
     #[arg(short, long, value_name = "config.toml")]
     pub config: PathBuf,
-}
-
-#[derive(Subcommand, Debug)]
-pub enum Commands {
-    /// Runs the web server
-    Server,
 }

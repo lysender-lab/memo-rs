@@ -21,13 +21,13 @@ API_URL=http://localhost:11001
 Development:
 
 ```
-cargo run -- server
+cargo run -- -c config.toml
 ```
 
 With auto-rebuild:
 
 ```
-cargo watch -x "run -- server"
+bacon run -- -- -c config.toml
 ```
 
 Release:
@@ -49,19 +49,19 @@ Edit systemd service file:
 First time?:
 
 ```
-sudo systemctl edit --full --force memo-rs.service
+sudo systemctl edit --full --force memo-website.service
 ```
 
 Edit?:
 ```
-sudo systemctl edit --full memo-rs.service
+sudo systemctl edit --full memo-website.service
 ```
 
-File: `/etc/systemd/system/memo-rs.service`
+File: `/etc/systemd/system/memo-website.service`
 
 ```
 [Unit]
-Description=memo-rs A photo gallery app
+Description=memo-website Make memories
 
 [Service]
 User=www-data
@@ -69,14 +69,14 @@ Group=www-data
 
 Environment="PORT=11000"
 Environment="SSL=false"
-Environment="FRONTEND_DIR=/data/www/html/sites/memo-rs/frontend"
+Environment="FRONTEND_DIR=/data/www/html/sites/memo-rs/website/frontend"
 Environment="CAPTCHA_SITE_KEY=key"
 Environment="CAPTCHA_SITE_SECRET=secret"
 Environment="JWT_SECRET=secret"
 Environment="API_URL=http://localhost:11001"
 
-WorkingDirectory=/data/www/html/sites/memo-rs/
-ExecStart=/data/www/html/sites/memo-rs/target/release/memo-rs
+WorkingDirectory=/data/www/html/sites/memo-rs/website
+ExecStart=/data/www/html/sites/memo-rs/target/release/website
 Restart=on-failure
 RestartSec=5s
 
@@ -87,16 +87,16 @@ WantedBy=multi-user.target
 To enable it for the first time:
 
 ```
-sudo systemctl enable memo-rs.service
+sudo systemctl enable memo-website.service
 ```
 
 Various commands:
 
 ```
-sudo systemctl start memo-rs.service
-sudo systemctl stop memo-rs.service
-sudo systemctl restart memo-rs.service
-sudo systemctl status memo-rs.service
+sudo systemctl start memo-website.service
+sudo systemctl stop memo-website.service
+sudo systemctl restart memo-website.service
+sudo systemctl status memo-website.service
 ```
 
 ### nginx
@@ -120,7 +120,7 @@ server {
     ssl_certificate     /etc/nginx/certs/memories-domain.com/server.crt;
     ssl_certificate_key /etc/nginx/certs/memories-domain.com/server.key;
 
-    root /data/www/html/sites/memories-domain/frontend/public;
+    root /data/www/html/sites/memories-domain/website/frontend/public;
 
     # Need to find a way to cache all static contents either in nginx or in rust/axum/tower
     location ~* \.(ico|css|js|gif|jpeg|jpg|png|woff|ttf|otf|svg|woff2|eot)$ {

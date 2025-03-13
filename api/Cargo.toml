@@ -1,6 +1,6 @@
 [package]
 name = "api"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
@@ -26,6 +26,5 @@ tower.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-uuid.workspace = true
 validator.workspace = true
 memo = { path = "../memo" }
