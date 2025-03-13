@@ -26,6 +26,19 @@ pub enum Error {
     InactiveUser,
     UserNotFound,
     ConfigError(String),
+
+    // Website errors
+    LoginFailed(String),
+    InvalidCaptcha(String),
+    CaptchaResponseError(String),
+    LoginRequired(String),
+    NoDefaultBucket,
+    AlbumNotFound,
+    PhotoNotFound,
+    NoAuthCookie,
+    InvalidCsrfToken,
+    JsonParseError(String),
+    ServiceError(String),
 }
 
 // Allow string slices to be converted to Error
@@ -57,6 +70,19 @@ impl core::fmt::Display for Error {
             Self::InactiveUser => write!(f, "Inactive user"),
             Self::UserNotFound => write!(f, "User not found"),
             Self::ConfigError(val) => write!(f, "{}", val),
+
+            // Website errors
+            Self::LoginFailed(val) => write!(f, "{}", val),
+            Self::InvalidCaptcha(val) => write!(f, "{}", val),
+            Self::CaptchaResponseError(val) => write!(f, "{}", val),
+            Self::LoginRequired(val) => write!(f, "{}", val),
+            Self::NoDefaultBucket => write!(f, "No default bucket configured"),
+            Self::AlbumNotFound => write!(f, "Album not found"),
+            Self::PhotoNotFound => write!(f, "Photo not found"),
+            Self::NoAuthCookie => write!(f, "Login to continue"),
+            Self::InvalidCsrfToken => write!(f, "Stale form data. Refresh the page and try again"),
+            Self::JsonParseError(val) => write!(f, "{}", val),
+            Self::ServiceError(val) => write!(f, "{}", val),
         }
     }
 }
@@ -64,7 +90,7 @@ impl core::fmt::Display for Error {
 // Allow errors to be rendered as response
 impl IntoResponse for Error {
     fn into_response(self) -> Response<Body> {
-        to_error_response(self)
+        to_json_error_response(self)
     }
 }
 
@@ -75,7 +101,7 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
-pub fn create_response(status: StatusCode, body: String) -> Response<Body> {
+pub fn create_json_response(status: StatusCode, body: String) -> Response<Body> {
     Response::builder()
         .status(status)
         .header("Content-Type", "application/json")
@@ -83,96 +109,107 @@ pub fn create_response(status: StatusCode, body: String) -> Response<Body> {
         .unwrap()
 }
 
-pub fn create_error_response(status: StatusCode, message: String, error: String) -> Response<Body> {
+pub fn create_json_error_response(
+    status: StatusCode,
+    message: String,
+    error: String,
+) -> Response<Body> {
     let body = ErrorResponse {
         status_code: status.as_u16(),
         message,
         error,
     };
 
-    return create_response(status, serde_json::to_string(&body).unwrap());
+    return create_json_response(status, serde_json::to_string(&body).unwrap());
 }
 
-pub fn to_error_response(error: Error) -> Response<Body> {
+pub fn to_json_error_response(error: Error) -> Response<Body> {
     match error {
-        Error::AnyError(message) => create_error_response(
+        Error::AnyError(message) => create_json_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             message,
             "Internal Server Error".to_string(),
         ),
         Error::BadRequest(message) => {
-            create_error_response(StatusCode::BAD_REQUEST, message, "Bad Request".to_string())
+            create_json_error_response(StatusCode::BAD_REQUEST, message, "Bad Request".to_string())
         }
         Error::Forbidden(message) => {
-            create_error_response(StatusCode::FORBIDDEN, message, "Forbidden".to_string())
+            create_json_error_response(StatusCode::FORBIDDEN, message, "Forbidden".to_string())
         }
         Error::ValidationError(message) => {
-            create_error_response(StatusCode::BAD_REQUEST, message, "Bad Request".to_string())
+            create_json_error_response(StatusCode::BAD_REQUEST, message, "Bad Request".to_string())
         }
         Error::MissingUploadFile(message) => {
-            create_error_response(StatusCode::BAD_REQUEST, message, "Bad Request".to_string())
+            create_json_error_response(StatusCode::BAD_REQUEST, message, "Bad Request".to_string())
         }
-        Error::FileTypeNotAllowed => create_error_response(
+        Error::FileTypeNotAllowed => create_json_error_response(
             StatusCode::BAD_REQUEST,
             "File type not allowed".to_string(),
             "Bad Request".to_string(),
         ),
         Error::NotFound(message) => {
-            create_error_response(StatusCode::NOT_FOUND, message, "Not Found".to_string())
+            create_json_error_response(StatusCode::NOT_FOUND, message, "Not Found".to_string())
         }
-        Error::InvalidAuthToken => create_error_response(
+        Error::InvalidAuthToken => create_json_error_response(
             StatusCode::UNAUTHORIZED,
             "Unauthorized".to_string(),
             "Unauthorized".to_string(),
         ),
-        Error::InsufficientAuthScope => create_error_response(
+        Error::InsufficientAuthScope => create_json_error_response(
             StatusCode::UNAUTHORIZED,
             "Unauthorized".to_string(),
             "Unauthorized".to_string(),
         ),
-        Error::NoAuthToken => create_error_response(
+        Error::NoAuthToken => create_json_error_response(
             StatusCode::UNAUTHORIZED,
             "Unauthorized".to_string(),
             "Unauthorized".to_string(),
         ),
-        Error::InvalidClient => create_error_response(
+        Error::InvalidClient => create_json_error_response(
             StatusCode::UNAUTHORIZED,
             "Unauthorized".to_string(),
             "Unauthorized".to_string(),
         ),
-        Error::RequiresAuth => create_error_response(
+        Error::RequiresAuth => create_json_error_response(
             StatusCode::UNAUTHORIZED,
             "Unauthorized".to_string(),
             "Unauthorized".to_string(),
         ),
-        Error::HashPasswordError(message) => create_error_response(
+        Error::HashPasswordError(message) => create_json_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             message,
             "Internal Server Error".to_string(),
         ),
-        Error::VerifyPasswordHashError(message) => create_error_response(
+        Error::VerifyPasswordHashError(message) => create_json_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             message,
             "Internal Server Error".to_string(),
         ),
-        Error::InvalidPassword => create_error_response(
+        Error::InvalidPassword => create_json_error_response(
             StatusCode::UNAUTHORIZED,
             "Invalid username or password".to_string(),
             "Unauthorized".to_string(),
         ),
-        Error::InactiveUser => create_error_response(
+        Error::InactiveUser => create_json_error_response(
             StatusCode::UNAUTHORIZED,
             "Inactive user".to_string(),
             "Unauthorized".to_string(),
         ),
-        Error::UserNotFound => create_error_response(
+        Error::UserNotFound => create_json_error_response(
             StatusCode::UNAUTHORIZED,
             "Unauthorized".to_string(),
             "Unauthorized".to_string(),
         ),
-        Error::ConfigError(message) => create_error_response(
+        Error::ConfigError(message) => create_json_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             message,
+            "Internal Server Error".to_string(),
+        ),
+
+        // Website errors are not handled here
+        _ => create_json_error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal Server Error".to_string(),
             "Internal Server Error".to_string(),
         ),
     }

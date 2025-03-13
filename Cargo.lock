@@ -1826,33 +1826,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "memo-rs"
-version = "0.1.0"
-dependencies = [
- "askama",
- "askama_axum",
- "axum",
- "axum-extra",
- "chrono",
- "clap",
- "derive_more",
- "jsonwebtoken",
- "multer",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
- "toml",
- "tower",
- "tower-cookies",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "urlencoding",
- "validator",
-]
-
-[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3503,6 +3476,34 @@ checksum = "33b6dd2ef9186f1f2072e409e99cd22a975331a6b3591b12c764e0e55c60d5d2"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "website"
+version = "0.1.0"
+dependencies = [
+ "askama",
+ "askama_axum",
+ "axum",
+ "axum-extra",
+ "chrono",
+ "clap",
+ "derive_more",
+ "jsonwebtoken",
+ "memo",
+ "multer",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml",
+ "tower",
+ "tower-cookies",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "urlencoding",
+ "validator",
 ]
 
 [[package]]

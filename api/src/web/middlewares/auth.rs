@@ -10,8 +10,9 @@ use axum::{
 use crate::{
     Error,
     auth::{Actor, authenticate_token},
-    web::{response::to_error_response, server::AppState},
+    web::server::AppState,
 };
+use memo::error::to_json_error_response;
 
 pub async fn auth_middleware(
     State(state): State<AppState>,
@@ -30,7 +31,7 @@ pub async fn auth_middleware(
     if let Some(auth_header) = auth_header {
         // At this point, authentication must be verified
         if !auth_header.starts_with("Bearer ") {
-            return to_error_response(Error::InvalidAuthToken);
+            return to_json_error_response(Error::InvalidAuthToken);
         }
         let token = auth_header.replace("Bearer ", "");
 
@@ -40,7 +41,7 @@ pub async fn auth_middleware(
                 actor = Some(data);
             }
             Err(e) => {
-                return to_error_response(e);
+                return to_json_error_response(e);
             }
         }
     }
@@ -63,7 +64,7 @@ pub async fn require_auth_middleware(
     //    return to_error_response(Error::NoAuthToken);
     //};
     if !actor.has_auth_scope() {
-        return to_error_response(Error::InsufficientAuthScope);
+        return to_json_error_response(Error::InsufficientAuthScope);
     }
 
     next.run(request).await

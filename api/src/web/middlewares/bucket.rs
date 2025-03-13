@@ -11,8 +11,9 @@ use crate::{
     auth::Actor,
     buckets::get_bucket,
     roles::Permission,
-    web::{params::Params, response::create_error_response, server::AppState},
+    web::{params::Params, server::AppState},
 };
+use memo::error::create_json_error_response;
 use memo::utils::valid_id;
 
 pub async fn bucket_middleware(
@@ -23,7 +24,7 @@ pub async fn bucket_middleware(
     next: Next,
 ) -> Response<Body> {
     if !actor.has_files_scope() {
-        return create_error_response(
+        return create_json_error_response(
             StatusCode::FORBIDDEN,
             "Insufficient auth scope".to_string(),
             "Forbidden".to_string(),
@@ -31,7 +32,7 @@ pub async fn bucket_middleware(
     }
     let permissions = vec![Permission::BucketsList, Permission::BucketsView];
     if !actor.has_permissions(&permissions) {
-        return create_error_response(
+        return create_json_error_response(
             StatusCode::FORBIDDEN,
             "Insufficient permissions".to_string(),
             "Forbidden".to_string(),
@@ -39,7 +40,7 @@ pub async fn bucket_middleware(
     }
 
     if !valid_id(&params.bucket_id) {
-        return create_error_response(
+        return create_json_error_response(
             StatusCode::BAD_REQUEST,
             "Invalid bucket id".to_string(),
             "Bad Request".to_string(),
@@ -48,7 +49,7 @@ pub async fn bucket_middleware(
 
     let bucket = get_bucket(&state.db_pool, &params.bucket_id).await;
     let Ok(bucket) = bucket else {
-        return create_error_response(
+        return create_json_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Error getting bucket".to_string(),
             "Internal Server Error".to_string(),
@@ -56,7 +57,7 @@ pub async fn bucket_middleware(
     };
 
     let Some(bucket) = bucket else {
-        return create_error_response(
+        return create_json_error_response(
             StatusCode::NOT_FOUND,
             "Bucket not found".to_string(),
             "Not Found".to_string(),
@@ -64,7 +65,7 @@ pub async fn bucket_middleware(
     };
 
     if &bucket.client_id != &actor.client_id {
-        return create_error_response(
+        return create_json_error_response(
             StatusCode::NOT_FOUND,
             "Bucket not found".to_string(),
             "Not Found".to_string(),
