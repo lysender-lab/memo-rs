@@ -1,6 +1,6 @@
-# files-rs: Personal file storage API
+# memo-rs: Make Memories
 
-`files-rs` is a simple file storage service, written in Rust btw.
+`memo-api` is a simple file storage service.
 
 It is designed for personal use and not indended for large number of concurrent users.
 The goal of the service is to provide an economical way to store and retrieve
@@ -61,11 +61,11 @@ Each client has access to the following resources:
 All clients are managed via the CLI only.
 
 ```bash
-./files-rs clients list
-./files-rs clients create name
-./files-rs clients disable client_id
-./files-rs clients enable client_id
-./files-rs clients delete client_id
+./memo-api clients list
+./memo-api clients create name
+./memo-api clients disable client_id
+./memo-api clients enable client_id
+./memo-api clients delete client_id
 ```
 
 Client:
@@ -80,11 +80,11 @@ Each clients can have users with roles the define the permissions to access clie
 Users are managed via CLI only as well.
 
 ```bash
-./files-rs users list client_id
-./files-rs users create client_id username
-./files-rs users enable id 
-./files-rs users disable id 
-./files-rs users delete id 
+./memo-api users list client_id
+./memo-api users create client_id username
+./memo-api users enable id
+./memo-api users disable id
+./memo-api users delete id
 ```
 
 User:
@@ -163,9 +163,9 @@ They are added into the client resources via the CLI.
 When adding a bucket, make sure it already exists in the cloud storage.
 
 ```bash
-./files-rs buckets list client_id
-./files-rs buckets create client_id bucket_name
-./files-rs buckets delete bucket_id
+./memo-api buckets list client_id
+./memo-api buckets create client_id bucket_name
+./memo-api buckets delete bucket_id
 ```
 
 ## Models
@@ -257,14 +257,14 @@ it as a simple systemd service.
 Edit systemd service file:
 
 ```
-sudo systemctl edit --force --full files-rs.service
+sudo systemctl edit --force --full memo-api.service
 ```
 
-File: `/etc/systemd/system/files-rs.service`
+File: `/etc/systemd/system/memo-api.service`
 
 ```
 [Unit]
-Description=files-rs Personal file storage API
+Description=memo-api Personal file storage API
 
 [Service]
 User=www-data
@@ -278,8 +278,8 @@ Environment="PORT=11001"
 Environment="GOOGLE_PROJECT_ID=value"
 Environment="GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json"
 
-WorkingDirectory=/data/www/html/sites/files-rs/
-ExecStart=/data/www/html/sites/files-rs/target/release/files-rs
+WorkingDirectory=/data/www/html/sites/memo-rs/api/
+ExecStart=/data/www/html/sites/memo-rs/target/release/memo-api
 Restart=on-failure
 RestartSec=5s
 
@@ -290,14 +290,14 @@ WantedBy=multi-user.target
 To enable it for the first time:
 
 ```
-sudo systemctl enable files-rs.service
+sudo systemctl enable memo-api.service
 ```
 
 Various commands:
 
 ```
-sudo systemctl start files-rs.service
-sudo systemctl stop files-rs.service
-sudo systemctl restart files-rs.service
-sudo systemctl status files-rs.service
+sudo systemctl start memo-api.service
+sudo systemctl stop memo-api.service
+sudo systemctl restart memo-api.service
+sudo systemctl status memo-api.service
 ```
