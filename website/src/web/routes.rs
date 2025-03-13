@@ -1,4 +1,5 @@
 use axum::extract::DefaultBodyLimit;
+use axum::handler::HandlerWithoutStateExt;
 use axum::response::IntoResponse;
 use axum::routing::{any, get, get_service, post};
 use axum::{Router, middleware};
@@ -21,6 +22,14 @@ use super::{
     pref_middleware, require_auth_middleware, upload_handler, upload_page_handler,
 };
 
+pub fn all_routes(state: AppState, frontend_dir: &PathBuf) -> Router {
+    Router::new()
+        .merge(public_routes(state.clone()))
+        .merge(private_routes(state.clone()))
+        .merge(assets_routes(frontend_dir))
+        .fallback(any(error_handler).with_state(state))
+}
+
 pub fn assets_routes(dir: &PathBuf) -> Router {
     let target_dir = dir.join("public");
     Router::new()
@@ -34,9 +43,11 @@ pub fn assets_routes(dir: &PathBuf) -> Router {
         )
         .nest_service(
             "/assets",
-            get_service(ServeDir::new(target_dir.join("assets"))),
+            get_service(
+                ServeDir::new(target_dir.join("assets"))
+                    .not_found_service(file_not_found.into_service()),
+            ),
         )
-        .fallback(file_not_found)
 }
 
 async fn file_not_found() -> impl IntoResponse {
@@ -117,13 +128,5 @@ pub fn public_routes(state: AppState) -> Router {
     Router::new()
         .route("/login", get(login_handler).post(post_login_handler))
         .route("/logout", post(logout_handler))
-        .with_state(state)
-}
-
-pub fn routes_fallback(state: AppState) -> Router {
-    // 404 handler
-    Router::new()
-        .route("/{*not_found}", any(error_handler))
-        .route_layer(middleware::from_fn(pref_middleware))
         .with_state(state)
 }

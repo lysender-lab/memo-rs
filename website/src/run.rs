@@ -10,7 +10,7 @@ use tracing::{Level, info};
 
 use crate::Result;
 use crate::config::Config;
-use crate::web::{assets_routes, private_routes, public_routes, routes_fallback};
+use crate::web::all_routes;
 
 #[derive(Clone, FromRef)]
 pub struct AppState {
@@ -25,10 +25,7 @@ pub async fn run(config: Config) -> Result<()> {
     };
 
     let routes_all = Router::new()
-        .merge(private_routes(state.clone()))
-        .merge(public_routes(state.clone()))
-        .merge(assets_routes(&frontend_dir))
-        .fallback_service(routes_fallback(state))
+        .merge(all_routes(state, &frontend_dir))
         .layer(CookieManagerLayer::new())
         .layer(
             ServiceBuilder::new().layer(
