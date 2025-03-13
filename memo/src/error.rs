@@ -1,7 +1,7 @@
 use axum::response::IntoResponse;
 use axum::{body::Body, http::StatusCode, response::Response};
 use derive_more::From;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -87,6 +87,45 @@ impl core::fmt::Display for Error {
     }
 }
 
+/// Allow Error to be converted to StatusCode
+impl From<Error> for StatusCode {
+    fn from(err: Error) -> Self {
+        match err {
+            Error::AnyError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::BadRequest(_) => StatusCode::BAD_REQUEST,
+            Error::Forbidden(_) => StatusCode::FORBIDDEN,
+            Error::ValidationError(_) => StatusCode::BAD_REQUEST,
+            Error::MissingUploadFile(_) => StatusCode::BAD_REQUEST,
+            Error::FileTypeNotAllowed => StatusCode::BAD_REQUEST,
+            Error::NotFound(_) => StatusCode::NOT_FOUND,
+            Error::InvalidAuthToken => StatusCode::UNAUTHORIZED,
+            Error::InsufficientAuthScope => StatusCode::UNAUTHORIZED,
+            Error::NoAuthToken => StatusCode::UNAUTHORIZED,
+            Error::InvalidClient => StatusCode::UNAUTHORIZED,
+            Error::RequiresAuth => StatusCode::UNAUTHORIZED,
+            Error::HashPasswordError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::VerifyPasswordHashError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::InvalidPassword => StatusCode::UNAUTHORIZED,
+            Error::InactiveUser => StatusCode::UNAUTHORIZED,
+            Error::UserNotFound => StatusCode::UNAUTHORIZED,
+            Error::ConfigError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+
+            // Website errors
+            Error::LoginFailed(_) => StatusCode::UNAUTHORIZED,
+            Error::InvalidCaptcha(_) => StatusCode::BAD_REQUEST,
+            Error::CaptchaResponseError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::LoginRequired(_) => StatusCode::UNAUTHORIZED,
+            Error::NoDefaultBucket => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::AlbumNotFound => StatusCode::NOT_FOUND,
+            Error::PhotoNotFound => StatusCode::NOT_FOUND,
+            Error::NoAuthCookie => StatusCode::UNAUTHORIZED,
+            Error::InvalidCsrfToken => StatusCode::BAD_REQUEST,
+            Error::JsonParseError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::ServiceError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
+
 // Allow errors to be rendered as response
 impl IntoResponse for Error {
     fn into_response(self) -> Response<Body> {
@@ -94,7 +133,7 @@ impl IntoResponse for Error {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ErrorResponse {
     pub status_code: u16,
     pub message: String,

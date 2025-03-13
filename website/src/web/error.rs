@@ -2,11 +2,11 @@ use askama::Template;
 use axum::{Extension, body::Body, extract::State, http::StatusCode, response::Response};
 
 use crate::{
-    Error,
     ctx::Ctx,
     models::{Actor, Pref, TemplateData},
     run::AppState,
 };
+use memo::Error;
 
 #[derive(Clone, Template)]
 #[template(path = "pages/error.html")]
@@ -141,6 +141,14 @@ impl From<Error> for ErrorInfo {
                 title: "Internal Server Error".to_string(),
                 message: msg.clone(),
                 description: msg,
+            },
+
+            // Catch all other errors
+            _ => Self {
+                status_code: StatusCode::INTERNAL_SERVER_ERROR,
+                title: "Internal Server Error".to_string(),
+                message: "An unknown error occurred".to_string(),
+                description: "An unknown error occurred".to_string(),
             },
         }
     }

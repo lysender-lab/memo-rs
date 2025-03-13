@@ -4,12 +4,12 @@ use reqwest::{Client, StatusCode};
 use tracing::error;
 
 use crate::config::Config;
-use crate::error::ErrorResponse;
 use crate::models::{
     Album, FileObject, ListAlbumsParams, ListPhotosParams, NewAlbum, NewAlbumForm, Paginated,
     Photo, UpdateAlbum, UpdateAlbumForm,
 };
 use crate::{Error, Result};
+use memo::error::ErrorResponse;
 
 use super::verify_csrf_token;
 
