@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use axum::Router;
 use axum::extract::FromRef;
 use deadpool_diesel::sqlite::Pool;
@@ -17,8 +15,8 @@ use crate::web::routes::all_routes;
 
 #[derive(Clone, FromRef)]
 pub struct AppState {
-    pub config: Arc<Config>,
-    pub storage_client: Arc<Client>,
+    pub config: Config,
+    pub storage_client: Client,
     pub db_pool: Pool,
 }
 
@@ -28,8 +26,8 @@ pub async fn run_web_server(config: &Config) -> Result<()> {
     let storage_client = create_storage_client(config.cloud.credentials.as_str()).await?;
     let pool = create_db_pool(config.db.url.as_str());
     let state = AppState {
-        config: Arc::new(config.clone()),
-        storage_client: Arc::new(storage_client),
+        config: config.clone(),
+        storage_client,
         db_pool: pool,
     };
 

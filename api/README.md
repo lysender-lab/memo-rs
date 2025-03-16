@@ -101,12 +101,31 @@ Usename is unique globally although it is namespaced by client_id.
 
 ### Roles
 
+- SystemAdmin
 - FilesAdmin
 - FilesEditor
 - FilesViewer
 
 ### Permissions
 
+- clients.create
+- clients.edit
+- clients.delete
+- clients.list
+- clients.view
+- clients.manage
+- buckets.create
+- buckets.edit
+- buckets.delete
+- buckets.list
+- buckets.view
+- buckets.manage
+- users.create
+- users.edit
+- users.delete
+- users.list
+- users.view
+- users.manage
 - dirs.create
 - dirs.edit
 - dirs.delete
@@ -121,6 +140,26 @@ Usename is unique globally although it is namespaced by client_id.
 - files.manage
 
 ### Roles to Permissions Mapping
+
+SystemAdmin:
+- clients.create
+- clients.edit
+- clients.delete
+- clients.list
+- clients.view
+- clients.manage
+- buckets.create
+- buckets.edit
+- buckets.delete
+- buckets.list
+- buckets.view
+- buckets.manage
+- users.create
+- users.edit
+- users.delete
+- users.list
+- users.view
+- users.manage
 
 FilesAdmin:
 - dirs.create
@@ -199,24 +238,43 @@ File:
 - created_at
 - updated_at
 
-## API Endpoints
+## API Endpoints for regular users
 
 ```
 GET /v1/auth/token
 GET /v1/buckets
-POST /v1/buckets
-GET /v1/buckets/:bucket_id
-PATCH /v1/buckets/:bucket_id
-DELETE /v1/buckets/:bucket_id
-GET /v1/buckets/:bucket_id/dirs?page=1&per_page=10&keyword=
-POST /v1/buckets/:bucket_id/dirs
-GET /v1/buckets/:bucket_id/dirs/:dir_id
-PATCH /v1/buckets/:bucket_id/dirs/:dir_id
-DELETE /v1/buckets/:bucket_id/dirs/:dir_id
-GET /v1/buckets/:bucket_id/dirs/:dir_id/files?page=1&per_page=10&keyword=
-POST /v1/buckets/:bucket_id/dirs/:dir_id/files
-GET /v1/buckets/:bucket_id/dirs/:dir_id/files/:file_id
-DELETE /v1/buckets/:bucket_id/dirs/:dir_id/files/:file_id
+GET /v1/buckets/{bucket_id}
+PATCH /v1/buckets/{bucket_id}
+DELETE /v1/buckets/{bucket_id}
+GET /v1/buckets/{bucket_id}/dirs?page=1&per_page=10&keyword=
+POST /v1/buckets/{bucket_id}/dirs
+GET /v1/buckets/{bucket_id}/dirs/{dir_id}
+PATCH /v1/buckets/{bucket_id}/dirs/{dir_id}
+DELETE /v1/buckets/{bucket_id}/dirs/{dir_id}
+GET /v1/buckets/{bucket_id}/dirs/{dir_id}/files?page=1&per_page=10&keyword=
+POST /v1/buckets/{bucket_id}/dirs/{dir_id}/files
+GET /v1/buckets/{bucket_id}/dirs/{dir_id}/files/{file_id}
+DELETE /v1/buckets/{bucket_id}/dirs/{dir_id}/files/{file_id}
+```
+
+## System Admin Endpoints
+
+```
+GET /v1/clients
+POST /v1/clients
+GET /v1/clients/{client_id}
+PATCH /v1/clients/{client_id}
+DELETE /v1/clients/{client_id}
+GET /v1/clients/{client_id}/users
+POST /v1/clients/{client_id}/users
+GET /v1/clients/{client_id}/users/{user_id}
+PATCH /v1/clients/{client_id}/users/{user_id}
+DELETE /v1/clients/{client_id}/users/{user_id}
+GET /v1/clients/{client_id}/buckets
+POST /v1/clients/{client_id}/buckets
+GET /v1/clients/{client_id}/buckets/{bucket_id}
+PATCH /v1/clients/{client_id}/buckets/{bucket_id}
+DELETE /v1/clients/{client_id}/buckets/{bucket_id}
 ```
 
 ## Database client setup
