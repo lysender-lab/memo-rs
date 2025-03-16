@@ -1,0 +1,13 @@
+pub mod auth;
+pub mod buckets;
+pub mod dirs;
+pub mod files;
+pub mod health;
+pub mod home;
+pub mod middlewares;
+pub mod not_found;
+pub mod pagination;
+pub mod params;
+pub mod response;
+pub mod routes;
+pub mod server;

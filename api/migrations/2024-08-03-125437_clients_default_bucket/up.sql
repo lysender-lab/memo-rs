@@ -1,0 +1,1 @@
+ALTER TABLE clients ADD COLUMN default_bucket_id CHAR(32) NULL DEFAULT NULL;
