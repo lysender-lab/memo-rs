@@ -8,7 +8,10 @@ use serde::Serialize;
 use tokio::{fs::File, fs::create_dir_all, io::AsyncWriteExt};
 
 use crate::{
-    auth::actor::Actor,
+    auth::{
+        actor::{Actor, Credentials},
+        authenticate,
+    },
     bucket::list_buckets,
     dir::{
         Dir, ListDirsParams, NewDir, UpdateDir, create_dir, delete_dir, get_dir, list_dirs,
@@ -31,6 +34,35 @@ use memo::{Error, Result};
 pub struct AppMeta {
     pub name: String,
     pub version: String,
+}
+
+#[axum::debug_handler]
+pub async fn authenticate_handler(
+    State(state): State<AppState>,
+    payload: Json<Credentials>,
+) -> Result<JsonResponse> {
+    //let Some(credentials) = payload else {
+    //    return Err(Error::BadRequest("Invalid credentials payload".into()));
+    //};
+
+    let res = authenticate(&state, &payload).await?;
+    Ok(JsonResponse::new(serde_json::to_string(&res).unwrap()))
+}
+
+pub async fn profile_handler(Extension(actor): Extension<Actor>) -> Result<JsonResponse> {
+    Ok(JsonResponse::new(
+        serde_json::to_string(&actor.user).unwrap(),
+    ))
+}
+
+pub async fn user_permissions(Extension(actor): Extension<Actor>) -> Result<JsonResponse> {
+    let mut items: Vec<String> = actor.permissions.iter().map(|p| p.to_string()).collect();
+    items.sort();
+    Ok(JsonResponse::new(serde_json::to_string(&items).unwrap()))
+}
+
+pub async fn user_authz(Extension(actor): Extension<Actor>) -> Result<JsonResponse> {
+    Ok(JsonResponse::new(serde_json::to_string(&actor).unwrap()))
 }
 
 pub async fn home_handler() -> impl IntoResponse {

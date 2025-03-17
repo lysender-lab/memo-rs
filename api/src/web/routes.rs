@@ -7,12 +7,12 @@ use axum::{
 use tower_http::limit::RequestBodyLimitLayer;
 
 use super::{
-    auth::{authenticate_handler, user_routes},
     handler::{
-        create_dir_handler, create_file_handler, delete_dir_handler, delete_file_handler,
-        get_bucket_handler, get_dir_handler, get_file_handler, health_live_handler,
-        health_ready_handler, home_handler, list_buckets_handler, list_dirs_handler,
-        list_files_handler, not_found_handler, update_dir_handler,
+        authenticate_handler, create_dir_handler, create_file_handler, delete_dir_handler,
+        delete_file_handler, get_bucket_handler, get_dir_handler, get_file_handler,
+        health_live_handler, health_ready_handler, home_handler, list_buckets_handler,
+        list_dirs_handler, list_files_handler, not_found_handler, profile_handler,
+        update_dir_handler, user_authz, user_permissions,
     },
     middleware::{
         auth_middleware, bucket_middleware, dir_middleware, file_middleware,
@@ -45,6 +45,18 @@ fn private_routes(state: AppState) -> Router<AppState> {
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
+        ))
+        .with_state(state)
+}
+
+pub fn user_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(profile_handler))
+        .route("/permissions", get(user_permissions))
+        .route("/authz", get(user_authz))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_auth_middleware,
         ))
         .with_state(state)
 }
