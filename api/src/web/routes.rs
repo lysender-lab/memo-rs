@@ -8,15 +8,12 @@ use tower_http::limit::RequestBodyLimitLayer;
 
 use super::{
     auth::{authenticate_handler, user_routes},
-    buckets::handlers::{get_bucket_handler, list_buckets_handler},
-    dirs::handlers::{
-        create_dir_handler, delete_dir_handler, get_dir_handler, list_dirs_handler,
-        update_dir_handler,
+    handler::{
+        create_dir_handler, create_file_handler, delete_dir_handler, delete_file_handler,
+        get_bucket_handler, get_dir_handler, get_file_handler, health_live_handler,
+        health_ready_handler, home_handler, list_buckets_handler, list_dirs_handler,
+        list_files_handler, not_found_handler, update_dir_handler,
     },
-    files::handlers::{
-        create_file_handler, delete_file_handler, get_file_handler, list_files_handler,
-    },
-    handler::{health_live_handler, health_ready_handler, home_handler, not_found_handler},
     middleware::{
         auth_middleware, bucket_middleware, dir_middleware, file_middleware,
         require_auth_middleware,
