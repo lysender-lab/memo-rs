@@ -39,7 +39,7 @@ pub async fn run_setup(config: &Config) -> Result<()> {
         client_id = client.id;
     } else {
         let new_client = NewClient {
-            name: "System Admin".to_string(),
+            name: "system-admin".to_string(),
         };
         let client = create_client(&db_pool, &new_client, true).await?;
         println!("{{ id = {}, name = {} }}", client.id, client.name);

@@ -13,6 +13,7 @@ use crate::{
         authenticate,
     },
     bucket::list_buckets,
+    client::list_clients,
     dir::{
         Dir, ListDirsParams, NewDir, UpdateDir, create_dir, delete_dir, get_dir, list_dirs,
         update_dir,
@@ -26,6 +27,7 @@ use memo::{
     Error, Result,
     dto::{
         bucket::BucketDto,
+        client::ClientDto,
         file::{FileDto, ImgVersion},
         pagination::Paginated,
     },
@@ -105,12 +107,22 @@ pub async fn health_ready_handler(State(state): State<AppState>) -> Result<JsonR
     ))
 }
 
+pub async fn list_clients_handler(State(state): State<AppState>) -> Result<JsonResponse> {
+    let clients = list_clients(&state.db_pool).await?;
+    Ok(JsonResponse::new(serde_json::to_string(&clients).unwrap()))
+}
+
 pub async fn list_buckets_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
 ) -> Result<JsonResponse> {
     let buckets = list_buckets(&state.db_pool, &actor.client_id).await?;
     Ok(JsonResponse::new(serde_json::to_string(&buckets).unwrap()))
+}
+
+pub async fn get_client_handler(Extension(client): Extension<ClientDto>) -> Result<JsonResponse> {
+    // Extract bucket from the middleware extension
+    Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()))
 }
 
 pub async fn get_bucket_handler(Extension(bucket): Extension<BucketDto>) -> Result<JsonResponse> {

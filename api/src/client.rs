@@ -2,6 +2,7 @@ use deadpool_diesel::sqlite::Pool;
 use diesel::dsl::count_star;
 use diesel::prelude::*;
 use diesel::{QueryDsl, SelectableHelper};
+use memo::dto::client::ClientDto;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -34,6 +35,35 @@ pub struct NewClient {
 pub struct UpdateClientBucket {
     #[diesel(treat_none_as_null = true)]
     pub default_bucket_id: Option<String>,
+}
+
+impl From<ClientDto> for Client {
+    fn from(dto: ClientDto) -> Self {
+        Client {
+            id: dto.id,
+            name: dto.name,
+            default_bucket_id: dto.default_bucket_id,
+            status: dto.status,
+            admin: if dto.admin { Some(1) } else { None },
+            created_at: dto.created_at,
+        }
+    }
+}
+
+impl From<Client> for ClientDto {
+    fn from(client: Client) -> Self {
+        ClientDto {
+            id: client.id,
+            name: client.name,
+            default_bucket_id: client.default_bucket_id,
+            status: client.status,
+            admin: match client.admin {
+                Some(1) => true,
+                _ => false,
+            },
+            created_at: client.created_at,
+        }
+    }
 }
 
 // Can't have too many clients
@@ -142,7 +172,7 @@ pub async fn create_client(db_pool: &Pool, data: &NewClient, admin: bool) -> Res
     }
 }
 
-pub async fn get_client(db_pool: &Pool, id: &str) -> Result<Option<Client>> {
+pub async fn get_client(db_pool: &Pool, id: &str) -> Result<Option<ClientDto>> {
     let Ok(db) = db_pool.get().await else {
         return Err("Error getting db connection".into());
     };
@@ -160,14 +190,14 @@ pub async fn get_client(db_pool: &Pool, id: &str) -> Result<Option<Client>> {
 
     match conn_result {
         Ok(select_res) => match select_res {
-            Ok(item) => Ok(item),
+            Ok(item) => Ok(item.map(|item| item.into())),
             Err(e) => Err(format!("Error reading clients: {}", e).into()),
         },
         Err(e) => Err(format!("Error using the db connection: {}", e).into()),
     }
 }
 
-pub async fn find_client_by_name(pool: &Pool, name: &str) -> Result<Option<Client>> {
+pub async fn find_client_by_name(pool: &Pool, name: &str) -> Result<Option<ClientDto>> {
     let Ok(db) = pool.get().await else {
         return Err("Error getting db connection".into());
     };
@@ -185,7 +215,7 @@ pub async fn find_client_by_name(pool: &Pool, name: &str) -> Result<Option<Clien
 
     match conn_result {
         Ok(select_res) => match select_res {
-            Ok(item) => Ok(item),
+            Ok(item) => Ok(item.map(|item| item.into())),
             Err(e) => Err(format!("Error finding client: {}", e).into()),
         },
         Err(e) => Err(format!("Error using the db connection: {}", e).into()),

@@ -10,6 +10,7 @@ use axum::{
 use crate::{
     auth::{actor::Actor, authenticate_token},
     bucket::get_bucket,
+    client::get_client,
     dir::get_dir,
     file::get_file,
     web::{params::Params, server::AppState},
@@ -20,6 +21,8 @@ use memo::{
     role::Permission,
     utils::valid_id,
 };
+
+use super::params::ClientParams;
 
 pub async fn auth_middleware(
     State(state): State<AppState>,
@@ -75,6 +78,74 @@ pub async fn require_auth_middleware(
     }
 
     next.run(request).await
+}
+
+pub async fn require_clients_admin_middleware(
+    actor: Extension<Actor>,
+    request: Request,
+    next: Next,
+) -> Response<Body> {
+    if !actor.has_auth_scope() {
+        return to_json_error_response(Error::InsufficientAuthScope);
+    }
+
+    let permissions = vec![Permission::ClientsList, Permission::ClientsView];
+    if !actor.has_permissions(&permissions) {
+        return create_json_error_response(
+            StatusCode::FORBIDDEN,
+            "Insufficient permissions".to_string(),
+            "Forbidden".to_string(),
+        );
+    }
+
+    next.run(request).await
+}
+
+pub async fn client_middleware(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(params): Path<ClientParams>,
+    mut request: Request,
+    next: Next,
+) -> Response<Body> {
+    let permissions = vec![Permission::ClientsList, Permission::ClientsView];
+    if !actor.has_permissions(&permissions) {
+        return create_json_error_response(
+            StatusCode::FORBIDDEN,
+            "Insufficient permissions".to_string(),
+            "Forbidden".to_string(),
+        );
+    }
+
+    if !valid_id(&params.client_id) {
+        return create_json_error_response(
+            StatusCode::BAD_REQUEST,
+            "Invalid client id".to_string(),
+            "Bad Request".to_string(),
+        );
+    }
+
+    let client = get_client(&state.db_pool, &params.client_id).await;
+    let Ok(client) = client else {
+        return create_json_error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Error getting client".to_string(),
+            "Internal Server Error".to_string(),
+        );
+    };
+
+    let Some(client) = client else {
+        return create_json_error_response(
+            StatusCode::NOT_FOUND,
+            "Client not found".to_string(),
+            "Not Found".to_string(),
+        );
+    };
+
+    // Forward to the next middleware/handler passing the client information
+    request.extensions_mut().insert(client);
+    let response = next.run(request).await;
+    response
 }
 
 pub async fn bucket_middleware(
