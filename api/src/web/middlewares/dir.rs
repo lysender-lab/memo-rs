@@ -8,12 +8,12 @@ use axum::{
 };
 
 use crate::{
-    auth::Actor,
-    dirs::get_dir,
-    roles::Permission,
+    auth::actor::Actor,
+    dir::get_dir,
     web::{params::Params, server::AppState},
 };
 use memo::error::create_json_error_response;
+use memo::role::Permission;
 
 pub async fn dir_middleware(
     state: State<AppState>,

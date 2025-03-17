@@ -10,10 +10,11 @@ use google_cloud_storage::http::objects::delete::DeleteObjectRequest;
 use google_cloud_storage::http::objects::upload::{Media, UploadObjectRequest, UploadType};
 use google_cloud_storage::sign::SignedURLOptions;
 
-use crate::buckets::BucketDto;
-use crate::dirs::Dir;
-use crate::files::{FileDto, ImgVersionDto, ORIGINAL_PATH};
+use crate::dir::Dir;
+use crate::file::ORIGINAL_PATH;
 use crate::{Error, Result};
+use memo::dto::bucket::BucketDto;
+use memo::dto::file::{FileDto, ImgVersionDto};
 
 pub async fn create_storage_client(key_file: &str) -> Result<Client> {
     match CredentialsFile::new_from_file(key_file.to_string()).await {

@@ -1,4 +1,6 @@
+pub mod dto;
 pub mod error;
+pub mod role;
 pub mod utils;
 pub mod validators;
 

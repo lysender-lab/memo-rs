@@ -1,34 +1,158 @@
 use chrono::{DateTime, NaiveDateTime};
 use deadpool_diesel::sqlite::Pool;
-use exif::{In, Tag};
-use google_cloud_storage::client::Client;
-use image::ImageReader;
-use image::imageops;
-use std::fs::File;
-use std::path::PathBuf;
-
 use diesel::dsl::count_star;
 use diesel::prelude::*;
 use diesel::{QueryDsl, SelectableHelper};
+use exif::{In, Tag};
+use google_cloud_storage::client::Client;
 use image::DynamicImage;
+use image::ImageReader;
+use image::imageops;
+use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::path::PathBuf;
 use tracing::error;
 use validator::Validate;
 
-use crate::buckets::BucketDto;
-use crate::dirs::{Dir, update_dir_timestamp};
+use crate::dir::{Dir, update_dir_timestamp};
 use crate::schema::files::{self, dsl};
 use crate::storage::upload_object;
 use crate::web::pagination::Paginated;
 use crate::{Error, Result};
+use memo::dto::bucket::BucketDto;
+use memo::dto::file::{FileDto, ImgDimension, ImgVersion, ImgVersionDto};
 use memo::utils::generate_id;
 use memo::utils::truncate_string;
 use memo::validators::flatten_errors;
 
-use super::{
-    ALLOWED_IMAGE_TYPES, FileDto, FileObject, FilePayload, ImgDimension, ImgVersion, ImgVersionDto,
-    ListFilesParams, MAX_DIMENSION, MAX_PREVIEW_DIMENSION, MAX_THUMB_DIMENSION, ORIGINAL_PATH,
-    PhotoExif,
-};
+pub const ORIGINAL_PATH: &str = "orig";
+pub const ALLOWED_IMAGE_TYPES: [&str; 4] = ["image/jpeg", "image/pjpeg", "image/png", "image/gif"];
+
+/// Maximum image dimension before creating a preview version
+pub const MAX_DIMENSION: u32 = 1000;
+pub const MAX_PREVIEW_DIMENSION: u32 = 2000;
+pub const MAX_THUMB_DIMENSION: u32 = 200;
+
+#[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
+#[diesel(table_name = crate::schema::files)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct FileObject {
+    pub id: String,
+    pub dir_id: String,
+    pub name: String,
+    pub filename: String,
+    pub content_type: String,
+    pub size: i64,
+    pub is_image: i32,
+    pub img_versions: Option<String>,
+    pub img_taken_at: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct FilePayload {
+    pub upload_dir: PathBuf,
+    pub name: String,
+    pub filename: String,
+    pub path: PathBuf,
+    pub size: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct PhotoExif {
+    pub orientation: u32,
+    pub img_taken_at: Option<i64>,
+}
+
+impl Default for PhotoExif {
+    fn default() -> Self {
+        Self {
+            orientation: 1,
+            img_taken_at: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Validate)]
+pub struct ListFilesParams {
+    #[validate(range(min = 1, max = 1000))]
+    pub page: Option<i32>,
+
+    #[validate(range(min = 1, max = 50))]
+    pub per_page: Option<i32>,
+
+    #[validate(length(min = 0, max = 50))]
+    pub keyword: Option<String>,
+}
+
+/// Convert FileDto to File
+impl From<FileDto> for FileObject {
+    fn from(file: FileDto) -> Self {
+        let img_versions = match file.img_versions {
+            Some(versions) => {
+                let versions_str: String = versions
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",");
+
+                Some(versions_str)
+            }
+            None => None,
+        };
+
+        Self {
+            id: file.id,
+            dir_id: file.dir_id,
+            name: file.name,
+            filename: file.filename,
+            content_type: file.content_type,
+            size: file.size,
+            is_image: if file.is_image { 1 } else { 0 },
+            img_versions,
+            img_taken_at: file.img_taken_at,
+            created_at: file.created_at,
+            updated_at: file.updated_at,
+        }
+    }
+}
+
+/// Convert File to FileDto
+impl From<FileObject> for FileDto {
+    fn from(file: FileObject) -> Self {
+        let img_versions = match file.img_versions {
+            Some(versions_str) => {
+                let versions: Vec<ImgVersionDto> = versions_str
+                    .split(',')
+                    .filter_map(|s| s.parse::<ImgVersionDto>().ok())
+                    .collect();
+
+                if versions.len() > 0 {
+                    Some(versions)
+                } else {
+                    None
+                }
+            }
+            None => None,
+        };
+
+        Self {
+            id: file.id,
+            dir_id: file.dir_id,
+            name: file.name,
+            filename: file.filename,
+            content_type: file.content_type,
+            size: file.size,
+            is_image: file.is_image == 1,
+            img_versions,
+            img_taken_at: file.img_taken_at,
+            url: None,
+            created_at: file.created_at,
+            updated_at: file.updated_at,
+        }
+    }
+}
 
 const MAX_PER_PAGE: i32 = 50;
 const MAX_FILES: i32 = 1000;

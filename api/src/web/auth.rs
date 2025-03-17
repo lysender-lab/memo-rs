@@ -2,7 +2,8 @@ use axum::{Extension, Json, Router, extract::State, middleware, routing::get};
 
 use crate::{
     Result,
-    auth::{Actor, Credentials, authenticate},
+    auth::actor::{Actor, Credentials},
+    auth::authenticate,
 };
 
 use super::{middlewares::require_auth_middleware, response::JsonResponse, server::AppState};

@@ -4,18 +4,17 @@ use run::run_command;
 use std::process;
 
 mod auth;
-mod buckets;
-mod clients;
+mod bucket;
+mod client;
+mod command;
 mod config;
 mod db;
-mod dirs;
-mod files;
+mod dir;
+mod file;
 mod health;
-mod roles;
 mod run;
 mod schema;
 mod storage;
-mod users;
 mod web;
 
 // Re-export error types for convenience

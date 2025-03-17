@@ -8,12 +8,12 @@ use axum::{
 };
 
 use crate::{
-    auth::Actor,
-    buckets::get_bucket,
-    roles::Permission,
+    auth::actor::Actor,
+    bucket::get_bucket,
     web::{params::Params, server::AppState},
 };
 use memo::error::create_json_error_response;
+use memo::role::Permission;
 use memo::utils::valid_id;
 
 pub async fn bucket_middleware(

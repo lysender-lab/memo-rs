@@ -6,14 +6,14 @@ use axum::{
 
 use crate::{
     Error, Result,
-    auth::Actor,
-    dirs::{
+    auth::actor::Actor,
+    dir::{
         Dir, ListDirsParams, NewDir, UpdateDir, create_dir, delete_dir, get_dir, list_dirs,
         update_dir,
     },
-    roles::Permission,
     web::{params::Params, response::JsonResponse, server::AppState},
 };
+use memo::role::Permission;
 
 #[axum::debug_handler]
 pub async fn list_dirs_handler(

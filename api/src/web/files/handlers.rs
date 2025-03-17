@@ -7,17 +7,15 @@ use tokio::{fs::File, fs::create_dir_all, io::AsyncWriteExt};
 
 use crate::{
     Error, Result,
-    auth::Actor,
-    buckets::BucketDto,
-    dirs::Dir,
-    files::{
-        FileDto, FileObject, FilePayload, ImgVersion, ListFilesParams, create_file, delete_file,
-        list_files,
-    },
-    roles::Permission,
+    auth::actor::Actor,
+    dir::Dir,
+    file::{FileObject, FilePayload, ListFilesParams, create_file, delete_file, list_files},
     storage::{delete_file_object, format_file, format_files},
     web::{pagination::Paginated, response::JsonResponse, server::AppState},
 };
+use memo::dto::bucket::BucketDto;
+use memo::dto::file::{FileDto, ImgVersion};
+use memo::role::Permission;
 use memo::utils::slugify_prefixed;
 
 #[axum::debug_handler]

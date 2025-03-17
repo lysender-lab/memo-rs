@@ -1,19 +1,42 @@
 use deadpool_diesel::sqlite::Pool;
-
 use diesel::dsl::count_star;
 use diesel::prelude::*;
 use diesel::{QueryDsl, SelectableHelper};
+use serde::{Deserialize, Serialize};
 use tracing::error;
 use validator::Validate;
 
-use crate::buckets::{count_client_buckets, get_bucket};
+use crate::auth::user::count_client_users;
+use crate::bucket::{count_client_buckets, get_bucket};
 use crate::schema::clients::{self, dsl};
-use crate::users::count_client_users;
 use crate::{Error, Result};
 use memo::utils::generate_id;
 use memo::validators::flatten_errors;
 
-use super::{Client, NewClient, UpdateClientBucket};
+#[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
+#[diesel(table_name = crate::schema::clients)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct Client {
+    pub id: String,
+    pub name: String,
+    pub default_bucket_id: Option<String>,
+    pub status: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, Validate)]
+pub struct NewClient {
+    #[validate(length(min = 1, max = 50))]
+    #[validate(custom(function = "memo::validators::anyname"))]
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Deserialize, AsChangeset)]
+#[diesel(table_name = crate::schema::clients)]
+pub struct UpdateClientBucket {
+    #[diesel(treat_none_as_null = true)]
+    pub default_bucket_id: Option<String>,
+}
 
 // Can't have too many clients
 const MAX_CLIENTS: i32 = 10;

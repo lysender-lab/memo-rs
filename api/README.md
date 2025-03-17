@@ -1,12 +1,10 @@
-# memo-rs: Make Memories
+# memo-api: Make Memories
 
-`memo-api` is a simple file storage service.
+`memo-api` is a simple file storage service and is the backend service for `memo-website`.
 
 It is designed for personal use and not indended for large number of concurrent users.
 The goal of the service is to provide an economical way to store and retrieve
 files in the cloud.
-
-See [memo-rs](https://github.com/lysender/memo-rs) to deploy a frontend for this service.
 
 Uses cases:
 - Store personal files and documents
@@ -38,6 +36,7 @@ Uses cases:
   - Content type
   - Size
   - Image dimension for each version
+  - Date picture is taken
 
 ## Google Cloud Service Account
 
@@ -52,10 +51,9 @@ Create a Google Cloud Service Account with the following roles:
 Clients are the tenants or customers of the service.
 
 Each client has access to the following resources:
-- teams
 - users
 - buckets
-- directories
+- dirs
 - files
 
 All clients are managed via the CLI only.
@@ -312,6 +310,13 @@ it as a simple systemd service.
 
 ### Setup systemd
 
+File: `/data/scripts/memo-rs/run-api.sh`
+
+```bash
+#!/bin/sh
+/data/www/html/sites/memo-rs/target/release/api -c /data/www/html/sites/memo-rs/api/config.toml server
+```
+
 Edit systemd service file:
 
 ```
@@ -322,22 +327,14 @@ File: `/etc/systemd/system/memo-api.service`
 
 ```
 [Unit]
-Description=memo-api Personal file storage API
+Description=memo-api Make memories
 
 [Service]
 User=www-data
 Group=www-data
 
-
-Environment="DATABASE_URL=sqlite:///path/to/db.sqlite3"
-Environment="UPLOAD_DIR=/path/to/upload_dir"
-Environment="JWT_SECRET=value"
-Environment="PORT=11001"
-Environment="GOOGLE_PROJECT_ID=value"
-Environment="GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json"
-
 WorkingDirectory=/data/www/html/sites/memo-rs/api/
-ExecStart=/data/www/html/sites/memo-rs/target/release/memo-api
+ExecStart=/data/scripts/memo-rs/run-api.sh
 Restart=on-failure
 RestartSec=5s
 

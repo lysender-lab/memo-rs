@@ -7,11 +7,7 @@ use axum::{
     response::Response,
 };
 
-use crate::{
-    Error,
-    auth::{Actor, authenticate_token},
-    web::server::AppState,
-};
+use crate::{Error, auth::actor::Actor, auth::authenticate_token, web::server::AppState};
 use memo::error::to_json_error_response;
 
 pub async fn auth_middleware(

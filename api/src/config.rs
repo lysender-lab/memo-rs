@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use serde::Deserialize;
 use std::{fs, path::PathBuf};
 
-use crate::Result;
+use memo::Result;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {

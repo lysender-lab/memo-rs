@@ -8,12 +8,12 @@ use axum::{
 };
 
 use crate::{
-    auth::Actor,
-    files::get_file,
-    roles::Permission,
+    auth::actor::Actor,
+    file::get_file,
     web::{params::Params, server::AppState},
 };
 use memo::error::create_json_error_response;
+use memo::role::Permission;
 
 pub async fn file_middleware(
     state: State<AppState>,

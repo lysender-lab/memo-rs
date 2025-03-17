@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use deadpool_diesel::sqlite::Pool;
 
 use diesel::dsl::count_star;
@@ -6,15 +8,54 @@ use diesel::{QueryDsl, SelectableHelper};
 use tracing::error;
 use validator::Validate;
 
-use crate::dirs::{Dir, NewDir, UpdateDir};
-use crate::files::count_dir_files;
+use crate::file::count_dir_files;
 use crate::schema::dirs::{self, dsl};
 use crate::web::pagination::Paginated;
-use crate::{Error, Result};
 use memo::utils::generate_id;
 use memo::validators::flatten_errors;
+use memo::{Error, Result};
 
-use super::ListDirsParams;
+#[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
+#[diesel(table_name = crate::schema::dirs)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct Dir {
+    pub id: String,
+    pub bucket_id: String,
+    pub name: String,
+    pub label: String,
+    pub file_count: i32,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, Validate)]
+pub struct NewDir {
+    #[validate(length(min = 1, max = 50))]
+    #[validate(custom(function = "memo::validators::sluggable"))]
+    pub name: String,
+
+    #[validate(length(min = 1, max = 60))]
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Validate, AsChangeset)]
+#[diesel(table_name = crate::schema::dirs)]
+pub struct UpdateDir {
+    #[validate(length(min = 1, max = 100))]
+    pub label: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Validate)]
+pub struct ListDirsParams {
+    #[validate(range(min = 1, max = 1000))]
+    pub page: Option<i32>,
+
+    #[validate(range(min = 1, max = 50))]
+    pub per_page: Option<i32>,
+
+    #[validate(length(min = 0, max = 50))]
+    pub keyword: Option<String>,
+}
 
 const MAX_DIRS: i32 = 1000;
 const MAX_PER_PAGE: i32 = 50;
@@ -394,5 +435,31 @@ pub async fn delete_dir(db_pool: &Pool, id: &str) -> Result<()> {
             error!("{}", e);
             Err("Error using the db connection".into())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_dir() {
+        let data = NewDir {
+            name: "hello-world".to_string(),
+            label: "Hello World".to_string(),
+        };
+        assert!(data.validate().is_ok());
+
+        let data = NewDir {
+            name: "hello_world".to_string(),
+            label: "Hello World".to_string(),
+        };
+        assert!(data.validate().is_err());
+
+        let data = NewDir {
+            name: "".to_string(),
+            label: "Hello World".to_string(),
+        };
+        assert!(data.validate().is_err());
     }
 }

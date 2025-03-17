@@ -2,7 +2,7 @@ use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 
-use super::models::ActorPayload;
+use super::actor::ActorPayload;
 use crate::{Error, Result};
 
 #[derive(Debug, Deserialize, Serialize)]

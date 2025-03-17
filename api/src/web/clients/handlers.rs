@@ -2,10 +2,11 @@ use axum::{Extension, extract::State};
 
 use crate::{
     Result,
-    auth::Actor,
-    buckets::{BucketDto, list_buckets},
+    auth::actor::Actor,
+    bucket::list_buckets,
     web::{response::JsonResponse, server::AppState},
 };
+use memo::dto::bucket::BucketDto;
 
 pub async fn list_buckets_handler(
     State(state): State<AppState>,
