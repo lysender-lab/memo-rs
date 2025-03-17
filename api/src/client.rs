@@ -86,7 +86,7 @@ pub async fn find_admin_client(db_pool: &Pool) -> Result<Option<Client>> {
     }
 }
 
-pub async fn create_client(db_pool: &Pool, data: &NewClient) -> Result<Client> {
+pub async fn create_client(db_pool: &Pool, data: &NewClient, admin: bool) -> Result<Client> {
     if let Err(errors) = data.validate() {
         return Err(Error::ValidationError(flatten_errors(&errors)));
     }
@@ -114,12 +114,13 @@ pub async fn create_client(db_pool: &Pool, data: &NewClient) -> Result<Client> {
 
     let data_copy = data.clone();
     let today = chrono::Utc::now().timestamp();
+    let admin = if admin { Some(1) } else { None };
     let client = Client {
         id: generate_id(),
         name: data_copy.name,
         default_bucket_id: None,
         status: "active".to_string(),
-        admin: None,
+        admin,
         created_at: today,
     };
 

@@ -17,7 +17,8 @@ use crate::auth::user::{create_user, get_user};
 use crate::client::{NewClient, create_client};
 
 pub async fn run_setup(config: &Config) -> Result<()> {
-    let username: String = read!("Enter username for the admin user: {}\n");
+    print!("Enter username for the admin user: ");
+    let username: String = read!("{}\n");
 
     let Ok(password) = rpassword::prompt_password("Enter password for the admin user: ") else {
         return Err("Failed to read password".into());
@@ -25,26 +26,34 @@ pub async fn run_setup(config: &Config) -> Result<()> {
 
     let password = password.trim().to_string();
     let new_user = NewUser {
-        username,
+        username: username.trim().to_string(),
         password,
         roles: "SystemAdmin".to_string(),
     };
 
     let db_pool = create_db_pool(config.db.url.as_str());
+
+    let client_id: String;
     let admin_client = find_admin_client(&db_pool).await?;
-    if admin_client.is_some() {
-        println!("Admin client already exists.");
+    if let Some(client) = admin_client {
+        client_id = client.id;
+    } else {
+        let new_client = NewClient {
+            name: "System Admin".to_string(),
+        };
+        let client = create_client(&db_pool, &new_client, true).await?;
+        println!("{{ id = {}, name = {} }}", client.id, client.name);
+        println!("Created system admin client.");
+        client_id = client.id;
+    }
+
+    let users = list_users(&db_pool, &client_id).await?;
+    if users.len() > 0 {
+        println!("Admin user already exists.");
         return Ok(());
     }
 
-    let new_client = NewClient {
-        name: "System Admin".to_string(),
-    };
-    let client = create_client(&db_pool, &new_client).await?;
-    println!("{{ id = {}, name = {} }}", client.id, client.name);
-    println!("Created system admin client.");
-
-    let user = create_user(&db_pool, &client.id, &new_user).await?;
+    let user = create_user(&db_pool, &client_id, &new_user).await?;
     println!(
         "{{ id = {}, username = {} status = {} }}",
         user.id, user.username, user.status
@@ -88,7 +97,7 @@ async fn run_list_clients(config: &Config) -> Result<()> {
 async fn run_create_client(config: &Config, name: String) -> Result<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
     let new_client = NewClient { name };
-    let client = create_client(&db_pool, &new_client).await?;
+    let client = create_client(&db_pool, &new_client, false).await?;
     println!("{{ id = {}, name = {} }}", client.id, client.name);
     println!("Created client.");
     Ok(())
