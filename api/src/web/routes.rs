@@ -16,13 +16,11 @@ use super::{
     files::handlers::{
         create_file_handler, delete_file_handler, get_file_handler, list_files_handler,
     },
-    health::{health_live_handler, health_ready_handler},
-    home::home_handler,
+    handler::{health_live_handler, health_ready_handler, home_handler, not_found_handler},
     middleware::{
         auth_middleware, bucket_middleware, dir_middleware, file_middleware,
         require_auth_middleware,
     },
-    not_found::not_found_handler,
 };
 use crate::web::server::AppState;
 

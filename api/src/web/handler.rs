@@ -1,11 +1,36 @@
-use axum::{extract::State, http::StatusCode};
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
+use serde::Serialize;
 
 use super::{response::JsonResponse, server::AppState};
-
 use crate::{
     Result,
     health::{check_liveness, check_readiness},
 };
+use memo::error::ErrorResponse;
+
+#[derive(Serialize)]
+pub struct AppMeta {
+    pub name: String,
+    pub version: String,
+}
+
+pub async fn home_handler() -> impl IntoResponse {
+    Json(AppMeta {
+        name: "files-rs".to_string(),
+        version: "0.1.0".to_string(),
+    })
+}
+
+pub async fn not_found_handler(State(_state): State<AppState>) -> impl IntoResponse {
+    (
+        StatusCode::NOT_FOUND,
+        Json(ErrorResponse {
+            status_code: StatusCode::NOT_FOUND.as_u16(),
+            message: "Not Found".to_string(),
+            error: "Not Found".to_string(),
+        }),
+    )
+}
 
 pub async fn health_live_handler() -> Result<JsonResponse> {
     let health = check_liveness().await?;

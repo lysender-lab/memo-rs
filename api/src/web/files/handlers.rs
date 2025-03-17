@@ -11,10 +11,11 @@ use crate::{
     dir::Dir,
     file::{FileObject, FilePayload, ListFilesParams, create_file, delete_file, list_files},
     storage::{delete_file_object, format_file, format_files},
-    web::{pagination::Paginated, response::JsonResponse, server::AppState},
+    web::{response::JsonResponse, server::AppState},
 };
 use memo::dto::bucket::BucketDto;
 use memo::dto::file::{FileDto, ImgVersion};
+use memo::dto::pagination::Paginated;
 use memo::role::Permission;
 use memo::utils::slugify_prefixed;
 

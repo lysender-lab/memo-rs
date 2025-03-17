@@ -10,7 +10,7 @@ use validator::Validate;
 
 use crate::file::count_dir_files;
 use crate::schema::dirs::{self, dsl};
-use crate::web::pagination::Paginated;
+use memo::dto::pagination::Paginated;
 use memo::utils::generate_id;
 use memo::validators::flatten_errors;
 use memo::{Error, Result};
