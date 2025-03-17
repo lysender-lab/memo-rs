@@ -19,6 +19,7 @@ pub struct Client {
     pub name: String,
     pub default_bucket_id: Option<String>,
     pub status: String,
+    pub admin: Option<i32>,
     pub created_at: i64,
 }
 
@@ -101,6 +102,7 @@ pub async fn create_client(db_pool: &Pool, data: &NewClient) -> Result<Client> {
         name: data_copy.name,
         default_bucket_id: None,
         status: "active".to_string(),
+        admin: None,
         created_at: today,
     };
 
