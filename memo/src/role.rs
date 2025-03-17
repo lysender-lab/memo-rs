@@ -4,6 +4,7 @@ use serde::Serialize;
 
 #[derive(PartialEq, Debug, Clone, Serialize)]
 pub enum Role {
+    SystemAdmin,
     Admin,
     Editor,
     Viewer,
@@ -34,6 +35,7 @@ impl TryFrom<&str> for Role {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
+            "SystemAdmin" => Ok(Role::SystemAdmin),
             "Admin" => Ok(Role::Admin),
             "Editor" => Ok(Role::Editor),
             "Viewer" => Ok(Role::Viewer),
@@ -48,6 +50,7 @@ impl TryFrom<&str> for Role {
 impl core::fmt::Display for Role {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
+            Role::SystemAdmin => write!(f, "SystemAdmin"),
             Role::Admin => write!(f, "Admin"),
             Role::Editor => write!(f, "Editor"),
             Role::Viewer => write!(f, "Viewer"),
@@ -125,6 +128,22 @@ pub fn to_permissions(permissions: &Vec<String>) -> crate::Result<Vec<Permission
 /// Role to permissions mapping
 pub fn role_permissions(role: &Role) -> Vec<Permission> {
     match role {
+        Role::SystemAdmin => vec![
+            Permission::BucketsList,
+            Permission::BucketsView,
+            Permission::DirsCreate,
+            Permission::DirsEdit,
+            Permission::DirsDelete,
+            Permission::DirsList,
+            Permission::DirsView,
+            Permission::DirsManage,
+            Permission::FilesCreate,
+            Permission::FilesEdit,
+            Permission::FilesDelete,
+            Permission::FilesList,
+            Permission::FilesView,
+            Permission::FilesManage,
+        ],
         Role::Admin => vec![
             Permission::BucketsList,
             Permission::BucketsView,

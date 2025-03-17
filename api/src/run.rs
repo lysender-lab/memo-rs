@@ -1,5 +1,5 @@
 use crate::Result;
-use crate::command::{run_bucket_command, run_client_command, run_user_command};
+use crate::command::{run_bucket_command, run_client_command, run_setup, run_user_command};
 use crate::config::CliArgs;
 use crate::config::Commands;
 use crate::config::Config;
@@ -11,6 +11,7 @@ pub async fn run_command(args: CliArgs) -> Result<()> {
     let config = Config::build(&args.config)?;
     match args.command {
         Commands::Server => run_web_server(&config).await,
+        Commands::Setup => run_setup(&config).await,
         Commands::Clients(cmd) => run_client_command(cmd, &config).await,
         Commands::Buckets(cmd) => run_bucket_command(cmd, &config).await,
         Commands::Users(cmd) => run_user_command(cmd, &config).await,

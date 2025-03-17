@@ -3,7 +3,6 @@ use diesel::dsl::count_star;
 use diesel::prelude::*;
 use diesel::{QueryDsl, SelectableHelper};
 use serde::{Deserialize, Serialize};
-use tracing::error;
 use validator::Validate;
 
 use crate::auth::user::count_client_users;
@@ -57,15 +56,33 @@ pub async fn list_clients(db_pool: &Pool) -> Result<Vec<Client>> {
     match conn_result {
         Ok(select_res) => match select_res {
             Ok(items) => Ok(items),
-            Err(e) => {
-                error!("{e}");
-                Err("Error reading clients".into())
-            }
+            Err(e) => Err(format!("Error reading clients: {}", e).into()),
         },
-        Err(e) => {
-            error!("{e}");
-            Err("Error using the db connection".into())
-        }
+        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
+    }
+}
+
+pub async fn find_admin_client(db_pool: &Pool) -> Result<Option<Client>> {
+    let Ok(db) = db_pool.get().await else {
+        return Err("Error getting db connection".into());
+    };
+
+    let conn_result = db
+        .interact(move |conn| {
+            dsl::clients
+                .filter(dsl::admin.eq(Some(1)))
+                .select(Client::as_select())
+                .first::<Client>(conn)
+                .optional()
+        })
+        .await;
+
+    match conn_result {
+        Ok(select_res) => match select_res {
+            Ok(item) => Ok(item),
+            Err(e) => Err(format!("Error reading clients: {}", e).into()),
+        },
+        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
     }
 }
 
@@ -118,15 +135,9 @@ pub async fn create_client(db_pool: &Pool, data: &NewClient) -> Result<Client> {
     match conn_result {
         Ok(insert_res) => match insert_res {
             Ok(_) => Ok(client),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error creating client".into())
-            }
+            Err(e) => Err(format!("Error creating client: {}", e).into()),
         },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
+        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
     }
 }
 
@@ -149,15 +160,9 @@ pub async fn get_client(db_pool: &Pool, id: &str) -> Result<Option<Client>> {
     match conn_result {
         Ok(select_res) => match select_res {
             Ok(item) => Ok(item),
-            Err(e) => {
-                error!("{e}");
-                Err("Error reading clients".into())
-            }
+            Err(e) => Err(format!("Error reading clients: {}", e).into()),
         },
-        Err(e) => {
-            error!("{e}");
-            Err("Error using the db connection".into())
-        }
+        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
     }
 }
 
@@ -180,15 +185,9 @@ pub async fn find_client_by_name(pool: &Pool, name: &str) -> Result<Option<Clien
     match conn_result {
         Ok(select_res) => match select_res {
             Ok(item) => Ok(item),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error finding client".into())
-            }
+            Err(e) => Err(format!("Error finding client: {}", e).into()),
         },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
+        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
     }
 }
 
@@ -204,15 +203,9 @@ pub async fn count_clients(db_pool: &Pool) -> Result<i64> {
     match conn_result {
         Ok(count_res) => match count_res {
             Ok(count) => Ok(count),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error counting clients".into())
-            }
+            Err(e) => Err(format!("Error counting clients: {}", e).into()),
         },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
+        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
     }
 }
 
@@ -235,15 +228,9 @@ pub async fn update_client_status(db_pool: &Pool, id: &str, status: &str) -> Res
     match conn_result {
         Ok(update_res) => match update_res {
             Ok(item) => Ok(item > 0),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error updating client".into())
-            }
+            Err(e) => Err(format!("Error updating client: {}", e).into()),
         },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
+        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
     }
 }
 
@@ -274,15 +261,9 @@ pub async fn delete_client(db_pool: &Pool, id: &str) -> Result<()> {
     match conn_result {
         Ok(delete_res) => match delete_res {
             Ok(_) => Ok(()),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error deleting client".into())
-            }
+            Err(e) => Err(format!("Error deleting client: {}", e).into()),
         },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
+        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
     }
 }
 
@@ -321,15 +302,9 @@ pub async fn set_client_default_bucket(db_pool: &Pool, id: &str, bucket_id: &str
     match conn_result {
         Ok(update_res) => match update_res {
             Ok(item) => Ok(item > 0),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error updating client".into())
-            }
+            Err(e) => Err(format!("Error updating client: {}", e).into()),
         },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
+        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
     }
 }
 
@@ -354,14 +329,8 @@ pub async fn unset_client_default_bucket(db_pool: &Pool, id: &str) -> Result<boo
     match conn_result {
         Ok(update_res) => match update_res {
             Ok(item) => Ok(item > 0),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error updating client".into())
-            }
+            Err(e) => Err(format!("Error updating client: {}", e).into()),
         },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
+        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
     }
 }

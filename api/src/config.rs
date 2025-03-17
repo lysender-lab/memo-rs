@@ -89,6 +89,9 @@ pub enum Commands {
     /// Runs the API server
     Server,
 
+    /// Sets up the admin user
+    Setup,
+
     /// Manages clients
     #[command(subcommand)]
     Clients(ClientCommand),

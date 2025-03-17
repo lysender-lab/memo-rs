@@ -20,6 +20,7 @@ multer.workspace = true
 rpassword.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+text_io.workspace = true
 tokio.workspace = true
 toml.workspace = true
 tower.workspace = true

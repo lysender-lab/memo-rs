@@ -1,9 +1,11 @@
+use text_io::read;
+
 use crate::Result;
 use crate::auth::user::{delete_user, list_users, update_user_password, update_user_status};
 use crate::bucket::{NewBucket, create_bucket, delete_bucket};
 use crate::bucket::{get_bucket, list_buckets};
 use crate::client::{
-    delete_client, get_client, list_clients, set_client_default_bucket,
+    delete_client, find_admin_client, get_client, list_clients, set_client_default_bucket,
     unset_client_default_bucket, update_client_status,
 };
 use crate::config::{BucketCommand, ClientCommand, Config, UserCommand};
@@ -13,6 +15,43 @@ use crate::storage::create_storage_client;
 use crate::auth::user::NewUser;
 use crate::auth::user::{create_user, get_user};
 use crate::client::{NewClient, create_client};
+
+pub async fn run_setup(config: &Config) -> Result<()> {
+    let username: String = read!("Enter username for the admin user: {}\n");
+
+    let Ok(password) = rpassword::prompt_password("Enter password for the admin user: ") else {
+        return Err("Failed to read password".into());
+    };
+
+    let password = password.trim().to_string();
+    let new_user = NewUser {
+        username,
+        password,
+        roles: "SystemAdmin".to_string(),
+    };
+
+    let db_pool = create_db_pool(config.db.url.as_str());
+    let admin_client = find_admin_client(&db_pool).await?;
+    if admin_client.is_some() {
+        println!("Admin client already exists.");
+        return Ok(());
+    }
+
+    let new_client = NewClient {
+        name: "System Admin".to_string(),
+    };
+    let client = create_client(&db_pool, &new_client).await?;
+    println!("{{ id = {}, name = {} }}", client.id, client.name);
+    println!("Created system admin client.");
+
+    let user = create_user(&db_pool, &client.id, &new_user).await?;
+    println!(
+        "{{ id = {}, username = {} status = {} }}",
+        user.id, user.username, user.status
+    );
+    println!("Created system admin user.");
+    Ok(())
+}
 
 pub async fn run_client_command(cmd: ClientCommand, config: &Config) -> Result<()> {
     match cmd {
