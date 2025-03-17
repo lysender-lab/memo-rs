@@ -6,7 +6,7 @@ use crate::{
     auth::authenticate,
 };
 
-use super::{middlewares::require_auth_middleware, response::JsonResponse, server::AppState};
+use super::{middleware::require_auth_middleware, response::JsonResponse, server::AppState};
 
 #[axum::debug_handler]
 pub async fn authenticate_handler(

@@ -1,5 +1,1 @@
-mod handlers;
-mod routes;
-
-pub use handlers::*;
-pub use routes::*;
+pub mod handlers;
