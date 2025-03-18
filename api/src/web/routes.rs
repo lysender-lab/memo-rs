@@ -8,11 +8,12 @@ use tower_http::limit::RequestBodyLimitLayer;
 
 use super::{
     handler::{
-        authenticate_handler, create_dir_handler, create_file_handler, delete_dir_handler,
-        delete_file_handler, get_bucket_handler, get_client_handler, get_dir_handler,
-        get_file_handler, health_live_handler, health_ready_handler, home_handler,
+        authenticate_handler, create_client_handler, create_dir_handler, create_file_handler,
+        delete_dir_handler, delete_file_handler, get_bucket_handler, get_client_handler,
+        get_dir_handler, get_file_handler, health_live_handler, health_ready_handler, home_handler,
         list_buckets_handler, list_clients_handler, list_dirs_handler, list_files_handler,
-        not_found_handler, profile_handler, update_dir_handler, user_authz, user_permissions,
+        not_found_handler, profile_handler, update_client_handler, update_dir_handler, user_authz,
+        user_permissions,
     },
     middleware::{
         auth_middleware, bucket_middleware, client_middleware, clients_admin_middleware,
@@ -56,7 +57,7 @@ fn private_routes(state: AppState) -> Router<AppState> {
 
 fn clients_routes(state: AppState) -> Router<AppState> {
     Router::new()
-        .route("/", get(list_clients_handler))
+        .route("/", get(list_clients_handler).post(create_client_handler))
         .nest("/{client_id}", inner_client_routes(state.clone()))
         .layer(middleware::from_fn_with_state(
             state.clone(),
@@ -82,13 +83,27 @@ fn buckets_routes(state: AppState) -> Router<AppState> {
 
 fn inner_client_routes(state: AppState) -> Router<AppState> {
     Router::new()
-        .route("/", get(get_client_handler))
-        .nest("/users", dir_routes(state.clone()))
-        .nest("/buckets", dir_routes(state.clone()))
+        .route("/", get(get_client_handler).patch(update_client_handler))
+        .nest("/users", client_users_routes(state.clone()))
+        .nest("/buckets", client_buckets_routes(state.clone()))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             client_middleware,
         ))
+        .with_state(state)
+}
+
+fn client_users_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(list_buckets_handler))
+        .nest("/{user_id}", inner_bucket_routes(state.clone()))
+        .with_state(state)
+}
+
+fn client_buckets_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(list_buckets_handler))
+        .nest("/{bucket_id}", inner_bucket_routes(state.clone()))
         .with_state(state)
 }
 

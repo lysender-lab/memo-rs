@@ -81,7 +81,11 @@ pub async fn clients_admin_middleware(
     request: Request,
     next: Next,
 ) -> Response<Body> {
-    let permissions = vec![Permission::ClientsList];
+    let permissions = vec![
+        Permission::ClientsList,
+        Permission::ClientsView,
+        Permission::ClientsManage,
+    ];
     if !actor.has_permissions(&permissions) {
         return create_json_error_response(
             StatusCode::FORBIDDEN,

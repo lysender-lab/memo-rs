@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::auth::user::count_client_users;
-use crate::bucket::{count_client_buckets, get_bucket};
+use crate::bucket::{count_client_buckets, find_client_bucket, get_bucket};
 use crate::schema::clients::{self, dsl};
 use memo::{Error, Result, utils::generate_id, validators::flatten_errors};
 
@@ -28,6 +28,30 @@ pub struct NewClient {
     #[validate(length(min = 1, max = 50))]
     #[validate(custom(function = "memo::validators::anyname"))]
     pub name: String,
+
+    #[validate(length(min = 1, max = 50))]
+    #[validate(custom(function = "memo::validators::uuid"))]
+    pub default_bucket_id: Option<String>,
+
+    #[validate(length(min = 1, max = 50))]
+    #[validate(custom(function = "memo::validators::status"))]
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Validate, AsChangeset)]
+#[diesel(table_name = crate::schema::clients)]
+pub struct UpdateClient {
+    #[validate(length(min = 1, max = 50))]
+    #[validate(custom(function = "memo::validators::anyname"))]
+    pub name: Option<String>,
+
+    #[validate(length(min = 1, max = 50))]
+    #[validate(custom(function = "memo::validators::uuid"))]
+    pub default_bucket_id: Option<Option<String>>,
+
+    #[validate(length(min = 1, max = 50))]
+    #[validate(custom(function = "memo::validators::status"))]
+    pub status: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, AsChangeset)]
@@ -142,14 +166,22 @@ pub async fn create_client(db_pool: &Pool, data: &NewClient, admin: bool) -> Res
         return Err(Error::ValidationError("Client already exists".to_string()));
     }
 
-    let data_copy = data.clone();
+    if let Some(bucket_id) = data.default_bucket_id.clone() {
+        let bucket = find_client_bucket(db_pool, bucket_id.as_str(), &data.name).await?;
+        if bucket.is_none() {
+            return Err(Error::ValidationError(
+                "Default bucket not found".to_string(),
+            ));
+        }
+    }
+
     let today = chrono::Utc::now().timestamp();
     let admin = if admin { Some(1) } else { None };
     let client = Client {
         id: generate_id(),
-        name: data_copy.name,
-        default_bucket_id: None,
-        status: "active".to_string(),
+        name: data.name.clone(),
+        default_bucket_id: data.default_bucket_id.clone(),
+        status: data.status.clone(),
         admin,
         created_at: today,
     };
@@ -192,6 +224,48 @@ pub async fn get_client(db_pool: &Pool, id: &str) -> Result<Option<ClientDto>> {
         Ok(select_res) => match select_res {
             Ok(item) => Ok(item.map(|item| item.into())),
             Err(e) => Err(format!("Error reading clients: {}", e).into()),
+        },
+        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
+    }
+}
+
+pub async fn update_client(db_pool: &Pool, id: &str, data: &UpdateClient) -> Result<bool> {
+    if let Err(errors) = data.validate() {
+        return Err(Error::ValidationError(flatten_errors(&errors)));
+    }
+
+    let Ok(db) = db_pool.get().await else {
+        return Err("Error getting db connection".into());
+    };
+
+    // We can't tell whether we are setting default bucket to null or skipping it
+    // Will just use a separate function for that
+    if let Some(bucket_id) = data.default_bucket_id.clone() {
+        if let Some(bid) = bucket_id {
+            let bucket = get_bucket(db_pool, &bid).await?;
+            if bucket.is_none() {
+                return Err(Error::ValidationError(
+                    "Default bucket not found".to_string(),
+                ));
+            }
+        }
+    }
+
+    let id = id.to_string();
+    let data_copy = data.clone();
+    let conn_result = db
+        .interact(move |conn| {
+            diesel::update(dsl::clients)
+                .filter(dsl::id.eq(id.as_str()))
+                .set(data_copy)
+                .execute(conn)
+        })
+        .await;
+
+    match conn_result {
+        Ok(update_res) => match update_res {
+            Ok(item) => Ok(item > 0),
+            Err(e) => Err(format!("Error updating client: {}", e).into()),
         },
         Err(e) => Err(format!("Error using the db connection: {}", e).into()),
     }

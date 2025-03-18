@@ -1,9 +1,10 @@
 use axum::{
     Extension,
-    extract::{Json, Multipart, Path, Query, State},
+    extract::{Json, Multipart, Path, Query, State, rejection::JsonRejection},
     http::StatusCode,
     response::IntoResponse,
 };
+use core::result::Result as CoreResult;
 use serde::Serialize;
 use tokio::{fs::File, fs::create_dir_all, io::AsyncWriteExt};
 
@@ -13,7 +14,7 @@ use crate::{
         authenticate,
     },
     bucket::list_buckets,
-    client::list_clients,
+    client::{NewClient, UpdateClient, create_client, get_client, list_clients, update_client},
     dir::{
         Dir, ListDirsParams, NewDir, UpdateDir, create_dir, delete_dir, get_dir, list_dirs,
         update_dir,
@@ -45,13 +46,13 @@ pub struct AppMeta {
 #[axum::debug_handler]
 pub async fn authenticate_handler(
     State(state): State<AppState>,
-    payload: Json<Credentials>,
+    payload: CoreResult<Json<Credentials>, JsonRejection>,
 ) -> Result<JsonResponse> {
-    //let Some(credentials) = payload else {
-    //    return Err(Error::BadRequest("Invalid credentials payload".into()));
-    //};
+    let Ok(credentials) = payload else {
+        return Err(Error::BadRequest("Invalid credentials payload".into()));
+    };
 
-    let res = authenticate(&state, &payload).await?;
+    let res = authenticate(&state, &credentials).await?;
     Ok(JsonResponse::new(serde_json::to_string(&res).unwrap()))
 }
 
@@ -112,6 +113,63 @@ pub async fn list_clients_handler(State(state): State<AppState>) -> Result<JsonR
     Ok(JsonResponse::new(serde_json::to_string(&clients).unwrap()))
 }
 
+pub async fn create_client_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    payload: CoreResult<Json<NewClient>, JsonRejection>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::ClientsCreate];
+    if !actor.has_permissions(&permissions) {
+        return Err(Error::Forbidden("Insufficient permissions".to_string()));
+    }
+
+    let Ok(data) = payload else {
+        return Err(Error::BadRequest("Invalid request payload".to_string()));
+    };
+
+    let created = create_client(&state.db_pool, &data, false).await?;
+    Ok(JsonResponse::new(serde_json::to_string(&created).unwrap()))
+}
+
+pub async fn get_client_handler(Extension(client): Extension<ClientDto>) -> Result<JsonResponse> {
+    Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()))
+}
+
+pub async fn update_client_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(client): Extension<ClientDto>,
+    payload: CoreResult<Json<UpdateClient>, JsonRejection>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::ClientsEdit];
+    if !actor.has_permissions(&permissions) {
+        return Err(Error::Forbidden("Insufficient permissions".to_string()));
+    }
+
+    let Ok(data) = payload else {
+        return Err(Error::BadRequest("Invalid request payload".to_string()));
+    };
+
+    // No changes, just return the client
+    if data.name.is_none() && data.default_bucket_id.is_none() && data.status.is_none() {
+        return Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()));
+    }
+
+    let updated = update_client(&state.db_pool, client.id.as_str(), &data).await?;
+    if !updated {
+        // No changes, just return the client
+        return Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()));
+    }
+
+    let updated_client = get_client(&state.db_pool, client.id.as_str()).await?;
+    let Some(updated_client) = updated_client else {
+        return Err("Unable to find updated client".into());
+    };
+    Ok(JsonResponse::new(
+        serde_json::to_string(&updated_client).unwrap(),
+    ))
+}
+
 pub async fn list_buckets_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
@@ -120,13 +178,7 @@ pub async fn list_buckets_handler(
     Ok(JsonResponse::new(serde_json::to_string(&buckets).unwrap()))
 }
 
-pub async fn get_client_handler(Extension(client): Extension<ClientDto>) -> Result<JsonResponse> {
-    // Extract bucket from the middleware extension
-    Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()))
-}
-
 pub async fn get_bucket_handler(Extension(bucket): Extension<BucketDto>) -> Result<JsonResponse> {
-    // Extract bucket from the middleware extension
     Ok(JsonResponse::new(serde_json::to_string(&bucket).unwrap()))
 }
 
@@ -148,17 +200,17 @@ pub async fn create_dir_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
     Path(bucket_id): Path<String>,
-    payload: Json<NewDir>,
+    payload: CoreResult<Json<NewDir>, JsonRejection>,
 ) -> Result<JsonResponse> {
     let permissions = vec![Permission::DirsCreate];
     if !actor.has_permissions(&permissions) {
         return Err(Error::Forbidden("Insufficient permissions".to_string()));
     }
 
-    //let Some(data) = payload else {
-    //    return Err(Error::BadRequest("Invalid request payload".to_string()));
-    //};
-    let dir = create_dir(&state.db_pool, &bucket_id, &payload).await?;
+    let Ok(data) = payload else {
+        return Err(Error::BadRequest("Invalid request payload".to_string()));
+    };
+    let dir = create_dir(&state.db_pool, &bucket_id, &data).await?;
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,
         serde_json::to_string(&dir).unwrap(),
@@ -166,7 +218,6 @@ pub async fn create_dir_handler(
 }
 
 pub async fn get_dir_handler(Extension(dir): Extension<Dir>) -> Result<JsonResponse> {
-    // Extract dir from the middleware extension
     Ok(JsonResponse::new(serde_json::to_string(&dir).unwrap()))
 }
 
@@ -176,7 +227,7 @@ pub async fn update_dir_handler(
     Extension(actor): Extension<Actor>,
     Extension(dir): Extension<Dir>,
     Path(params): Path<Params>,
-    payload: Json<UpdateDir>,
+    payload: CoreResult<Json<UpdateDir>, JsonRejection>,
 ) -> Result<JsonResponse> {
     let permissions = vec![Permission::DirsEdit];
     if !actor.has_permissions(&permissions) {
@@ -184,11 +235,11 @@ pub async fn update_dir_handler(
     }
 
     let dir_id = params.dir_id.clone().expect("dir_id is required");
-    //let Some(data) = payload else {
-    //    return Err(Error::BadRequest("Invalid request payload".to_string()));
-    //};
+    let Ok(data) = payload else {
+        return Err(Error::BadRequest("Invalid request payload".to_string()));
+    };
 
-    let updated = update_dir(&state.db_pool, &dir_id, &payload).await?;
+    let updated = update_dir(&state.db_pool, &dir_id, &data).await?;
 
     // Either return the updated dir or the original one
     match updated {

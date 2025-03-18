@@ -5,8 +5,8 @@ use crate::auth::user::{delete_user, list_users, update_user_password, update_us
 use crate::bucket::{NewBucket, create_bucket, delete_bucket};
 use crate::bucket::{get_bucket, list_buckets};
 use crate::client::{
-    delete_client, find_admin_client, get_client, list_clients, set_client_default_bucket,
-    unset_client_default_bucket, update_client_status,
+    NewClient, delete_client, find_admin_client, get_client, list_clients,
+    set_client_default_bucket, unset_client_default_bucket, update_client_status,
 };
 use crate::config::{BucketCommand, ClientCommand, Config, UserCommand};
 use crate::db::create_db_pool;
@@ -14,7 +14,7 @@ use crate::storage::create_storage_client;
 
 use crate::auth::user::NewUser;
 use crate::auth::user::{create_user, get_user};
-use crate::client::{NewClient, create_client};
+use crate::client::create_client;
 
 pub async fn run_setup(config: &Config) -> Result<()> {
     print!("Enter username for the admin user: ");
@@ -40,6 +40,8 @@ pub async fn run_setup(config: &Config) -> Result<()> {
     } else {
         let new_client = NewClient {
             name: "system-admin".to_string(),
+            status: "active".to_string(),
+            default_bucket_id: None,
         };
         let client = create_client(&db_pool, &new_client, true).await?;
         println!("{{ id = {}, name = {} }}", client.id, client.name);
@@ -96,7 +98,11 @@ async fn run_list_clients(config: &Config) -> Result<()> {
 
 async fn run_create_client(config: &Config, name: String) -> Result<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
-    let new_client = NewClient { name };
+    let new_client = NewClient {
+        name,
+        status: "active".to_string(),
+        default_bucket_id: None,
+    };
     let client = create_client(&db_pool, &new_client, false).await?;
     println!("{{ id = {}, name = {} }}", client.id, client.name);
     println!("Created client.");
