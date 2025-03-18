@@ -45,6 +45,27 @@ impl Actor {
         }
     }
 
+    /// Empty actor for unauthenticated requests
+    pub fn empty() -> Self {
+        Actor {
+            id: "unknown".to_string(),
+            client_id: "unknown".to_string(),
+            default_bucket_id: None,
+            scope: "".to_string(),
+            user: UserDto {
+                id: "unknown".to_string(),
+                client_id: "unknown".to_string(),
+                username: "unknown".to_string(),
+                status: "unknown".to_string(),
+                roles: vec![],
+                created_at: 0,
+                updated_at: 0,
+            },
+            roles: vec![],
+            permissions: vec![],
+        }
+    }
+
     pub fn has_auth_scope(&self) -> bool {
         self.has_scope("auth")
     }

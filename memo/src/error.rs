@@ -134,10 +134,10 @@ impl IntoResponse for Error {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct ErrorResponse {
+pub struct ErrorResponse<'a> {
     pub status_code: u16,
-    pub message: String,
-    pub error: String,
+    pub message: &'a str,
+    pub error: &'a str,
 }
 
 pub fn create_json_response(status: StatusCode, body: String) -> Response<Body> {
@@ -150,8 +150,8 @@ pub fn create_json_response(status: StatusCode, body: String) -> Response<Body> 
 
 pub fn create_json_error_response(
     status: StatusCode,
-    message: String,
-    error: String,
+    message: &str,
+    error: &str,
 ) -> Response<Body> {
     let body = ErrorResponse {
         status_code: status.as_u16(),
@@ -166,90 +166,76 @@ pub fn to_json_error_response(error: Error) -> Response<Body> {
     match error {
         Error::AnyError(message) => create_json_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
-            message,
-            "Internal Server Error".to_string(),
+            message.as_str(),
+            "Internal Server Error",
         ),
         Error::BadRequest(message) => {
-            create_json_error_response(StatusCode::BAD_REQUEST, message, "Bad Request".to_string())
+            create_json_error_response(StatusCode::BAD_REQUEST, message.as_str(), "Bad Request")
         }
         Error::Forbidden(message) => {
-            create_json_error_response(StatusCode::FORBIDDEN, message, "Forbidden".to_string())
+            create_json_error_response(StatusCode::FORBIDDEN, message.as_str(), "Forbidden")
         }
         Error::ValidationError(message) => {
-            create_json_error_response(StatusCode::BAD_REQUEST, message, "Bad Request".to_string())
+            create_json_error_response(StatusCode::BAD_REQUEST, message.as_str(), "Bad Request")
         }
         Error::MissingUploadFile(message) => {
-            create_json_error_response(StatusCode::BAD_REQUEST, message, "Bad Request".to_string())
+            create_json_error_response(StatusCode::BAD_REQUEST, message.as_str(), "Bad Request")
         }
         Error::FileTypeNotAllowed => create_json_error_response(
             StatusCode::BAD_REQUEST,
-            "File type not allowed".to_string(),
-            "Bad Request".to_string(),
+            "File type not allowed",
+            "Bad Request",
         ),
         Error::NotFound(message) => {
-            create_json_error_response(StatusCode::NOT_FOUND, message, "Not Found".to_string())
+            create_json_error_response(StatusCode::NOT_FOUND, message.as_str(), "Not Found")
         }
-        Error::InvalidAuthToken => create_json_error_response(
-            StatusCode::UNAUTHORIZED,
-            "Unauthorized".to_string(),
-            "Unauthorized".to_string(),
-        ),
-        Error::InsufficientAuthScope => create_json_error_response(
-            StatusCode::UNAUTHORIZED,
-            "Unauthorized".to_string(),
-            "Unauthorized".to_string(),
-        ),
-        Error::NoAuthToken => create_json_error_response(
-            StatusCode::UNAUTHORIZED,
-            "Unauthorized".to_string(),
-            "Unauthorized".to_string(),
-        ),
-        Error::InvalidClient => create_json_error_response(
-            StatusCode::UNAUTHORIZED,
-            "Unauthorized".to_string(),
-            "Unauthorized".to_string(),
-        ),
-        Error::RequiresAuth => create_json_error_response(
-            StatusCode::UNAUTHORIZED,
-            "Unauthorized".to_string(),
-            "Unauthorized".to_string(),
-        ),
+        Error::InvalidAuthToken => {
+            create_json_error_response(StatusCode::UNAUTHORIZED, "Unauthorized", "Unauthorized")
+        }
+        Error::InsufficientAuthScope => {
+            create_json_error_response(StatusCode::UNAUTHORIZED, "Unauthorized", "Unauthorized")
+        }
+        Error::NoAuthToken => {
+            create_json_error_response(StatusCode::UNAUTHORIZED, "Unauthorized", "Unauthorized")
+        }
+        Error::InvalidClient => {
+            create_json_error_response(StatusCode::UNAUTHORIZED, "Unauthorized", "Unauthorized")
+        }
+        Error::RequiresAuth => {
+            create_json_error_response(StatusCode::UNAUTHORIZED, "Unauthorized", "Unauthorized")
+        }
         Error::HashPasswordError(message) => create_json_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
-            message,
-            "Internal Server Error".to_string(),
+            message.as_str(),
+            "Internal Server Error",
         ),
         Error::VerifyPasswordHashError(message) => create_json_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
-            message,
-            "Internal Server Error".to_string(),
+            message.as_str(),
+            "Internal Server Error",
         ),
         Error::InvalidPassword => create_json_error_response(
             StatusCode::UNAUTHORIZED,
-            "Invalid username or password".to_string(),
-            "Unauthorized".to_string(),
+            "Invalid username or password",
+            "Unauthorized",
         ),
-        Error::InactiveUser => create_json_error_response(
-            StatusCode::UNAUTHORIZED,
-            "Inactive user".to_string(),
-            "Unauthorized".to_string(),
-        ),
-        Error::UserNotFound => create_json_error_response(
-            StatusCode::UNAUTHORIZED,
-            "Unauthorized".to_string(),
-            "Unauthorized".to_string(),
-        ),
+        Error::InactiveUser => {
+            create_json_error_response(StatusCode::UNAUTHORIZED, "Inactive user", "Unauthorized")
+        }
+        Error::UserNotFound => {
+            create_json_error_response(StatusCode::UNAUTHORIZED, "Unauthorized", "Unauthorized")
+        }
         Error::ConfigError(message) => create_json_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
-            message,
-            "Internal Server Error".to_string(),
+            message.as_str(),
+            "Internal Server Error",
         ),
 
         // Website errors are not handled here
         _ => create_json_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal Server Error".to_string(),
-            "Internal Server Error".to_string(),
+            "Internal Server Error",
+            "Internal Server Error",
         ),
     }
 }

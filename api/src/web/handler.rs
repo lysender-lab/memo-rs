@@ -83,8 +83,8 @@ pub async fn not_found_handler(State(_state): State<AppState>) -> impl IntoRespo
         StatusCode::NOT_FOUND,
         Json(ErrorResponse {
             status_code: StatusCode::NOT_FOUND.as_u16(),
-            message: "Not Found".to_string(),
-            error: "Not Found".to_string(),
+            message: "Not Found",
+            error: "Not Found",
         }),
     )
 }
