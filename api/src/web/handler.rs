@@ -15,8 +15,8 @@ use crate::{
     },
     bucket::list_buckets,
     client::{
-        NewClient, UpdateClient, create_client, delete_client, get_client, list_clients,
-        update_client,
+        ClientDefaultBucket, NewClient, UpdateClient, create_client, delete_client, get_client,
+        list_clients, update_client,
     },
     dir::{
         Dir, ListDirsParams, NewDir, UpdateDir, create_dir, delete_dir, get_dir, list_dirs,
@@ -192,6 +192,42 @@ pub async fn delete_client_handler(
     Ok(JsonResponse::with_status(
         StatusCode::NO_CONTENT,
         "".to_string(),
+    ))
+}
+
+pub async fn update_default_bucket_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(client): Extension<ClientDto>,
+    payload: CoreResult<Json<ClientDefaultBucket>, JsonRejection>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::ClientsEdit];
+    if !actor.has_permissions(&permissions) {
+        return Err(Error::Forbidden("Insufficient permissions".to_string()));
+    }
+
+    let Ok(data) = payload else {
+        return Err(Error::BadRequest("Invalid request payload".to_string()));
+    };
+
+    let data = UpdateClient {
+        name: None,
+        status: None,
+        default_bucket_id: Some(data.default_bucket_id.clone()),
+    };
+
+    let updated = update_client(&state.db_pool, client.id.as_str(), &data).await?;
+    if !updated {
+        // No changes, just return the client
+        return Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()));
+    }
+
+    let updated_client = get_client(&state.db_pool, client.id.as_str()).await?;
+    let Some(updated_client) = updated_client else {
+        return Err("Unable to find updated client".into());
+    };
+    Ok(JsonResponse::new(
+        serde_json::to_string(&updated_client).unwrap(),
     ))
 }
 

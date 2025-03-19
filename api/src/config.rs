@@ -92,10 +92,6 @@ pub enum Commands {
     /// Sets up the admin user
     Setup,
 
-    /// Manages clients
-    #[command(subcommand)]
-    Clients(ClientCommand),
-
     /// Manages client users
     #[command(subcommand)]
     Users(UserCommand),
@@ -106,17 +102,6 @@ pub enum Commands {
 
     /// Checks health of the API server
     CheckHealth,
-}
-
-#[derive(Subcommand, Debug)]
-pub enum ClientCommand {
-    List,
-    Create { name: String },
-    Enable { id: String },
-    Disable { id: String },
-    Delete { id: String },
-    SetDefaultBucket { id: String, bucket_id: String },
-    UnsetDefaultBucket { id: String },
 }
 
 #[derive(Subcommand, Debug)]

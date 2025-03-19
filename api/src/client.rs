@@ -54,6 +54,13 @@ pub struct UpdateClient {
     pub status: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, Validate)]
+pub struct ClientDefaultBucket {
+    #[validate(length(min = 1, max = 50))]
+    #[validate(custom(function = "memo::validators::uuid"))]
+    pub default_bucket_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize, AsChangeset)]
 #[diesel(table_name = crate::schema::clients)]
 pub struct UpdateClientBucket {
@@ -327,31 +334,6 @@ pub async fn count_clients(db_pool: &Pool) -> Result<i64> {
     }
 }
 
-pub async fn update_client_status(db_pool: &Pool, id: &str, status: &str) -> Result<bool> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
-
-    let id = id.to_string();
-    let status = status.to_string();
-    let conn_result = db
-        .interact(move |conn| {
-            diesel::update(dsl::clients)
-                .filter(dsl::id.eq(id.as_str()))
-                .set(dsl::status.eq(status))
-                .execute(conn)
-        })
-        .await;
-
-    match conn_result {
-        Ok(update_res) => match update_res {
-            Ok(item) => Ok(item > 0),
-            Err(e) => Err(format!("Error updating client: {}", e).into()),
-        },
-        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
-    }
-}
-
 pub async fn delete_client(db_pool: &Pool, id: &str) -> Result<()> {
     let Ok(db) = db_pool.get().await else {
         return Err("Error getting db connection".into());
@@ -389,74 +371,6 @@ pub async fn delete_client(db_pool: &Pool, id: &str) -> Result<()> {
         Ok(delete_res) => match delete_res {
             Ok(_) => Ok(()),
             Err(e) => Err(format!("Error deleting client: {}", e).into()),
-        },
-        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
-    }
-}
-
-pub async fn set_client_default_bucket(db_pool: &Pool, id: &str, bucket_id: &str) -> Result<bool> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
-
-    // Ensure that bucket exists and is owned by the client
-    let bucket = get_bucket(db_pool, bucket_id).await?;
-    let Some(bucket) = bucket else {
-        return Err(Error::ValidationError("Bucket not found".to_string()));
-    };
-
-    if bucket.client_id.as_str() != id {
-        return Err(Error::ValidationError(
-            "Bucket not owned by client".to_string(),
-        ));
-    }
-
-    let id = id.to_string();
-    let bucket_id = bucket_id.to_string();
-    let data = UpdateClientBucket {
-        default_bucket_id: Some(bucket_id),
-    };
-
-    let conn_result = db
-        .interact(move |conn| {
-            diesel::update(dsl::clients)
-                .filter(dsl::id.eq(id.as_str()))
-                .set(data)
-                .execute(conn)
-        })
-        .await;
-
-    match conn_result {
-        Ok(update_res) => match update_res {
-            Ok(item) => Ok(item > 0),
-            Err(e) => Err(format!("Error updating client: {}", e).into()),
-        },
-        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
-    }
-}
-
-pub async fn unset_client_default_bucket(db_pool: &Pool, id: &str) -> Result<bool> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
-
-    let id = id.to_string();
-    let data = UpdateClientBucket {
-        default_bucket_id: None,
-    };
-    let conn_result = db
-        .interact(move |conn| {
-            diesel::update(dsl::clients)
-                .filter(dsl::id.eq(id.as_str()))
-                .set(data)
-                .execute(conn)
-        })
-        .await;
-
-    match conn_result {
-        Ok(update_res) => match update_res {
-            Ok(item) => Ok(item > 0),
-            Err(e) => Err(format!("Error updating client: {}", e).into()),
         },
         Err(e) => Err(format!("Error using the db connection: {}", e).into()),
     }
