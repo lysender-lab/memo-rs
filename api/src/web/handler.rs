@@ -14,7 +14,10 @@ use crate::{
         authenticate,
     },
     bucket::list_buckets,
-    client::{NewClient, UpdateClient, create_client, get_client, list_clients, update_client},
+    client::{
+        NewClient, UpdateClient, create_client, delete_client, get_client, list_clients,
+        update_client,
+    },
     dir::{
         Dir, ListDirsParams, NewDir, UpdateDir, create_dir, delete_dir, get_dir, list_dirs,
         update_dir,
@@ -167,6 +170,28 @@ pub async fn update_client_handler(
     };
     Ok(JsonResponse::new(
         serde_json::to_string(&updated_client).unwrap(),
+    ))
+}
+
+pub async fn delete_client_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(client): Extension<ClientDto>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::ClientsDelete];
+    if !actor.has_permissions(&permissions) {
+        return Err(Error::Forbidden("Insufficient permissions".to_string()));
+    }
+
+    if client.admin {
+        return Err(Error::Forbidden("Cannot delete admin client".to_string()));
+    }
+
+    let _ = delete_client(&state.db_pool, &client.id).await?;
+
+    Ok(JsonResponse::with_status(
+        StatusCode::NO_CONTENT,
+        "".to_string(),
     ))
 }
 

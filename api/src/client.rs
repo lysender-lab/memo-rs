@@ -68,7 +68,7 @@ impl From<ClientDto> for Client {
             name: dto.name,
             default_bucket_id: dto.default_bucket_id,
             status: dto.status,
-            admin: if dto.admin { Some(1) } else { None },
+            admin: if dto.admin { Some(1) } else { Some(0) },
             created_at: dto.created_at,
         }
     }
@@ -163,7 +163,9 @@ pub async fn create_client(db_pool: &Pool, data: &NewClient, admin: bool) -> Res
 
     // Client name must be unique
     if let Some(_) = find_client_by_name(db_pool, &data.name).await? {
-        return Err(Error::ValidationError("Client already exists".to_string()));
+        return Err(Error::ValidationError(
+            "Client name already exists".to_string(),
+        ));
     }
 
     if let Some(bucket_id) = data.default_bucket_id.clone() {
@@ -176,7 +178,7 @@ pub async fn create_client(db_pool: &Pool, data: &NewClient, admin: bool) -> Res
     }
 
     let today = chrono::Utc::now().timestamp();
-    let admin = if admin { Some(1) } else { None };
+    let admin = if admin { Some(1) } else { Some(0) };
     let client = Client {
         id: generate_id(),
         name: data.name.clone(),
@@ -237,6 +239,17 @@ pub async fn update_client(db_pool: &Pool, id: &str, data: &UpdateClient) -> Res
     let Ok(db) = db_pool.get().await else {
         return Err("Error getting db connection".into());
     };
+
+    // Client name must be unique
+    if let Some(name) = data.name.clone() {
+        if let Some(existing) = find_client_by_name(db_pool, &name).await? {
+            if existing.id != id {
+                return Err(Error::ValidationError(
+                    "Client name already exists".to_string(),
+                ));
+            }
+        }
+    }
 
     // We can't tell whether we are setting default bucket to null or skipping it
     // Will just use a separate function for that
@@ -343,6 +356,15 @@ pub async fn delete_client(db_pool: &Pool, id: &str) -> Result<()> {
     let Ok(db) = db_pool.get().await else {
         return Err("Error getting db connection".into());
     };
+
+    let Some(client) = get_client(db_pool, id).await? else {
+        return Err(Error::ValidationError("Client not found".to_string()));
+    };
+    if client.admin {
+        return Err(Error::ValidationError(
+            "Cannot delete admin client".to_string(),
+        ));
+    }
 
     let bucket_count = count_client_buckets(db_pool, id).await?;
     if bucket_count > 0 {
