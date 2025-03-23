@@ -9,7 +9,8 @@ use validator::Validate;
 use crate::auth::user::count_client_users;
 use crate::bucket::{count_client_buckets, find_client_bucket, get_bucket};
 use crate::schema::clients::{self, dsl};
-use memo::{Error, Result, utils::generate_id, validators::flatten_errors};
+use crate::{Error, Result};
+use memo::{utils::generate_id, validators::flatten_errors};
 
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
 #[diesel(table_name = crate::schema::clients)]

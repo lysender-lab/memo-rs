@@ -10,10 +10,10 @@ use validator::Validate;
 
 use crate::file::count_dir_files;
 use crate::schema::dirs::{self, dsl};
+use crate::{Error, Result};
 use memo::dto::pagination::Paginated;
 use memo::utils::generate_id;
 use memo::validators::flatten_errors;
-use memo::{Error, Result};
 
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
 #[diesel(table_name = crate::schema::dirs)]

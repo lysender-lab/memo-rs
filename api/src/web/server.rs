@@ -31,9 +31,7 @@ pub async fn run_web_server(config: &Config) -> Result<()> {
         db_pool: pool,
     };
 
-    let mut routes_all = Router::new().merge(all_routes(state));
-
-    routes_all = routes_all.layer(
+    let routes_all = Router::new().merge(all_routes(state)).layer(
         ServiceBuilder::new().layer(
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::new().level(Level::INFO))

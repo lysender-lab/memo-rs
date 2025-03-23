@@ -4,11 +4,11 @@ use deadpool_diesel::sqlite::Pool;
 use tracing::error;
 
 use crate::{
+    Result,
     bucket::test_read_bucket,
     config::Config,
     storage::{create_storage_client, test_list_hmac_keys},
 };
-use memo::Result;
 
 #[derive(Serialize)]
 pub struct LiveStatus {

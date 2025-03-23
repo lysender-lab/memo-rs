@@ -12,7 +12,8 @@ use validator::Validate;
 use crate::dir::count_bucket_dirs;
 use crate::schema::buckets::{self, dsl};
 use crate::storage::read_bucket;
-use memo::{Error, Result, dto::bucket::BucketDto, utils::generate_id, validators::flatten_errors};
+use crate::{Error, Result};
+use memo::{dto::bucket::BucketDto, utils::generate_id, validators::flatten_errors};
 
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
 #[diesel(table_name = crate::schema::buckets)]

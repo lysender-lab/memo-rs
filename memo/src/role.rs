@@ -1,3 +1,4 @@
+use snafu::prelude::*;
 use std::collections::HashSet;
 
 use serde::Serialize;
@@ -8,6 +9,12 @@ pub enum Role {
     Admin,
     Editor,
     Viewer,
+}
+
+#[derive(Debug, Snafu)]
+#[snafu(display("Invalid roles: {roles}"))]
+pub struct InvalidRolesError {
+    roles: String,
 }
 
 #[derive(PartialEq, Eq, Hash, Debug, Clone, Serialize)]
@@ -48,6 +55,12 @@ pub enum Permission {
     FilesManage,
 }
 
+#[derive(Debug, Snafu)]
+#[snafu(display("Invalid permissions: {permissions}"))]
+pub struct InvalidPermissionsError {
+    permissions: String,
+}
+
 impl TryFrom<&str> for Role {
     type Error = String;
 
@@ -57,10 +70,7 @@ impl TryFrom<&str> for Role {
             "Admin" => Ok(Role::Admin),
             "Editor" => Ok(Role::Editor),
             "Viewer" => Ok(Role::Viewer),
-            _ => Err(format!(
-                "Valid roles are: Admin, Editor, Viewer, got: {}",
-                value
-            )),
+            _ => Err(format!("Invalid role: {value}")),
         }
     }
 }
@@ -76,13 +86,21 @@ impl core::fmt::Display for Role {
     }
 }
 
-pub fn to_roles(list: Vec<String>) -> crate::Result<Vec<Role>> {
-    let mut roles: Vec<Role> = Vec::new();
+pub fn to_roles(list: Vec<String>) -> Result<Vec<Role>, InvalidRolesError> {
+    let mut roles: Vec<Role> = Vec::with_capacity(list.len());
+    let mut errors: Vec<String> = Vec::with_capacity(list.len());
     for item in list.into_iter() {
-        match Role::try_from(item.as_str()) {
+        let role = item.as_str();
+        match Role::try_from(role) {
             Ok(role) => roles.push(role),
-            Err(e) => return Err(e.into()),
+            Err(_) => errors.push(role.to_string()),
         }
+    }
+
+    if errors.len() > 0 {
+        return Err(InvalidRolesError {
+            roles: errors.join(", "),
+        });
     }
     Ok(roles)
 }
@@ -122,7 +140,7 @@ impl TryFrom<&str> for Permission {
             "files.list" => Ok(Permission::FilesList),
             "files.view" => Ok(Permission::FilesView),
             "files.manage" => Ok(Permission::FilesManage),
-            _ => Err(format!("Invalid permission: {}", value)),
+            _ => Err(format!("Invalid permission: {value}")),
         }
     }
 }
@@ -164,13 +182,22 @@ impl core::fmt::Display for Permission {
     }
 }
 
-pub fn to_permissions(permissions: &Vec<String>) -> crate::Result<Vec<Permission>> {
-    let mut perms: Vec<Permission> = Vec::new();
+pub fn to_permissions(
+    permissions: &Vec<String>,
+) -> Result<Vec<Permission>, InvalidPermissionsError> {
+    let mut perms: Vec<Permission> = Vec::with_capacity(permissions.len());
+    let mut errors: Vec<String> = Vec::with_capacity(permissions.len());
     for item in permissions.iter() {
-        match Permission::try_from(item.as_str()) {
+        let perm = item.as_str();
+        match Permission::try_from(perm) {
             Ok(permission) => perms.push(permission),
-            Err(e) => return Err(e.into()),
+            Err(_) => errors.push(perm.to_string()),
         }
+    }
+    if errors.len() > 0 {
+        return Err(InvalidPermissionsError {
+            permissions: errors.join(", "),
+        });
     }
     Ok(perms)
 }
@@ -262,8 +289,52 @@ mod tests {
 
     #[test]
     fn test_to_roles_invalid() {
-        let data = vec!["Admin".to_string(), "InvalidRole".to_string()];
+        let data = vec![
+            "Admin".to_string(),
+            "InvalidRole".to_string(),
+            "NetflixRole".to_string(),
+        ];
         let roles = to_roles(data);
         assert!(roles.is_err());
+        if let Err(e) = roles {
+            assert_eq!(e.to_string(), "Invalid roles: InvalidRole, NetflixRole");
+        }
+    }
+
+    #[test]
+    fn test_to_permissions_valid() {
+        let data = vec![
+            "clients.create".to_string(),
+            "clients.edit".to_string(),
+            "clients.delete".to_string(),
+        ];
+        let permissions = to_permissions(&data).unwrap();
+        assert_eq!(
+            permissions,
+            vec![
+                Permission::ClientsCreate,
+                Permission::ClientsEdit,
+                Permission::ClientsDelete,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_to_permissions_invalid() {
+        let data = vec![
+            "clients.create".to_string(),
+            "clients.edit".to_string(),
+            "clients.delete".to_string(),
+            "netflix.binge".to_string(),
+            "netflix.watch".to_string(),
+        ];
+        let permissions = to_permissions(&data);
+        assert!(permissions.is_err());
+        if let Err(e) = permissions {
+            assert_eq!(
+                e.to_string(),
+                "Invalid permissions: netflix.binge, netflix.watch"
+            );
+        }
     }
 }

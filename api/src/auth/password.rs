@@ -3,7 +3,7 @@ use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
 
-use memo::{Error, Result};
+use crate::{Error, Result};
 
 pub fn hash_password(password: &str) -> Result<String> {
     let pwd = password.as_bytes();

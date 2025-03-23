@@ -10,5 +10,7 @@ axum.workspace = true
 derive_more.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+snafu.workspace = true
+thiserror.workspace = true
 validator.workspace = true
 uuid.workspace = true
