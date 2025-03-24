@@ -1,32 +1,32 @@
-use std::path::PathBuf;
-use std::time::Duration;
-
 use google_cloud_storage::client::google_cloud_auth::credentials::CredentialsFile;
-use google_cloud_storage::client::{Client, ClientConfig};
+use google_cloud_storage::client::{Client, ClientConfig, google_cloud_auth};
 use google_cloud_storage::http::Error as CloudError;
 use google_cloud_storage::http::buckets::get::GetBucketRequest;
 use google_cloud_storage::http::hmac_keys::list::ListHmacKeysRequest;
 use google_cloud_storage::http::objects::delete::DeleteObjectRequest;
 use google_cloud_storage::http::objects::upload::{Media, UploadObjectRequest, UploadType};
 use google_cloud_storage::sign::SignedURLOptions;
+use snafu::{Backtrace, ResultExt, Snafu, ensure};
+use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::dir::Dir;
 use crate::file::ORIGINAL_PATH;
-use crate::{Error, Result};
 use memo::dto::bucket::BucketDto;
 use memo::dto::file::{FileDto, ImgVersionDto};
 
-pub async fn create_storage_client(key_file: &str) -> Result<Client> {
-    match CredentialsFile::new_from_file(key_file.to_string()).await {
-        Ok(creds) => match ClientConfig::default().with_credentials(creds).await {
-            Ok(config) => Ok(Client::new(config)),
-            Err(err) => Err(format!("Error creating Cloud Storage config: {}", err).into()),
-        },
-        Err(err) => Err(format!("Error reading credentials file: {}", err).into()),
-    }
+pub async fn create_storage_client(key_file: &str) -> Result<Client, StorageError> {
+    let creds = CredentialsFile::new_from_file(key_file.to_string())
+        .await
+        .context(CredentialsSnafu)?;
+    let config = ClientConfig::default()
+        .with_credentials(creds)
+        .await
+        .context(CredentialsSnafu)?;
+    Ok(Client::new(config))
 }
 
-pub async fn read_bucket(client: &Client, name: &str) -> Result<String> {
+pub async fn read_bucket(client: &Client, name: &str) -> Result<String, StorageError> {
     let res = client
         .get_bucket(&GetBucketRequest {
             bucket: name.to_string(),

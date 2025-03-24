@@ -9,15 +9,17 @@ use image::DynamicImage;
 use image::ImageReader;
 use image::imageops;
 use serde::{Deserialize, Serialize};
+use snafu::{ResultExt, ensure};
 use std::fs::File;
 use std::path::PathBuf;
 use tracing::error;
 use validator::Validate;
 
+use crate::Result2;
 use crate::dir::{Dir, update_dir_timestamp};
+use crate::error::{DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, ValidationSnafu};
 use crate::schema::files::{self, dsl};
 use crate::storage::upload_object;
-use crate::{Error, Result};
 use memo::dto::bucket::BucketDto;
 use memo::dto::file::{FileDto, ImgDimension, ImgVersion, ImgVersionDto};
 use memo::dto::pagination::Paginated;
@@ -161,13 +163,16 @@ pub async fn list_files(
     db_pool: &Pool,
     dir: &Dir,
     params: &ListFilesParams,
-) -> Result<Paginated<FileObject>> {
-    if let Err(errors) = params.validate() {
-        return Err(Error::ValidationError(flatten_errors(&errors)));
-    }
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+) -> Result2<Paginated<FileObject>> {
+    let errors = params.validate();
+    ensure!(
+        errors.is_ok(),
+        ValidationSnafu {
+            msg: flatten_errors(&errors.unwrap_err()),
+        }
+    );
+
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let did = dir.id.clone();
 
@@ -198,7 +203,7 @@ pub async fn list_files(
     }
 
     let params_copy = params.clone();
-    let conn_result = db
+    let select_res = db
         .interact(move |conn| {
             let mut query = dsl::files.into_boxed();
             query = query.filter(dsl::dir_id.eq(did.as_str()));
@@ -216,32 +221,23 @@ pub async fn list_files(
                 .order(dsl::created_at.desc())
                 .load::<FileObject>(conn)
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(select_res) => match select_res {
-            Ok(items) => Ok(Paginated::new(items, page, per_page, total_records)),
-            Err(e) => {
-                error!("{e}");
-                Err("Error reading files".into())
-            }
-        },
-        Err(e) => {
-            error!("{e}");
-            Err("Error using the db connection".into())
-        }
-    }
+    let items = select_res.context(DbQuerySnafu {
+        table: "files".to_string(),
+    })?;
+
+    Ok(Paginated::new(items, page, per_page, total_records))
 }
 
-async fn list_files_count(db_pool: &Pool, dir_id: &str, params: &ListFilesParams) -> Result<i64> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+async fn list_files_count(db_pool: &Pool, dir_id: &str, params: &ListFilesParams) -> Result2<i64> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let did = dir_id.to_string();
     let params_copy = params.clone();
 
-    let conn_result = db
+    let count_res = db
         .interact(move |conn| {
             let mut query = dsl::files.into_boxed();
             query = query.filter(dsl::dir_id.eq(did.as_str()));
@@ -253,31 +249,22 @@ async fn list_files_count(db_pool: &Pool, dir_id: &str, params: &ListFilesParams
             }
             query.select(count_star()).get_result::<i64>(conn)
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(count_res) => match count_res {
-            Ok(count) => Ok(count),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error counting files".into())
-            }
-        },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
-    }
+    let count = count_res.context(DbQuerySnafu {
+        table: "files".to_string(),
+    })?;
+
+    Ok(count)
 }
 
-pub async fn find_dir_file(pool: &Pool, dir_id: &str, name: &str) -> Result<Option<FileObject>> {
-    let Ok(db) = pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn find_dir_file(pool: &Pool, dir_id: &str, name: &str) -> Result2<Option<FileObject>> {
+    let db = pool.get().await.context(DbPoolSnafu)?;
 
     let did = dir_id.to_string();
     let name_copy = name.to_string();
-    let conn_result = db
+    let select_res = db
         .interact(move |conn| {
             dsl::files
                 .filter(dsl::dir_id.eq(did.as_str()))
@@ -286,51 +273,35 @@ pub async fn find_dir_file(pool: &Pool, dir_id: &str, name: &str) -> Result<Opti
                 .first::<FileObject>(conn)
                 .optional()
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(select_res) => match select_res {
-            Ok(item) => Ok(item),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error finding file".into())
-            }
-        },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
-    }
+    let item = select_res.context(DbQuerySnafu {
+        table: "files".to_string(),
+    })?;
+
+    Ok(item)
 }
 
-pub async fn count_dir_files(db_pool: &Pool, dir_id: &str) -> Result<i64> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn count_dir_files(db_pool: &Pool, dir_id: &str) -> Result2<i64> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let did = dir_id.to_string();
-    let conn_result = db
+    let count_res = db
         .interact(move |conn| {
             dsl::files
                 .filter(dsl::dir_id.eq(did.as_str()))
                 .select(count_star())
                 .get_result::<i64>(conn)
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(count_res) => match count_res {
-            Ok(count) => Ok(count),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error counting files".into())
-            }
-        },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
-    }
+    let count = count_res.context(DbQuerySnafu {
+        table: "files".to_string(),
+    })?;
+
+    Ok(count)
 }
 
 pub async fn create_file(
@@ -339,43 +310,45 @@ pub async fn create_file(
     bucket: &BucketDto,
     dir: &Dir,
     data: &FilePayload,
-) -> Result<FileObject> {
+) -> Result2<FileObject> {
     let mut file_dto = init_file(dir, data)?;
 
-    if bucket.images_only && !file_dto.is_image {
-        if let Err(e) = cleanup_temp_uploads(data, None) {
-            error!("Cleanup orig file: {}", e);
+    let cleanup = |data: &FilePayload, file: Option<&FileDto>| {
+        if let Err(e) = cleanup_temp_uploads(data, file) {
+            error!("Cleanup file(s): {}", e);
         }
-        return Err(Error::ValidationError("Bucket only accepts images".into()));
+    };
+
+    if bucket.images_only && !file_dto.is_image {
+        cleanup(data, None);
+
+        return ValidationSnafu {
+            msg: "Bucket only accepts images".into(),
+        }
+        .fail();
     }
 
     // Limit the number of files per dir
-    let _ = match count_dir_files(db_pool, &dir.id).await {
-        Ok(count) => {
-            if count >= MAX_FILES as i64 {
-                if let Err(e) = cleanup_temp_uploads(data, None) {
-                    error!("Cleanup orig file: {}", e);
-                }
-                return Err(Error::ValidationError(
-                    "Maximum number of files reached".to_string(),
-                ));
-            }
+    let count = count_dir_files(db_pool, &dir.id).await?;
+    if count >= MAX_FILES as i64 {
+        cleanup(data, None);
+
+        return ValidationSnafu {
+            msg: "Directory already has files".to_string(),
         }
-        Err(e) => return Err(e),
-    };
+        .fail();
+    }
 
     // Name must be unique for the dir (not filename)
     if let Some(_) = find_dir_file(db_pool, &dir.id, &data.name).await? {
-        if let Err(e) = cleanup_temp_uploads(data, None) {
-            error!("Cleanup orig file: {}", e);
-        }
+        cleanup(data, None);
 
         // Show error but ensure name is not too long
         let short_name = truncate_string(&data.name, 20);
-        return Err(Error::ValidationError(format!(
-            "{} already exists",
-            short_name,
-        )));
+        return ValidationSnafu {
+            msg: format!("{} already exists", short_name),
+        }
+        .fail();
     }
 
     if file_dto.is_image {
@@ -395,9 +368,7 @@ pub async fn create_file(
                 }
             }
             Err(e) => {
-                if let Err(e) = cleanup_temp_uploads(data, None) {
-                    error!("Cleanup orig file: {}", e);
-                }
+                cleanup(data, None);
                 return Err(e);
             }
         };
@@ -408,76 +379,51 @@ pub async fn create_file(
     if let Err(upload_err) =
         upload_object(storage_client, bucket, dir, &data.upload_dir, &file_dto).await
     {
-        if let Err(e) = cleanup_temp_uploads(data, Some(&file_dto)) {
-            error!("Cleanup file(s): {}", e);
-        }
+        cleanup(data, Some(&file_dto));
         return Err(upload_err);
     }
 
     // Save to database
     let file_db_pool = db_pool.clone();
     let Ok(db) = file_db_pool.get().await else {
-        if let Err(e) = cleanup_temp_uploads(data, Some(&file_dto)) {
-            error!("Cleanup file(s): {}", e);
-        }
+        cleanup(data, Some(&file_dto));
         return Err("Error getting db connection".into());
     };
 
     let file: FileObject = file_dto.clone().into();
     let file_copy = file.clone();
 
-    let conn_result = db
+    let insert_res = db
         .interact(move |conn| {
             diesel::insert_into(files::table)
                 .values(&file_copy)
                 .execute(conn)
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(insert_res) => match insert_res {
-            Ok(_) => {
-                // Cleanup files before returning...
-                if let Err(e) = cleanup_temp_uploads(data, Some(&file_dto)) {
-                    // Can't afford to fail here, we will just log the error...
-                    error!("Cleanup file(s): {}", e);
-                }
+    let _ = insert_res.context(DbQuerySnafu {
+        table: "files".to_string(),
+    })?;
 
-                // Also update dir
-                let today = chrono::Utc::now().timestamp();
-                let dir_result = update_dir_timestamp(db_pool, &dir.id, today).await;
-                if let Err(e) = dir_result {
-                    // Can't afford to fail here, we will just log the error...
-                    error!("{}", e);
-                }
+    cleanup(data, Some(&file_dto));
 
-                Ok(file)
-            }
-            Err(e) => {
-                error!("{}", e);
-                if let Err(e) = cleanup_temp_uploads(data, Some(&file_dto)) {
-                    error!("Cleanup file(s): {}", e);
-                }
-                Err("Error creating file".into())
-            }
-        },
-        Err(e) => {
-            error!("{}", e);
-            if let Err(e) = cleanup_temp_uploads(data, Some(&file_dto)) {
-                error!("Cleanup file(s): {}", e);
-            }
-            Err("Error using the db connection".into())
-        }
+    // Also update dir
+    let today = chrono::Utc::now().timestamp();
+    let dir_result = update_dir_timestamp(db_pool, &dir.id, today).await;
+    if let Err(e) = dir_result {
+        // Can't afford to fail here, we will just log the error...
+        error!("{}", e);
     }
+
+    Ok(file)
 }
 
-pub async fn get_file(pool: &Pool, id: &str) -> Result<Option<FileObject>> {
-    let Ok(db) = pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn get_file(pool: &Pool, id: &str) -> Result2<Option<FileObject>> {
+    let db = pool.get().await.context(DbPoolSnafu)?;
 
     let fid = id.to_string();
-    let conn_result = db
+    let select_res = db
         .interact(move |conn| {
             dsl::files
                 .find(fid)
@@ -485,49 +431,33 @@ pub async fn get_file(pool: &Pool, id: &str) -> Result<Option<FileObject>> {
                 .first::<FileObject>(conn)
                 .optional()
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(select_res) => match select_res {
-            Ok(item) => Ok(item),
-            Err(e) => {
-                error!("{e}");
-                Err("Error reading files".into())
-            }
-        },
-        Err(e) => {
-            error!("{e}");
-            Err("Error using the db connection".into())
-        }
-    }
+    let item = select_res.context(DbQuerySnafu {
+        table: "files".to_string(),
+    })?;
+
+    Ok(item)
 }
 
-pub async fn delete_file(pool: &Pool, id: &str) -> Result<()> {
-    let Ok(db) = pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn delete_file(pool: &Pool, id: &str) -> Result2<()> {
+    let db = pool.get().await.context(DbPoolSnafu)?;
 
     let fid = id.to_string();
-    let conn_result = db
+    let delete_res = db
         .interact(move |conn| diesel::delete(dsl::files.filter(dsl::id.eq(fid))).execute(conn))
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(delete_res) => match delete_res {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                error!("{e}");
-                Err("Error deleting file".into())
-            }
-        },
-        Err(e) => {
-            error!("{e}");
-            Err("Error using the db connection".into())
-        }
-    }
+    let _ = delete_res.context(DbQuerySnafu {
+        table: "files".to_string(),
+    })?;
+
+    Ok(())
 }
 
-fn cleanup_temp_uploads(data: &FilePayload, file: Option<&FileDto>) -> Result<()> {
+fn cleanup_temp_uploads(data: &FilePayload, file: Option<&FileDto>) -> Result2<()> {
     if let Some(file) = file {
         if file.is_image {
             // Cleanup versions
@@ -565,7 +495,7 @@ fn cleanup_temp_uploads(data: &FilePayload, file: Option<&FileDto>) -> Result<()
     Ok(())
 }
 
-fn init_file(dir: &Dir, data: &FilePayload) -> Result<FileDto> {
+fn init_file(dir: &Dir, data: &FilePayload) -> Result2<FileDto> {
     let mut is_image = false;
     let content_type = get_content_type(&data.path)?;
     if content_type.starts_with("image/") {
@@ -599,7 +529,7 @@ fn init_file(dir: &Dir, data: &FilePayload) -> Result<FileDto> {
     Ok(file)
 }
 
-fn read_image(path: &PathBuf) -> Result<DynamicImage> {
+fn read_image(path: &PathBuf) -> Result2<DynamicImage> {
     match ImageReader::open(path) {
         Ok(read_img) => match read_img.with_guessed_format() {
             Ok(format_img) => match format_img.decode() {
@@ -624,7 +554,7 @@ fn read_image(path: &PathBuf) -> Result<DynamicImage> {
     }
 }
 
-fn create_versions(data: &FilePayload, exif_info: &PhotoExif) -> Result<Vec<ImgVersionDto>> {
+fn create_versions(data: &FilePayload, exif_info: &PhotoExif) -> Result2<Vec<ImgVersionDto>> {
     let img = read_image(&data.path)?;
 
     // Rotate based on exif orientation before creating versions
@@ -666,7 +596,7 @@ fn create_versions(data: &FilePayload, exif_info: &PhotoExif) -> Result<Vec<ImgV
     Ok(versions)
 }
 
-fn create_preview(data: &FilePayload, img: &DynamicImage) -> Result<ImgVersionDto> {
+fn create_preview(data: &FilePayload, img: &DynamicImage) -> Result2<ImgVersionDto> {
     // Prepare dir
     let prev_dir = data
         .upload_dir
@@ -709,7 +639,7 @@ fn create_preview(data: &FilePayload, img: &DynamicImage) -> Result<ImgVersionDt
     Ok(version)
 }
 
-fn create_thumbnail(data: &FilePayload, img: &DynamicImage) -> Result<ImgVersionDto> {
+fn create_thumbnail(data: &FilePayload, img: &DynamicImage) -> Result2<ImgVersionDto> {
     // Prepare dir
     let prev_dir = data
         .upload_dir
@@ -752,7 +682,7 @@ fn create_thumbnail(data: &FilePayload, img: &DynamicImage) -> Result<ImgVersion
     Ok(version)
 }
 
-fn get_content_type(path: &PathBuf) -> Result<String> {
+fn get_content_type(path: &PathBuf) -> Result2<String> {
     match infer::get_from_path(path) {
         Ok(Some(kind)) => Ok(kind.mime_type().to_string()),
         Ok(None) => Err("Uploaded file type unknown".into()),
@@ -760,7 +690,7 @@ fn get_content_type(path: &PathBuf) -> Result<String> {
     }
 }
 
-fn parse_exif_info(path: &PathBuf) -> Result<PhotoExif> {
+fn parse_exif_info(path: &PathBuf) -> Result2<PhotoExif> {
     let Ok(file) = File::open(path) else {
         return Err("Unable to open file to read exif into".into());
     };

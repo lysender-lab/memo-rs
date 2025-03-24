@@ -1,31 +1,10 @@
 use clap::{Parser, Subcommand};
 use serde::Deserialize;
-use snafu::{Backtrace, ResultExt, Snafu, ensure};
+use snafu::{ResultExt, ensure};
 use std::{fs, path::PathBuf};
 
-#[derive(Debug, Snafu)]
-pub enum ConfigError {
-    #[snafu(display("Error reading config file: {}", source))]
-    ConfigFile {
-        source: std::io::Error,
-        backtrace: Backtrace,
-    },
-
-    #[snafu(display("Error parsing config file: {}", source))]
-    ConfigParse {
-        source: toml::de::Error,
-        backtrace: Backtrace,
-    },
-
-    #[snafu(display("Config error: {}", msg))]
-    Config { msg: String },
-
-    #[snafu(display("Unable to create upload dir"))]
-    UploadDir {
-        source: std::io::Error,
-        backtrace: Backtrace,
-    },
-}
+use crate::Result2;
+use crate::error::{ConfigFileSnafu, ConfigParseSnafu, ConfigSnafu, UploadDirSnafu};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -53,16 +32,15 @@ pub struct DbConfig {
 }
 
 impl Config {
-    pub fn build(filename: &PathBuf) -> Result<Self, ConfigError> {
+    pub fn build(filename: &PathBuf) -> Result2<Self> {
         let toml_string = fs::read_to_string(filename).context(ConfigFileSnafu)?;
-
         let config: Config = toml::from_str(toml_string.as_str()).context(ConfigParseSnafu)?;
 
         // Validate config values
         ensure!(
             config.jwt_secret.len() > 0,
             ConfigSnafu {
-                msg: "JWT secret is required.".to_string()
+                msg: "Jwt secret is required.".to_string()
             }
         );
 
@@ -94,16 +72,14 @@ impl Config {
             }
         );
 
-        let mut upload_dir = config.upload_dir.clone();
         ensure!(
-            upload_dir.exists(),
+            config.upload_dir.exists(),
             ConfigSnafu {
-                msg: "Upload directory must be an absolute path.".to_string()
+                msg: "Upload directory does not exist.".to_string()
             }
         );
 
-        upload_dir = upload_dir.join("tmp");
-
+        let upload_dir = config.upload_dir.clone().join("tmp");
         std::fs::create_dir_all(&upload_dir).context(UploadDirSnafu)?;
 
         Ok(config)

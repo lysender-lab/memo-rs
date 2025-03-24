@@ -1,18 +1,19 @@
-use serde::{Deserialize, Serialize};
-
 use deadpool_diesel::sqlite::Pool;
-
 use diesel::dsl::count_star;
 use diesel::prelude::*;
 use diesel::{QueryDsl, SelectableHelper};
 use google_cloud_storage::client::Client;
-use tracing::error;
+use serde::{Deserialize, Serialize};
+use snafu::{ResultExt, ensure};
 use validator::Validate;
 
+use crate::Result2;
 use crate::dir::count_bucket_dirs;
+use crate::error::{
+    DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, MaxBucketsReachedSnafu, ValidationSnafu,
+};
 use crate::schema::buckets::{self, dsl};
 use crate::storage::read_bucket;
-use crate::{Error, Result};
 use memo::{dto::bucket::BucketDto, utils::generate_id, validators::flatten_errors};
 
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
@@ -73,13 +74,11 @@ impl From<Bucket> for BucketDto {
 
 const MAX_BUCKETS_PER_CLIENT: i32 = 50;
 
-pub async fn list_buckets(db_pool: &Pool, client_id: &str) -> Result<Vec<BucketDto>> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn list_buckets(db_pool: &Pool, client_id: &str) -> Result2<Vec<BucketDto>> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let client_id = client_id.to_string();
-    let conn_result = db
+    let select_res = db
         .interact(move |conn| {
             dsl::buckets
                 .filter(dsl::client_id.eq(&client_id))
@@ -87,24 +86,15 @@ pub async fn list_buckets(db_pool: &Pool, client_id: &str) -> Result<Vec<BucketD
                 .order(dsl::name.asc())
                 .load::<Bucket>(conn)
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(select_res) => match select_res {
-            Ok(items) => {
-                let dtos: Vec<BucketDto> = items.into_iter().map(|item| item.into()).collect();
-                Ok(dtos)
-            }
-            Err(e) => {
-                error!("{}", e);
-                Err("Error reading buckets".into())
-            }
-        },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
-    }
+    let items = select_res.context(DbQuerySnafu {
+        table: "buckets".to_string(),
+    })?;
+
+    let dtos: Vec<BucketDto> = items.into_iter().map(|item| item.into()).collect();
+    Ok(dtos)
 }
 
 pub async fn create_bucket(
@@ -112,33 +102,32 @@ pub async fn create_bucket(
     storage_client: &Client,
     client_id: &str,
     data: &NewBucket,
-) -> Result<BucketDto> {
-    if let Err(errors) = data.validate() {
-        return Err(Error::ValidationError(flatten_errors(&errors)));
-    }
+) -> Result2<BucketDto> {
+    let valid_res = data.validate();
+    ensure!(
+        valid_res.is_ok(),
+        ValidationSnafu {
+            msg: flatten_errors(&valid_res.unwrap_err()),
+        }
+    );
 
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     // Limit the number of buckets per client
-    let _ = match count_client_buckets(db_pool, client_id).await {
-        Ok(count) => {
-            if count >= MAX_BUCKETS_PER_CLIENT as i64 {
-                return Err(Error::ValidationError(
-                    "Maximum number of buckets reached".to_string(),
-                ));
-            }
-        }
-        Err(e) => return Err(e),
-    };
+    let count = count_client_buckets(db_pool, client_id).await?;
+    ensure!(
+        count < MAX_BUCKETS_PER_CLIENT as i64,
+        MaxBucketsReachedSnafu
+    );
 
     // Bucket name must be unique for the client
-    if let Some(_) = find_client_bucket(db_pool, client_id, &data.name).await? {
-        return Err(Error::ValidationError(
-            "Bucket name already exists".to_string(),
-        ));
-    }
+    let existing = find_client_bucket(db_pool, client_id, &data.name).await?;
+    ensure!(
+        existing.is_none(),
+        ValidationSnafu {
+            msg: "Bucket name already exists".to_string(),
+        }
+    );
 
     // Validate against the cloud storage
     let _ = read_bucket(storage_client, &data.name).await?;
@@ -154,36 +143,27 @@ pub async fn create_bucket(
     };
 
     let bucket_copy = bucket.clone();
-    let conn_result = db
+    let insert_res = db
         .interact(move |conn| {
             diesel::insert_into(buckets::table)
                 .values(&bucket_copy)
                 .execute(conn)
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(insert_res) => match insert_res {
-            Ok(_) => Ok(bucket.into()),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error creating a bucket".into())
-            }
-        },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
-    }
+    let _ = insert_res.context(DbQuerySnafu {
+        table: "buckets".to_string(),
+    })?;
+
+    Ok(bucket.into())
 }
 
-pub async fn get_bucket(db_pool: &Pool, id: &str) -> Result<Option<BucketDto>> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn get_bucket(db_pool: &Pool, id: &str) -> Result2<Option<BucketDto>> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let bid = id.to_string();
-    let conn_result = db
+    let select_res = db
         .interact(move |conn| {
             dsl::buckets
                 .find(bid)
@@ -191,35 +171,26 @@ pub async fn get_bucket(db_pool: &Pool, id: &str) -> Result<Option<BucketDto>> {
                 .first::<Bucket>(conn)
                 .optional()
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(select_res) => match select_res {
-            Ok(item) => Ok(item.map(|item| item.into())),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error finding bucket".into())
-            }
-        },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
-    }
+    let item = select_res.context(DbQuerySnafu {
+        table: "buckets".to_string(),
+    })?;
+
+    Ok(item.map(|item| item.into()))
 }
 
 pub async fn find_client_bucket(
     db_pool: &Pool,
     client_id: &str,
     name: &str,
-) -> Result<Option<BucketDto>> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+) -> Result2<Option<BucketDto>> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let cid = client_id.to_string();
     let name_copy = name.to_string();
-    let conn_result = db
+    let select_res = db
         .interact(move |conn| {
             dsl::buckets
                 .filter(dsl::client_id.eq(cid.as_str()))
@@ -228,115 +199,82 @@ pub async fn find_client_bucket(
                 .first::<Bucket>(conn)
                 .optional()
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(select_res) => match select_res {
-            Ok(item) => Ok(item.map(|item| item.into())),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error finding bucket".into())
-            }
-        },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
-    }
+    let item = select_res.context(DbQuerySnafu {
+        table: "buckets".to_string(),
+    })?;
+
+    Ok(item.map(|item| item.into()))
 }
 
-pub async fn count_client_buckets(db_pool: &Pool, client_id: &str) -> Result<i64> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn count_client_buckets(db_pool: &Pool, client_id: &str) -> Result2<i64> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let cid = client_id.to_string();
-    let conn_result = db
+    let count_res = db
         .interact(move |conn| {
             dsl::buckets
                 .filter(dsl::client_id.eq(cid.as_str()))
                 .select(count_star())
                 .get_result::<i64>(conn)
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(count_res) => match count_res {
-            Ok(count) => Ok(count),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error counting buckets".into())
-            }
-        },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
-    }
+    let count = count_res.context(DbQuerySnafu {
+        table: "buckets".to_string(),
+    })?;
+
+    Ok(count)
 }
 
-pub async fn delete_bucket(db_pool: &Pool, id: &str) -> Result<()> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn delete_bucket(db_pool: &Pool, id: &str) -> Result2<()> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     // Do not delete if there are still directories inside
     let dir_count = count_bucket_dirs(db_pool, id).await?;
-    if dir_count > 0 {
-        return Err(Error::ValidationError(
-            "Cannot delete bucket with directories inside".to_string(),
-        ));
-    }
+    ensure!(
+        dir_count == 0,
+        ValidationSnafu {
+            msg: "Cannot delete bucket with directories inside".to_string(),
+        }
+    );
 
     let bucket_id = id.to_string();
-    let conn_result = db
+    let delete_res = db
         .interact(move |conn| {
             diesel::delete(dsl::buckets.filter(dsl::id.eq(bucket_id.as_str()))).execute(conn)
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(delete_res) => match delete_res {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error deleting bucket".into())
-            }
-        },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
-    }
+    let _ = delete_res.context(DbQuerySnafu {
+        table: "buckets".to_string(),
+    })?;
+
+    Ok(())
 }
 
-pub async fn test_read_bucket(db_pool: &Pool) -> Result<()> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn test_read_bucket(db_pool: &Pool) -> Result2<()> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
-    let conn_result = db
+    let selected_res = db
         .interact(move |conn| {
             dsl::buckets
                 .select(Bucket::as_select())
                 .first::<Bucket>(conn)
                 .optional()
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(select_res) => match select_res {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error finding bucket".into())
-            }
-        },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
-    }
+    let _ = selected_res.context(DbQuerySnafu {
+        table: "buckets".to_string(),
+    })?;
+
+    Ok(())
 }
 
 #[cfg(test)]

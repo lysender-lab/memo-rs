@@ -1,6 +1,6 @@
 use text_io::read;
 
-use crate::Result;
+use crate::Result2;
 use crate::auth::user::{delete_user, list_users, update_user_password, update_user_status};
 use crate::bucket::{NewBucket, create_bucket, delete_bucket};
 use crate::bucket::{get_bucket, list_buckets};
@@ -13,7 +13,7 @@ use crate::auth::user::NewUser;
 use crate::auth::user::{create_user, get_user};
 use crate::client::create_client;
 
-pub async fn run_setup(config: &Config) -> Result<()> {
+pub async fn run_setup(config: &Config) -> Result2<()> {
     print!("Enter username for the admin user: ");
     let username: String = read!("{}\n");
 

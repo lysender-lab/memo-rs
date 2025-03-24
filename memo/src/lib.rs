@@ -5,4 +5,4 @@ pub mod utils;
 pub mod validators;
 
 // Re-exports
-pub use error::{Error, Result};
+pub use error::{Error, Error2, Result};

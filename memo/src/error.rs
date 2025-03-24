@@ -2,8 +2,27 @@ use axum::response::IntoResponse;
 use axum::{body::Body, http::StatusCode, response::Response};
 use derive_more::From;
 use serde::{Deserialize, Serialize};
+use snafu::{Backtrace, Snafu};
+
+use crate::role::{InvalidPermissionsError, InvalidRolesError};
 
 pub type Result<T> = core::result::Result<T, Error>;
+
+#[derive(Debug, Snafu)]
+#[snafu(visibility(pub(crate)))]
+pub enum Error2 {
+    #[snafu(display("{}", source))]
+    InvalidRoles {
+        source: InvalidRolesError,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("{}", source))]
+    InvalidPermissions {
+        source: InvalidPermissionsError,
+        backtrace: Backtrace,
+    },
+}
 
 #[derive(Debug, From)]
 pub enum Error {

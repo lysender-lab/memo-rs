@@ -4,12 +4,16 @@ use diesel::prelude::*;
 use diesel::{QueryDsl, SelectableHelper};
 use memo::dto::client::ClientDto;
 use serde::{Deserialize, Serialize};
+use snafu::{ResultExt, ensure};
 use validator::Validate;
 
 use crate::auth::user::count_client_users;
 use crate::bucket::{count_client_buckets, find_client_bucket, get_bucket};
+use crate::error::{
+    DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, MaxClientsReachedSnafu, ValidationSnafu,
+};
 use crate::schema::clients::{self, dsl};
-use crate::{Error, Result};
+use crate::{Error, Error2, Result, Result2};
 use memo::{utils::generate_id, validators::flatten_errors};
 
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
@@ -101,35 +105,30 @@ impl From<Client> for ClientDto {
 // Can't have too many clients
 const MAX_CLIENTS: i32 = 10;
 
-pub async fn list_clients(db_pool: &Pool) -> Result<Vec<Client>> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn list_clients(db_pool: &Pool) -> Result2<Vec<Client>> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
-    let conn_result = db
+    let select_res = db
         .interact(move |conn| {
             dsl::clients
                 .select(Client::as_select())
                 .order(dsl::name.asc())
                 .load::<Client>(conn)
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(select_res) => match select_res {
-            Ok(items) => Ok(items),
-            Err(e) => Err(format!("Error reading clients: {}", e).into()),
-        },
-        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
-    }
+    let items = select_res.context(DbQuerySnafu {
+        table: "clients".to_string(),
+    })?;
+
+    Ok(items)
 }
 
-pub async fn find_admin_client(db_pool: &Pool) -> Result<Option<Client>> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn find_admin_client(db_pool: &Pool) -> Result2<Option<Client>> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
-    let conn_result = db
+    let select_res = db
         .interact(move |conn| {
             dsl::clients
                 .filter(dsl::admin.eq(Some(1)))
@@ -137,52 +136,48 @@ pub async fn find_admin_client(db_pool: &Pool) -> Result<Option<Client>> {
                 .first::<Client>(conn)
                 .optional()
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(select_res) => match select_res {
-            Ok(item) => Ok(item),
-            Err(e) => Err(format!("Error reading clients: {}", e).into()),
-        },
-        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
-    }
+    let item = select_res.context(DbQuerySnafu {
+        table: "clients".to_string(),
+    })?;
+
+    Ok(item)
 }
 
-pub async fn create_client(db_pool: &Pool, data: &NewClient, admin: bool) -> Result<Client> {
-    if let Err(errors) = data.validate() {
-        return Err(Error::ValidationError(flatten_errors(&errors)));
-    }
+pub async fn create_client(db_pool: &Pool, data: &NewClient, admin: bool) -> Result2<Client> {
+    let valid_res = data.validate();
+    ensure!(
+        valid_res.is_ok(),
+        ValidationSnafu {
+            msg: flatten_errors(&valid_res.unwrap_err()),
+        }
+    );
 
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     // Limit the number of clients because we are poor!
-    let _ = match count_clients(db_pool).await {
-        Ok(count) => {
-            if count >= MAX_CLIENTS as i64 {
-                return Err(Error::ValidationError(
-                    "Maximum number of clients reached".to_string(),
-                ));
-            }
-        }
-        Err(e) => return Err(e),
-    };
+    let count = count_clients(db_pool).await?;
+    ensure!(count < MAX_CLIENTS as i64, MaxClientsReachedSnafu,);
 
     // Client name must be unique
-    if let Some(_) = find_client_by_name(db_pool, &data.name).await? {
-        return Err(Error::ValidationError(
-            "Client name already exists".to_string(),
-        ));
-    }
+    let existing = find_client_by_name(db_pool, &data.name).await?;
+    ensure!(
+        existing.is_none(),
+        ValidationSnafu {
+            msg: "Client name already exists".to_string(),
+        }
+    );
 
     if let Some(bucket_id) = data.default_bucket_id.clone() {
         let bucket = find_client_bucket(db_pool, bucket_id.as_str(), &data.name).await?;
-        if bucket.is_none() {
-            return Err(Error::ValidationError(
-                "Default bucket not found".to_string(),
-            ));
-        }
+        ensure!(
+            bucket.is_some(),
+            ValidationSnafu {
+                msg: "Default bucket not found".to_string()
+            }
+        );
     }
 
     let today = chrono::Utc::now().timestamp();
@@ -197,30 +192,27 @@ pub async fn create_client(db_pool: &Pool, data: &NewClient, admin: bool) -> Res
     };
 
     let client_copy = client.clone();
-    let conn_result = db
+    let insert_res = db
         .interact(move |conn| {
             diesel::insert_into(clients::table)
                 .values(&client_copy)
                 .execute(conn)
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(insert_res) => match insert_res {
-            Ok(_) => Ok(client),
-            Err(e) => Err(format!("Error creating client: {}", e).into()),
-        },
-        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
-    }
+    let _ = insert_res.context(DbQuerySnafu {
+        table: "clients".to_string(),
+    })?;
+
+    Ok(client)
 }
 
-pub async fn get_client(db_pool: &Pool, id: &str) -> Result<Option<ClientDto>> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn get_client(db_pool: &Pool, id: &str) -> Result2<Option<ClientDto>> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let cid = id.to_string();
-    let conn_result = db
+    let select_res = db
         .interact(move |conn| {
             dsl::clients
                 .find(cid)
@@ -228,34 +220,36 @@ pub async fn get_client(db_pool: &Pool, id: &str) -> Result<Option<ClientDto>> {
                 .first::<Client>(conn)
                 .optional()
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(select_res) => match select_res {
-            Ok(item) => Ok(item.map(|item| item.into())),
-            Err(e) => Err(format!("Error reading clients: {}", e).into()),
-        },
-        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
-    }
+    let item = select_res.context(DbQuerySnafu {
+        table: "clients".to_string(),
+    })?;
+
+    Ok(item.map(|item| item.into()))
 }
 
-pub async fn update_client(db_pool: &Pool, id: &str, data: &UpdateClient) -> Result<bool> {
-    if let Err(errors) = data.validate() {
-        return Err(Error::ValidationError(flatten_errors(&errors)));
-    }
+pub async fn update_client(db_pool: &Pool, id: &str, data: &UpdateClient) -> Result2<bool> {
+    let valid_res = data.validate();
+    ensure!(
+        valid_res.is_ok(),
+        ValidationSnafu {
+            msg: flatten_errors(&valid_res.unwrap_err()),
+        }
+    );
 
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     // Client name must be unique
     if let Some(name) = data.name.clone() {
         if let Some(existing) = find_client_by_name(db_pool, &name).await? {
-            if existing.id != id {
-                return Err(Error::ValidationError(
-                    "Client name already exists".to_string(),
-                ));
-            }
+            ensure!(
+                existing.id != id,
+                ValidationSnafu {
+                    msg: "Client name already exists".to_string(),
+                }
+            );
         }
     }
 
@@ -264,41 +258,39 @@ pub async fn update_client(db_pool: &Pool, id: &str, data: &UpdateClient) -> Res
     if let Some(bucket_id) = data.default_bucket_id.clone() {
         if let Some(bid) = bucket_id {
             let bucket = get_bucket(db_pool, &bid).await?;
-            if bucket.is_none() {
-                return Err(Error::ValidationError(
-                    "Default bucket not found".to_string(),
-                ));
-            }
+            ensure!(
+                bucket.is_some(),
+                ValidationSnafu {
+                    msg: "Default bucket not found".to_string(),
+                }
+            );
         }
     }
 
     let id = id.to_string();
     let data_copy = data.clone();
-    let conn_result = db
+    let update_res = db
         .interact(move |conn| {
             diesel::update(dsl::clients)
                 .filter(dsl::id.eq(id.as_str()))
                 .set(data_copy)
                 .execute(conn)
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(update_res) => match update_res {
-            Ok(item) => Ok(item > 0),
-            Err(e) => Err(format!("Error updating client: {}", e).into()),
-        },
-        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
-    }
+    let item = update_res.context(DbQuerySnafu {
+        table: "clients".to_string(),
+    })?;
+
+    Ok(item > 0)
 }
 
-pub async fn find_client_by_name(pool: &Pool, name: &str) -> Result<Option<ClientDto>> {
-    let Ok(db) = pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn find_client_by_name(pool: &Pool, name: &str) -> Result2<Option<ClientDto>> {
+    let db = pool.get().await.context(DbPoolSnafu)?;
 
     let name_copy = name.to_string();
-    let conn_result = db
+    let select_res = db
         .interact(move |conn| {
             dsl::clients
                 .filter(dsl::name.eq(name_copy.as_str()))
@@ -306,73 +298,75 @@ pub async fn find_client_by_name(pool: &Pool, name: &str) -> Result<Option<Clien
                 .first::<Client>(conn)
                 .optional()
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(select_res) => match select_res {
-            Ok(item) => Ok(item.map(|item| item.into())),
-            Err(e) => Err(format!("Error finding client: {}", e).into()),
-        },
-        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
-    }
+    let item = select_res.context(DbQuerySnafu {
+        table: "clients".to_string(),
+    })?;
+
+    Ok(item.map(|item| item.into()))
 }
 
-pub async fn count_clients(db_pool: &Pool) -> Result<i64> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn count_clients(db_pool: &Pool) -> Result2<i64> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
-    let conn_result = db
+    let count_res = db
         .interact(move |conn| dsl::clients.select(count_star()).get_result::<i64>(conn))
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(count_res) => match count_res {
-            Ok(count) => Ok(count),
-            Err(e) => Err(format!("Error counting clients: {}", e).into()),
-        },
-        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
-    }
+    let count = count_res.context(DbQuerySnafu {
+        table: "clients".to_string(),
+    })?;
+
+    Ok(count)
 }
 
-pub async fn delete_client(db_pool: &Pool, id: &str) -> Result<()> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn delete_client(db_pool: &Pool, id: &str) -> Result2<()> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let Some(client) = get_client(db_pool, id).await? else {
-        return Err(Error::ValidationError("Client not found".to_string()));
+        return ValidationSnafu {
+            msg: "Client not found".to_string(),
+        }
+        .fail();
     };
-    if client.admin {
-        return Err(Error::ValidationError(
-            "Cannot delete admin client".to_string(),
-        ));
-    }
+
+    ensure!(
+        client.admin,
+        ValidationSnafu {
+            msg: "Cannot delete admin client".to_string(),
+        }
+    );
 
     let bucket_count = count_client_buckets(db_pool, id).await?;
-    if bucket_count > 0 {
-        return Err(Error::ValidationError(
-            "Client still has buckets".to_string(),
-        ));
-    }
+    ensure!(
+        bucket_count == 0,
+        ValidationSnafu {
+            msg: "Client still has buckets".to_string(),
+        }
+    );
 
     let users_count = count_client_users(db_pool, id).await?;
-    if users_count > 0 {
-        return Err(Error::ValidationError("Client still has users".to_string()));
-    }
+    ensure!(
+        users_count == 0,
+        ValidationSnafu {
+            msg: "Client still has users".to_string(),
+        }
+    );
 
     let id = id.to_string();
-    let conn_result = db
+    let delete_res = db
         .interact(move |conn| {
             diesel::delete(dsl::clients.filter(dsl::id.eq(id.as_str()))).execute(conn)
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(delete_res) => match delete_res {
-            Ok(_) => Ok(()),
-            Err(e) => Err(format!("Error deleting client: {}", e).into()),
-        },
-        Err(e) => Err(format!("Error using the db connection: {}", e).into()),
-    }
+    let _ = delete_res.context(DbQuerySnafu {
+        table: "clients".to_string(),
+    })?;
+
+    Ok(())
 }
