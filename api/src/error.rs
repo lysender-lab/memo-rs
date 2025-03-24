@@ -1,9 +1,23 @@
+use crate::config::ConfigError;
 use axum::response::IntoResponse;
 use axum::{body::Body, http::StatusCode, response::Response};
 use serde::{Deserialize, Serialize};
+use snafu::{Backtrace, Snafu};
 use thiserror::Error;
 
-pub type Result<T> = core::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
+
+pub type Result2<T> = std::result::Result<T, Error2>;
+
+#[derive(Debug, Snafu)]
+#[snafu(visibility(pub(crate)))]
+pub enum Error2 {
+    #[snafu(display("{}", source))]
+    Config {
+        source: ConfigError,
+        backtrace: Backtrace,
+    },
+}
 
 #[derive(Error, Debug)]
 pub enum Error {

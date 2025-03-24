@@ -1,8 +1,31 @@
 use clap::{Parser, Subcommand};
 use serde::Deserialize;
+use snafu::{Backtrace, ResultExt, Snafu, ensure};
 use std::{fs, path::PathBuf};
 
-use crate::error::Result;
+#[derive(Debug, Snafu)]
+pub enum ConfigError {
+    #[snafu(display("Error reading config file: {}", source))]
+    ConfigFile {
+        source: std::io::Error,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Error parsing config file: {}", source))]
+    ConfigParse {
+        source: toml::de::Error,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Config error: {}", msg))]
+    Config { msg: String },
+
+    #[snafu(display("Unable to create upload dir"))]
+    UploadDir {
+        source: std::io::Error,
+        backtrace: Backtrace,
+    },
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -30,44 +53,58 @@ pub struct DbConfig {
 }
 
 impl Config {
-    pub fn build(filename: &PathBuf) -> Result<Self> {
-        let toml_string = match fs::read_to_string(filename) {
-            Ok(str) => str,
-            Err(e) => {
-                return Err(format!("Error reading config file: {}", e).into());
-            }
-        };
+    pub fn build(filename: &PathBuf) -> Result<Self, ConfigError> {
+        let toml_string = fs::read_to_string(filename).context(ConfigFileSnafu)?;
 
-        let config: Config = match toml::from_str(toml_string.as_str()) {
-            Ok(value) => value,
-            Err(e) => {
-                return Err(format!("Error parsing config file: {}", e).into());
-            }
-        };
+        let config: Config = toml::from_str(toml_string.as_str()).context(ConfigParseSnafu)?;
 
         // Validate config values
-        if config.jwt_secret.len() == 0 {
-            return Err("JWT secret is required.".into());
-        }
-        if config.cloud.project_id.len() == 0 {
-            return Err("Google Cloud Project ID is required.".into());
-        }
-        if config.cloud.credentials.len() == 0 {
-            return Err("Google Cloud credentials file is required.".into());
-        }
-        if config.db.url.len() == 0 {
-            return Err("Database URL required.".into());
-        }
-        if config.server.port == 0 {
-            return Err("PORT is required.".into());
-        }
+        ensure!(
+            config.jwt_secret.len() > 0,
+            ConfigSnafu {
+                msg: "JWT secret is required.".to_string()
+            }
+        );
+
+        ensure!(
+            config.cloud.project_id.len() > 0,
+            ConfigSnafu {
+                msg: "Google Cloud Project ID is required.".to_string()
+            }
+        );
+
+        ensure!(
+            config.cloud.credentials.len() > 0,
+            ConfigSnafu {
+                msg: "Google Cloud credentials file is required.".to_string()
+            }
+        );
+
+        ensure!(
+            config.db.url.len() > 0,
+            ConfigSnafu {
+                msg: "Database URL is required.".to_string()
+            }
+        );
+
+        ensure!(
+            config.server.port > 0,
+            ConfigSnafu {
+                msg: "Server port is required.".to_string()
+            }
+        );
 
         let mut upload_dir = config.upload_dir.clone();
-        if !upload_dir.exists() {
-            return Err("Upload directory does not exist.".into());
-        }
+        ensure!(
+            upload_dir.exists(),
+            ConfigSnafu {
+                msg: "Upload directory must be an absolute path.".to_string()
+            }
+        );
+
         upload_dir = upload_dir.join("tmp");
-        std::fs::create_dir_all(&upload_dir).expect("Unable to create upload tmp dir");
+
+        std::fs::create_dir_all(&upload_dir).context(UploadDirSnafu)?;
 
         Ok(config)
     }

@@ -1,4 +1,4 @@
-use snafu::prelude::*;
+use snafu::{Snafu, ensure};
 use std::collections::HashSet;
 
 use serde::Serialize;
@@ -97,11 +97,13 @@ pub fn to_roles(list: Vec<String>) -> Result<Vec<Role>, InvalidRolesError> {
         }
     }
 
-    if errors.len() > 0 {
-        return Err(InvalidRolesError {
-            roles: errors.join(", "),
-        });
-    }
+    ensure!(
+        errors.len() == 0,
+        InvalidRolesSnafu {
+            roles: errors.join(", ")
+        }
+    );
+
     Ok(roles)
 }
 
@@ -194,11 +196,14 @@ pub fn to_permissions(
             Err(_) => errors.push(perm.to_string()),
         }
     }
-    if errors.len() > 0 {
-        return Err(InvalidPermissionsError {
-            permissions: errors.join(", "),
-        });
-    }
+
+    ensure!(
+        errors.len() == 0,
+        InvalidPermissionsSnafu {
+            permissions: errors.join(", ")
+        }
+    );
+
     Ok(perms)
 }
 
