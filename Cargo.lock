@@ -126,7 +126,6 @@ dependencies = [
  "serde_json",
  "snafu",
  "text_io",
- "thiserror 2.0.12",
  "tokio",
  "toml",
  "tower",
