@@ -1,4 +1,4 @@
-use crate::Result2;
+use crate::Result;
 use crate::command::{run_bucket_command, run_setup, run_user_command};
 use crate::config::CliArgs;
 use crate::config::Commands;
@@ -7,7 +7,7 @@ use crate::db::create_db_pool;
 use crate::health::check_readiness;
 use crate::web::server::run_web_server;
 
-pub async fn run_command(args: CliArgs) -> Result2<()> {
+pub async fn run_command(args: CliArgs) -> Result<()> {
     let config = Config::build(&args.config)?;
     match args.command {
         Commands::Server => run_web_server(&config).await,
@@ -18,7 +18,7 @@ pub async fn run_command(args: CliArgs) -> Result2<()> {
     }
 }
 
-pub async fn check_health(config: &Config) -> Result2<()> {
+pub async fn check_health(config: &Config) -> Result<()> {
     let pool = create_db_pool(config.db.url.as_str());
     let health = check_readiness(config, &pool).await?;
 

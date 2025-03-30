@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use validator::Validate;
 
-use crate::Result2;
+use crate::Result;
 use crate::error::{
     DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, MaxDirsReachedSnafu, ValidationSnafu,
 };
@@ -65,7 +65,7 @@ pub async fn list_dirs(
     db_pool: &Pool,
     bucket_id: &str,
     params: &ListDirsParams,
-) -> Result2<Paginated<Dir>> {
+) -> Result<Paginated<Dir>> {
     let valid_res = params.validate();
     ensure!(
         valid_res.is_ok(),
@@ -134,7 +134,7 @@ pub async fn list_dirs(
     Ok(Paginated::new(items, page, per_page, total_records))
 }
 
-async fn list_dirs_count(db_pool: &Pool, bucket_id: &str, params: &ListDirsParams) -> Result2<i64> {
+async fn list_dirs_count(db_pool: &Pool, bucket_id: &str, params: &ListDirsParams) -> Result<i64> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let bid = bucket_id.to_string();
@@ -163,7 +163,7 @@ async fn list_dirs_count(db_pool: &Pool, bucket_id: &str, params: &ListDirsParam
     Ok(count)
 }
 
-pub async fn create_dir(db_pool: &Pool, bucket_id: &str, data: &NewDir) -> Result2<Dir> {
+pub async fn create_dir(db_pool: &Pool, bucket_id: &str, data: &NewDir) -> Result<Dir> {
     let valid_res = data.validate();
     ensure!(
         valid_res.is_ok(),
@@ -216,7 +216,7 @@ pub async fn create_dir(db_pool: &Pool, bucket_id: &str, data: &NewDir) -> Resul
     Ok(dir)
 }
 
-pub async fn get_dir(pool: &Pool, id: &str) -> Result2<Option<Dir>> {
+pub async fn get_dir(pool: &Pool, id: &str) -> Result<Option<Dir>> {
     let db = pool.get().await.context(DbPoolSnafu)?;
 
     let did = id.to_string();
@@ -238,7 +238,7 @@ pub async fn get_dir(pool: &Pool, id: &str) -> Result2<Option<Dir>> {
     Ok(item)
 }
 
-pub async fn find_bucket_dir(pool: &Pool, bucket_id: &str, name: &str) -> Result2<Option<Dir>> {
+pub async fn find_bucket_dir(pool: &Pool, bucket_id: &str, name: &str) -> Result<Option<Dir>> {
     let db = pool.get().await.context(DbPoolSnafu)?;
 
     let bid = bucket_id.to_string();
@@ -262,7 +262,7 @@ pub async fn find_bucket_dir(pool: &Pool, bucket_id: &str, name: &str) -> Result
     Ok(item)
 }
 
-pub async fn count_bucket_dirs(db_pool: &Pool, bucket_id: &str) -> Result2<i64> {
+pub async fn count_bucket_dirs(db_pool: &Pool, bucket_id: &str) -> Result<i64> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let bid = bucket_id.to_string();
@@ -283,7 +283,7 @@ pub async fn count_bucket_dirs(db_pool: &Pool, bucket_id: &str) -> Result2<i64> 
     Ok(count)
 }
 
-pub async fn update_dir(db_pool: &Pool, id: &str, data: &UpdateDir) -> Result2<bool> {
+pub async fn update_dir(db_pool: &Pool, id: &str, data: &UpdateDir) -> Result<bool> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let errors = data.validate();
@@ -318,7 +318,7 @@ pub async fn update_dir(db_pool: &Pool, id: &str, data: &UpdateDir) -> Result2<b
     Ok(item > 0)
 }
 
-pub async fn update_dir_timestamp(db_pool: &Pool, id: &str, timestamp: i64) -> Result2<bool> {
+pub async fn update_dir_timestamp(db_pool: &Pool, id: &str, timestamp: i64) -> Result<bool> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let dir_id = id.to_string();
@@ -339,7 +339,7 @@ pub async fn update_dir_timestamp(db_pool: &Pool, id: &str, timestamp: i64) -> R
     Ok(item > 0)
 }
 
-pub async fn delete_dir(db_pool: &Pool, id: &str) -> Result2<()> {
+pub async fn delete_dir(db_pool: &Pool, id: &str) -> Result<()> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     // Do not delete if there are still files inside

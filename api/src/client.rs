@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use validator::Validate;
 
-use crate::Result2;
+use crate::Result;
 use crate::auth::user::count_client_users;
 use crate::bucket::{count_client_buckets, find_client_bucket, get_bucket};
 use crate::error::{
@@ -105,7 +105,7 @@ impl From<Client> for ClientDto {
 // Can't have too many clients
 const MAX_CLIENTS: i32 = 10;
 
-pub async fn list_clients(db_pool: &Pool) -> Result2<Vec<Client>> {
+pub async fn list_clients(db_pool: &Pool) -> Result<Vec<Client>> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let select_res = db
@@ -125,7 +125,7 @@ pub async fn list_clients(db_pool: &Pool) -> Result2<Vec<Client>> {
     Ok(items)
 }
 
-pub async fn find_admin_client(db_pool: &Pool) -> Result2<Option<Client>> {
+pub async fn find_admin_client(db_pool: &Pool) -> Result<Option<Client>> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let select_res = db
@@ -146,7 +146,7 @@ pub async fn find_admin_client(db_pool: &Pool) -> Result2<Option<Client>> {
     Ok(item)
 }
 
-pub async fn create_client(db_pool: &Pool, data: &NewClient, admin: bool) -> Result2<Client> {
+pub async fn create_client(db_pool: &Pool, data: &NewClient, admin: bool) -> Result<Client> {
     let valid_res = data.validate();
     ensure!(
         valid_res.is_ok(),
@@ -208,7 +208,7 @@ pub async fn create_client(db_pool: &Pool, data: &NewClient, admin: bool) -> Res
     Ok(client)
 }
 
-pub async fn get_client(db_pool: &Pool, id: &str) -> Result2<Option<ClientDto>> {
+pub async fn get_client(db_pool: &Pool, id: &str) -> Result<Option<ClientDto>> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let cid = id.to_string();
@@ -230,7 +230,7 @@ pub async fn get_client(db_pool: &Pool, id: &str) -> Result2<Option<ClientDto>> 
     Ok(item.map(|item| item.into()))
 }
 
-pub async fn update_client(db_pool: &Pool, id: &str, data: &UpdateClient) -> Result2<bool> {
+pub async fn update_client(db_pool: &Pool, id: &str, data: &UpdateClient) -> Result<bool> {
     let valid_res = data.validate();
     ensure!(
         valid_res.is_ok(),
@@ -286,7 +286,7 @@ pub async fn update_client(db_pool: &Pool, id: &str, data: &UpdateClient) -> Res
     Ok(item > 0)
 }
 
-pub async fn find_client_by_name(pool: &Pool, name: &str) -> Result2<Option<ClientDto>> {
+pub async fn find_client_by_name(pool: &Pool, name: &str) -> Result<Option<ClientDto>> {
     let db = pool.get().await.context(DbPoolSnafu)?;
 
     let name_copy = name.to_string();
@@ -308,7 +308,7 @@ pub async fn find_client_by_name(pool: &Pool, name: &str) -> Result2<Option<Clie
     Ok(item.map(|item| item.into()))
 }
 
-pub async fn count_clients(db_pool: &Pool) -> Result2<i64> {
+pub async fn count_clients(db_pool: &Pool) -> Result<i64> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let count_res = db
@@ -323,7 +323,7 @@ pub async fn count_clients(db_pool: &Pool) -> Result2<i64> {
     Ok(count)
 }
 
-pub async fn delete_client(db_pool: &Pool, id: &str) -> Result2<()> {
+pub async fn delete_client(db_pool: &Pool, id: &str) -> Result<()> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let Some(client) = get_client(db_pool, id).await? else {

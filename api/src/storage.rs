@@ -10,14 +10,14 @@ use google_cloud_storage::http::objects::delete::DeleteObjectRequest;
 use google_cloud_storage::http::objects::upload::{Media, UploadObjectRequest, UploadType};
 use google_cloud_storage::sign::SignedURLOptions;
 
-use crate::Result2;
+use crate::Result;
 use crate::dir::Dir;
 use crate::error::{GoogleSnafu, ValidationSnafu};
 use crate::file::ORIGINAL_PATH;
 use memo::dto::bucket::BucketDto;
 use memo::dto::file::{FileDto, ImgVersionDto};
 
-pub async fn create_storage_client(key_file: &str) -> Result2<Client> {
+pub async fn create_storage_client(key_file: &str) -> Result<Client> {
     match CredentialsFile::new_from_file(key_file.to_string()).await {
         Ok(creds) => match ClientConfig::default().with_credentials(creds).await {
             Ok(config) => Ok(Client::new(config)),
@@ -27,7 +27,7 @@ pub async fn create_storage_client(key_file: &str) -> Result2<Client> {
     }
 }
 
-pub async fn read_bucket(client: &Client, name: &str) -> Result2<String> {
+pub async fn read_bucket(client: &Client, name: &str) -> Result<String> {
     let res = client
         .get_bucket(&GetBucketRequest {
             bucket: name.to_string(),
@@ -56,7 +56,7 @@ pub async fn upload_object(
     dir: &Dir,
     source_dir: &PathBuf,
     file: &FileDto,
-) -> Result2<()> {
+) -> Result<()> {
     match file.is_image {
         true => upload_image_object(client, bucket, dir, source_dir, file).await,
         false => upload_regular_object(client, bucket, dir, source_dir, file).await,
@@ -69,7 +69,7 @@ async fn upload_regular_object(
     dir: &Dir,
     source_dir: &PathBuf,
     file: &FileDto,
-) -> Result2<()> {
+) -> Result<()> {
     // Prepare media
     let file_path = format!("{}/{}/{}", &dir.name, ORIGINAL_PATH, &file.filename);
     let mut media = Media::new(file_path.clone());
@@ -114,7 +114,7 @@ async fn upload_image_object(
     dir: &Dir,
     source_dir: &PathBuf,
     file: &FileDto,
-) -> Result2<()> {
+) -> Result<()> {
     if let Some(versions) = &file.img_versions {
         for version in versions.iter() {
             let _ = upload_image_version(&client, bucket, dir, source_dir, &file, version).await?;
@@ -131,7 +131,7 @@ async fn upload_image_version(
     source_dir: &PathBuf,
     file: &FileDto,
     version: &ImgVersionDto,
-) -> Result2<()> {
+) -> Result<()> {
     // Prepare media
     let version_dir: String = version.version.to_string();
     let file_path = format!("{}/{}/{}", &dir.name, &version_dir, &file.filename);
@@ -176,7 +176,7 @@ pub async fn delete_file_object(
     bucket_name: &str,
     dir_name: &str,
     file: &FileDto,
-) -> Result2<()> {
+) -> Result<()> {
     if file.is_image {
         // Delete all versions
         if let Some(versions) = &file.img_versions {
@@ -198,7 +198,7 @@ pub async fn delete_file_object(
     Ok(())
 }
 
-async fn delete_object_by_path(client: &Client, bucket_name: &str, path: &str) -> Result2<()> {
+async fn delete_object_by_path(client: &Client, bucket_name: &str, path: &str) -> Result<()> {
     let res = client
         .delete_object(&DeleteObjectRequest {
             bucket: bucket_name.to_string(),
@@ -227,7 +227,7 @@ pub async fn format_files(
     bucket_name: &str,
     dir: &str,
     files: Vec<FileDto>,
-) -> Result2<Vec<FileDto>> {
+) -> Result<Vec<FileDto>> {
     let mut tasks = Vec::with_capacity(files.len());
     for file in files.iter() {
         let client_copy = client.clone();
@@ -257,7 +257,7 @@ pub async fn format_file(
     bucket_name: &str,
     dir_name: &str,
     file: FileDto,
-) -> Result2<FileDto> {
+) -> Result<FileDto> {
     format_file_single(&client, bucket_name, dir_name, file).await
 }
 
@@ -266,7 +266,7 @@ async fn format_file_single(
     bucket_name: &str,
     dir_name: &str,
     mut file: FileDto,
-) -> Result2<FileDto> {
+) -> Result<FileDto> {
     if file.is_image {
         if let Some(versions) = &file.img_versions {
             let mut updated_versions: Vec<ImgVersionDto> = Vec::with_capacity(versions.len());
@@ -303,7 +303,7 @@ async fn format_file_single(
     Ok(file)
 }
 
-async fn generate_url(client: &Client, bucket_name: &str, file_path: &str) -> Result2<String> {
+async fn generate_url(client: &Client, bucket_name: &str, file_path: &str) -> Result<String> {
     let expires = Duration::from_secs(3600 * 12);
     let mut options = SignedURLOptions::default();
     options.expires = expires;
@@ -318,7 +318,7 @@ async fn generate_url(client: &Client, bucket_name: &str, file_path: &str) -> Re
     }
 }
 
-pub async fn test_list_hmac_keys(client: &Client, project_id: &str) -> Result2<()> {
+pub async fn test_list_hmac_keys(client: &Client, project_id: &str) -> Result<()> {
     let res = client
         .list_hmac_keys(&ListHmacKeysRequest {
             project_id: project_id.to_string(),

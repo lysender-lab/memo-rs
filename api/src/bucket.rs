@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use validator::Validate;
 
-use crate::Result2;
+use crate::Result;
 use crate::dir::count_bucket_dirs;
 use crate::error::{
     DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, MaxBucketsReachedSnafu, ValidationSnafu,
@@ -74,7 +74,7 @@ impl From<Bucket> for BucketDto {
 
 const MAX_BUCKETS_PER_CLIENT: i32 = 50;
 
-pub async fn list_buckets(db_pool: &Pool, client_id: &str) -> Result2<Vec<BucketDto>> {
+pub async fn list_buckets(db_pool: &Pool, client_id: &str) -> Result<Vec<BucketDto>> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let client_id = client_id.to_string();
@@ -102,7 +102,7 @@ pub async fn create_bucket(
     storage_client: &Client,
     client_id: &str,
     data: &NewBucket,
-) -> Result2<BucketDto> {
+) -> Result<BucketDto> {
     let valid_res = data.validate();
     ensure!(
         valid_res.is_ok(),
@@ -159,7 +159,7 @@ pub async fn create_bucket(
     Ok(bucket.into())
 }
 
-pub async fn get_bucket(db_pool: &Pool, id: &str) -> Result2<Option<BucketDto>> {
+pub async fn get_bucket(db_pool: &Pool, id: &str) -> Result<Option<BucketDto>> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let bid = id.to_string();
@@ -185,7 +185,7 @@ pub async fn find_client_bucket(
     db_pool: &Pool,
     client_id: &str,
     name: &str,
-) -> Result2<Option<BucketDto>> {
+) -> Result<Option<BucketDto>> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let cid = client_id.to_string();
@@ -209,7 +209,7 @@ pub async fn find_client_bucket(
     Ok(item.map(|item| item.into()))
 }
 
-pub async fn count_client_buckets(db_pool: &Pool, client_id: &str) -> Result2<i64> {
+pub async fn count_client_buckets(db_pool: &Pool, client_id: &str) -> Result<i64> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let cid = client_id.to_string();
@@ -230,7 +230,7 @@ pub async fn count_client_buckets(db_pool: &Pool, client_id: &str) -> Result2<i6
     Ok(count)
 }
 
-pub async fn delete_bucket(db_pool: &Pool, id: &str) -> Result2<()> {
+pub async fn delete_bucket(db_pool: &Pool, id: &str) -> Result<()> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     // Do not delete if there are still directories inside
@@ -257,7 +257,7 @@ pub async fn delete_bucket(db_pool: &Pool, id: &str) -> Result2<()> {
     Ok(())
 }
 
-pub async fn test_read_bucket(db_pool: &Pool) -> Result2<()> {
+pub async fn test_read_bucket(db_pool: &Pool) -> Result<()> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let selected_res = db

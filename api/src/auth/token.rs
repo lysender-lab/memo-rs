@@ -5,7 +5,7 @@ use snafu::ensure;
 
 use super::actor::ActorPayload;
 use crate::{
-    Result2,
+    Result,
     error::{InvalidAuthTokenSnafu, WhateverSnafu},
 };
 
@@ -21,7 +21,7 @@ struct Claims {
 // Duration in seconds
 const EXP_DURATION: i64 = 60 * 60 * 24 * 7; // 1 week
 
-pub fn create_auth_token(actor: &ActorPayload, secret: &str) -> Result2<String> {
+pub fn create_auth_token(actor: &ActorPayload, secret: &str) -> Result<String> {
     let exp = Utc::now() + Duration::seconds(EXP_DURATION);
     let data = actor.clone();
 
@@ -47,7 +47,7 @@ pub fn create_auth_token(actor: &ActorPayload, secret: &str) -> Result2<String> 
     Ok(token)
 }
 
-pub fn verify_auth_token(token: &str, secret: &str) -> Result2<ActorPayload> {
+pub fn verify_auth_token(token: &str, secret: &str) -> Result<ActorPayload> {
     let Ok(decoded) = decode::<Claims>(
         token,
         &DecodingKey::from_secret(secret.as_bytes()),

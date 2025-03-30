@@ -8,7 +8,7 @@ use token::{create_auth_token, verify_auth_token};
 use crate::error::{
     InactiveUserSnafu, InvalidClientSnafu, InvalidPasswordSnafu, UserNotFoundSnafu, ValidationSnafu,
 };
-use crate::{Result2, client::get_client, web::server::AppState};
+use crate::{Result, client::get_client, web::server::AppState};
 use memo::validators::flatten_errors;
 use user::{find_user_by_username, get_user};
 
@@ -17,7 +17,7 @@ pub mod password;
 pub mod token;
 pub mod user;
 
-pub async fn authenticate(state: &AppState, credentials: &Credentials) -> Result2<AuthResponse> {
+pub async fn authenticate(state: &AppState, credentials: &Credentials) -> Result<AuthResponse> {
     let errors = credentials.validate();
     ensure!(
         errors.is_ok(),
@@ -56,7 +56,7 @@ pub async fn authenticate(state: &AppState, credentials: &Credentials) -> Result
     })
 }
 
-pub async fn authenticate_token(state: &AppState, token: &str) -> Result2<Actor> {
+pub async fn authenticate_token(state: &AppState, token: &str) -> Result<Actor> {
     let actor = verify_auth_token(token, &state.config.jwt_secret)?;
 
     // Validate client

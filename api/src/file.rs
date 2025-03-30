@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use tracing::error;
 use validator::Validate;
 
-use crate::Result2;
+use crate::Result;
 use crate::dir::{Dir, update_dir_timestamp};
 use crate::error::{DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, ValidationSnafu};
 use crate::schema::files::{self, dsl};
@@ -163,7 +163,7 @@ pub async fn list_files(
     db_pool: &Pool,
     dir: &Dir,
     params: &ListFilesParams,
-) -> Result2<Paginated<FileObject>> {
+) -> Result<Paginated<FileObject>> {
     let errors = params.validate();
     ensure!(
         errors.is_ok(),
@@ -231,7 +231,7 @@ pub async fn list_files(
     Ok(Paginated::new(items, page, per_page, total_records))
 }
 
-async fn list_files_count(db_pool: &Pool, dir_id: &str, params: &ListFilesParams) -> Result2<i64> {
+async fn list_files_count(db_pool: &Pool, dir_id: &str, params: &ListFilesParams) -> Result<i64> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let did = dir_id.to_string();
@@ -259,7 +259,7 @@ async fn list_files_count(db_pool: &Pool, dir_id: &str, params: &ListFilesParams
     Ok(count)
 }
 
-pub async fn find_dir_file(pool: &Pool, dir_id: &str, name: &str) -> Result2<Option<FileObject>> {
+pub async fn find_dir_file(pool: &Pool, dir_id: &str, name: &str) -> Result<Option<FileObject>> {
     let db = pool.get().await.context(DbPoolSnafu)?;
 
     let did = dir_id.to_string();
@@ -283,7 +283,7 @@ pub async fn find_dir_file(pool: &Pool, dir_id: &str, name: &str) -> Result2<Opt
     Ok(item)
 }
 
-pub async fn count_dir_files(db_pool: &Pool, dir_id: &str) -> Result2<i64> {
+pub async fn count_dir_files(db_pool: &Pool, dir_id: &str) -> Result<i64> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let did = dir_id.to_string();
@@ -310,7 +310,7 @@ pub async fn create_file(
     bucket: &BucketDto,
     dir: &Dir,
     data: &FilePayload,
-) -> Result2<FileObject> {
+) -> Result<FileObject> {
     let mut file_dto = init_file(dir, data)?;
 
     let cleanup = |data: &FilePayload, file: Option<&FileDto>| {
@@ -419,7 +419,7 @@ pub async fn create_file(
     Ok(file)
 }
 
-pub async fn get_file(pool: &Pool, id: &str) -> Result2<Option<FileObject>> {
+pub async fn get_file(pool: &Pool, id: &str) -> Result<Option<FileObject>> {
     let db = pool.get().await.context(DbPoolSnafu)?;
 
     let fid = id.to_string();
@@ -441,7 +441,7 @@ pub async fn get_file(pool: &Pool, id: &str) -> Result2<Option<FileObject>> {
     Ok(item)
 }
 
-pub async fn delete_file(pool: &Pool, id: &str) -> Result2<()> {
+pub async fn delete_file(pool: &Pool, id: &str) -> Result<()> {
     let db = pool.get().await.context(DbPoolSnafu)?;
 
     let fid = id.to_string();
@@ -457,7 +457,7 @@ pub async fn delete_file(pool: &Pool, id: &str) -> Result2<()> {
     Ok(())
 }
 
-fn cleanup_temp_uploads(data: &FilePayload, file: Option<&FileDto>) -> Result2<()> {
+fn cleanup_temp_uploads(data: &FilePayload, file: Option<&FileDto>) -> Result<()> {
     if let Some(file) = file {
         if file.is_image {
             // Cleanup versions
@@ -495,7 +495,7 @@ fn cleanup_temp_uploads(data: &FilePayload, file: Option<&FileDto>) -> Result2<(
     Ok(())
 }
 
-fn init_file(dir: &Dir, data: &FilePayload) -> Result2<FileDto> {
+fn init_file(dir: &Dir, data: &FilePayload) -> Result<FileDto> {
     let mut is_image = false;
     let content_type = get_content_type(&data.path)?;
     if content_type.starts_with("image/") {
@@ -529,7 +529,7 @@ fn init_file(dir: &Dir, data: &FilePayload) -> Result2<FileDto> {
     Ok(file)
 }
 
-fn read_image(path: &PathBuf) -> Result2<DynamicImage> {
+fn read_image(path: &PathBuf) -> Result<DynamicImage> {
     match ImageReader::open(path) {
         Ok(read_img) => match read_img.with_guessed_format() {
             Ok(format_img) => match format_img.decode() {
@@ -554,7 +554,7 @@ fn read_image(path: &PathBuf) -> Result2<DynamicImage> {
     }
 }
 
-fn create_versions(data: &FilePayload, exif_info: &PhotoExif) -> Result2<Vec<ImgVersionDto>> {
+fn create_versions(data: &FilePayload, exif_info: &PhotoExif) -> Result<Vec<ImgVersionDto>> {
     let img = read_image(&data.path)?;
 
     // Rotate based on exif orientation before creating versions
@@ -596,7 +596,7 @@ fn create_versions(data: &FilePayload, exif_info: &PhotoExif) -> Result2<Vec<Img
     Ok(versions)
 }
 
-fn create_preview(data: &FilePayload, img: &DynamicImage) -> Result2<ImgVersionDto> {
+fn create_preview(data: &FilePayload, img: &DynamicImage) -> Result<ImgVersionDto> {
     // Prepare dir
     let prev_dir = data
         .upload_dir
@@ -639,7 +639,7 @@ fn create_preview(data: &FilePayload, img: &DynamicImage) -> Result2<ImgVersionD
     Ok(version)
 }
 
-fn create_thumbnail(data: &FilePayload, img: &DynamicImage) -> Result2<ImgVersionDto> {
+fn create_thumbnail(data: &FilePayload, img: &DynamicImage) -> Result<ImgVersionDto> {
     // Prepare dir
     let prev_dir = data
         .upload_dir
@@ -682,7 +682,7 @@ fn create_thumbnail(data: &FilePayload, img: &DynamicImage) -> Result2<ImgVersio
     Ok(version)
 }
 
-fn get_content_type(path: &PathBuf) -> Result2<String> {
+fn get_content_type(path: &PathBuf) -> Result<String> {
     match infer::get_from_path(path) {
         Ok(Some(kind)) => Ok(kind.mime_type().to_string()),
         Ok(None) => Err("Uploaded file type unknown".into()),
@@ -690,7 +690,7 @@ fn get_content_type(path: &PathBuf) -> Result2<String> {
     }
 }
 
-fn parse_exif_info(path: &PathBuf) -> Result2<PhotoExif> {
+fn parse_exif_info(path: &PathBuf) -> Result<PhotoExif> {
     let Ok(file) = File::open(path) else {
         return Err("Unable to open file to read exif into".into());
     };

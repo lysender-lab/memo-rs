@@ -3,7 +3,7 @@ use serde::Deserialize;
 use snafu::{ResultExt, ensure};
 use std::{fs, path::PathBuf};
 
-use crate::Result2;
+use crate::Result;
 use crate::error::{ConfigFileSnafu, ConfigParseSnafu, ConfigSnafu, UploadDirSnafu};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -32,7 +32,7 @@ pub struct DbConfig {
 }
 
 impl Config {
-    pub fn build(filename: &PathBuf) -> Result2<Self> {
+    pub fn build(filename: &PathBuf) -> Result<Self> {
         let toml_string = fs::read_to_string(filename).context(ConfigFileSnafu)?;
         let config: Config = toml::from_str(toml_string.as_str()).context(ConfigParseSnafu)?;
 

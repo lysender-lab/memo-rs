@@ -1,7 +1,7 @@
 use snafu::{ResultExt, ensure};
 use text_io::read;
 
-use crate::Result2;
+use crate::Result;
 use crate::auth::user::{delete_user, list_users, update_user_password, update_user_status};
 use crate::bucket::{NewBucket, create_bucket, delete_bucket};
 use crate::bucket::{get_bucket, list_buckets};
@@ -15,7 +15,7 @@ use crate::auth::user::NewUser;
 use crate::auth::user::{create_user, get_user};
 use crate::client::create_client;
 
-pub async fn run_setup(config: &Config) -> Result2<()> {
+pub async fn run_setup(config: &Config) -> Result<()> {
     print!("Enter username for the admin user: ");
     let username: String = read!("{}\n");
 
@@ -65,7 +65,7 @@ pub async fn run_setup(config: &Config) -> Result2<()> {
     Ok(())
 }
 
-pub async fn run_user_command(cmd: UserCommand, config: &Config) -> Result2<()> {
+pub async fn run_user_command(cmd: UserCommand, config: &Config) -> Result<()> {
     match cmd {
         UserCommand::List { client_id } => run_list_users(config, client_id).await,
         UserCommand::Create {
@@ -80,7 +80,7 @@ pub async fn run_user_command(cmd: UserCommand, config: &Config) -> Result2<()> 
     }
 }
 
-async fn run_list_users(config: &Config, client_id: String) -> Result2<()> {
+async fn run_list_users(config: &Config, client_id: String) -> Result<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
     let users = list_users(&db_pool, &client_id).await?;
     for user in users.iter() {
@@ -97,7 +97,7 @@ async fn run_create_user(
     client_id: String,
     username: String,
     roles: String,
-) -> Result2<()> {
+) -> Result<()> {
     let password = rpassword::prompt_password("Enter password for the new user: ").context(
         PasswordPromptSnafu {
             msg: "Failed to read password",
@@ -121,7 +121,7 @@ async fn run_create_user(
     Ok(())
 }
 
-async fn run_set_user_password(config: &Config, id: String) -> Result2<()> {
+async fn run_set_user_password(config: &Config, id: String) -> Result<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
     let user = get_user(&db_pool, &id).await?;
     if let Some(node) = user {
@@ -145,7 +145,7 @@ async fn run_set_user_password(config: &Config, id: String) -> Result2<()> {
     Ok(())
 }
 
-async fn run_disable_user(config: &Config, id: String) -> Result2<()> {
+async fn run_disable_user(config: &Config, id: String) -> Result<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
     let user = get_user(&db_pool, &id).await?;
     if let Some(node) = user {
@@ -161,7 +161,7 @@ async fn run_disable_user(config: &Config, id: String) -> Result2<()> {
     Ok(())
 }
 
-async fn run_enable_user(config: &Config, id: String) -> Result2<()> {
+async fn run_enable_user(config: &Config, id: String) -> Result<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
     let user = get_user(&db_pool, &id).await?;
     if let Some(node) = user {
@@ -177,7 +177,7 @@ async fn run_enable_user(config: &Config, id: String) -> Result2<()> {
     Ok(())
 }
 
-async fn run_delete_user(config: &Config, id: String) -> Result2<()> {
+async fn run_delete_user(config: &Config, id: String) -> Result<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
     let user = get_user(&db_pool, &id).await?;
     if let Some(_) = user {
@@ -189,7 +189,7 @@ async fn run_delete_user(config: &Config, id: String) -> Result2<()> {
     Ok(())
 }
 
-pub async fn run_bucket_command(cmd: BucketCommand, config: &Config) -> Result2<()> {
+pub async fn run_bucket_command(cmd: BucketCommand, config: &Config) -> Result<()> {
     match cmd {
         BucketCommand::List { client_id } => run_list_buckets(config, client_id).await,
         BucketCommand::Create {
@@ -201,7 +201,7 @@ pub async fn run_bucket_command(cmd: BucketCommand, config: &Config) -> Result2<
     }
 }
 
-async fn run_list_buckets(config: &Config, client_id: String) -> Result2<()> {
+async fn run_list_buckets(config: &Config, client_id: String) -> Result<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
     let buckets = list_buckets(&db_pool, &client_id).await?;
     for bucket in buckets.iter() {
@@ -218,11 +218,11 @@ async fn run_create_bucket(
     client_id: String,
     name: String,
     images_only: String,
-) -> Result2<()> {
+) -> Result<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
     let storage_client = create_storage_client(config.cloud.credentials.as_str()).await?;
 
-    let res: Result2<bool> = match images_only.as_str() {
+    let res: Result<bool> = match images_only.as_str() {
         "true" => Ok(true),
         "false" => Ok(false),
         _ => {
@@ -250,7 +250,7 @@ async fn run_create_bucket(
     Ok(())
 }
 
-async fn run_delete_bucket(config: &Config, id: String) -> Result2<()> {
+async fn run_delete_bucket(config: &Config, id: String) -> Result<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
     let bucket = get_bucket(&db_pool, &id).await?;
     if let Some(_) = bucket {

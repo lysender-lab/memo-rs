@@ -8,11 +8,11 @@ use memo::role::{InvalidPermissionsError, InvalidRolesError};
 use serde::{Deserialize, Serialize};
 use snafu::{Backtrace, Snafu};
 
-pub type Result2<T> = std::result::Result<T, Error2>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
-pub enum Error2 {
+pub enum Error {
     #[snafu(display("Error reading config file: {}", source))]
     ConfigFile {
         source: std::io::Error,
@@ -157,7 +157,7 @@ pub enum Error2 {
 }
 
 // Allow string slices to be converted to Error
-impl From<&str> for Error2 {
+impl From<&str> for Error {
     fn from(val: &str) -> Self {
         Self::Whatever {
             msg: val.to_string(),
@@ -165,46 +165,46 @@ impl From<&str> for Error2 {
     }
 }
 
-impl From<String> for Error2 {
+impl From<String> for Error {
     fn from(val: String) -> Self {
         Self::Whatever { msg: val }
     }
 }
 
 /// Allow Error to be converted to StatusCode
-impl From<Error2> for StatusCode {
-    fn from(err: Error2) -> Self {
+impl From<Error> for StatusCode {
+    fn from(err: Error) -> Self {
         match err {
-            Error2::Validation { .. } => StatusCode::BAD_REQUEST,
-            Error2::MaxClientsReached => StatusCode::BAD_REQUEST,
-            Error2::MaxUsersReached => StatusCode::BAD_REQUEST,
-            Error2::MaxBucketsReached => StatusCode::BAD_REQUEST,
-            Error2::MaxDirsReached => StatusCode::BAD_REQUEST,
-            Error2::MaxFilesReached => StatusCode::BAD_REQUEST,
-            Error2::BadRequest { .. } => StatusCode::BAD_REQUEST,
-            Error2::Forbidden { .. } => StatusCode::FORBIDDEN,
-            Error2::JsonRejection { .. } => StatusCode::BAD_REQUEST,
-            Error2::MissingUploadFile { .. } => StatusCode::BAD_REQUEST,
-            Error2::CreateFile { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            Error2::FileTypeNotAllowed => StatusCode::BAD_REQUEST,
-            Error2::NotFound { .. } => StatusCode::NOT_FOUND,
-            Error2::InvalidAuthToken => StatusCode::UNAUTHORIZED,
-            Error2::InsufficientAuthScope => StatusCode::UNAUTHORIZED,
-            Error2::NoAuthToken => StatusCode::UNAUTHORIZED,
-            Error2::InvalidClient => StatusCode::UNAUTHORIZED,
-            Error2::RequiresAuth => StatusCode::UNAUTHORIZED,
-            Error2::InvalidPassword => StatusCode::UNAUTHORIZED,
-            Error2::InactiveUser => StatusCode::UNAUTHORIZED,
-            Error2::UserNotFound => StatusCode::UNAUTHORIZED,
-            Error2::InvalidRoles { .. } => StatusCode::BAD_REQUEST,
-            Error2::InvalidPermissions { .. } => StatusCode::BAD_REQUEST,
+            Error::Validation { .. } => StatusCode::BAD_REQUEST,
+            Error::MaxClientsReached => StatusCode::BAD_REQUEST,
+            Error::MaxUsersReached => StatusCode::BAD_REQUEST,
+            Error::MaxBucketsReached => StatusCode::BAD_REQUEST,
+            Error::MaxDirsReached => StatusCode::BAD_REQUEST,
+            Error::MaxFilesReached => StatusCode::BAD_REQUEST,
+            Error::BadRequest { .. } => StatusCode::BAD_REQUEST,
+            Error::Forbidden { .. } => StatusCode::FORBIDDEN,
+            Error::JsonRejection { .. } => StatusCode::BAD_REQUEST,
+            Error::MissingUploadFile { .. } => StatusCode::BAD_REQUEST,
+            Error::CreateFile { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::FileTypeNotAllowed => StatusCode::BAD_REQUEST,
+            Error::NotFound { .. } => StatusCode::NOT_FOUND,
+            Error::InvalidAuthToken => StatusCode::UNAUTHORIZED,
+            Error::InsufficientAuthScope => StatusCode::UNAUTHORIZED,
+            Error::NoAuthToken => StatusCode::UNAUTHORIZED,
+            Error::InvalidClient => StatusCode::UNAUTHORIZED,
+            Error::RequiresAuth => StatusCode::UNAUTHORIZED,
+            Error::InvalidPassword => StatusCode::UNAUTHORIZED,
+            Error::InactiveUser => StatusCode::UNAUTHORIZED,
+            Error::UserNotFound => StatusCode::UNAUTHORIZED,
+            Error::InvalidRoles { .. } => StatusCode::BAD_REQUEST,
+            Error::InvalidPermissions { .. } => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
 
 // Allow errors to be rendered as response
-impl IntoResponse for Error2 {
+impl IntoResponse for Error {
     fn into_response(self) -> Response<Body> {
         to_json_error_response(self)
     }
@@ -239,102 +239,102 @@ pub fn create_json_error_response(
     return create_json_response(status, serde_json::to_string(&body).unwrap());
 }
 
-pub fn to_json_error_response(error: Error2) -> Response<Body> {
+pub fn to_json_error_response(error: Error) -> Response<Body> {
     match error {
-        Error2::Validation { msg } => {
+        Error::Validation { msg } => {
             create_json_error_response(StatusCode::BAD_REQUEST, msg.as_str(), "Bad Request")
         }
-        Error2::MaxClientsReached => create_json_error_response(
+        Error::MaxClientsReached => create_json_error_response(
             StatusCode::BAD_REQUEST,
             "Maximum number of clients reached: 10",
             "Bad Request",
         ),
-        Error2::MaxUsersReached => create_json_error_response(
+        Error::MaxUsersReached => create_json_error_response(
             StatusCode::BAD_REQUEST,
             "Maximum number of users reached: 100",
             "Bad Request",
         ),
-        Error2::MaxBucketsReached => create_json_error_response(
+        Error::MaxBucketsReached => create_json_error_response(
             StatusCode::BAD_REQUEST,
             "Maximum number of buckets reached: 50",
             "Bad Request",
         ),
-        Error2::MaxDirsReached => create_json_error_response(
+        Error::MaxDirsReached => create_json_error_response(
             StatusCode::BAD_REQUEST,
             "Maximum number of directories reached: 1000",
             "Bad Request",
         ),
-        Error2::MaxFilesReached => create_json_error_response(
+        Error::MaxFilesReached => create_json_error_response(
             StatusCode::BAD_REQUEST,
             "Maximum number of files reached: 1000",
             "Bad Request",
         ),
-        Error2::Google { msg } => create_json_error_response(
+        Error::Google { msg } => create_json_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             msg.as_str(),
             "Internal Server Error",
         ),
-        Error2::BadRequest { msg } => {
+        Error::BadRequest { msg } => {
             create_json_error_response(StatusCode::BAD_REQUEST, msg.as_str(), "Bad Request")
         }
-        Error2::Forbidden { msg } => {
+        Error::Forbidden { msg } => {
             create_json_error_response(StatusCode::FORBIDDEN, msg.as_str(), "Forbidden")
         }
-        Error2::JsonRejection { msg, .. } => {
+        Error::JsonRejection { msg, .. } => {
             create_json_error_response(StatusCode::BAD_REQUEST, msg.as_str(), "Bad Request")
         }
-        Error2::MissingUploadFile { msg } => {
+        Error::MissingUploadFile { msg } => {
             create_json_error_response(StatusCode::BAD_REQUEST, msg.as_str(), "Bad Request")
         }
-        Error2::CreateFile { .. } => create_json_error_response(
+        Error::CreateFile { .. } => create_json_error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("Unable to create file").as_str(),
             "Internal Server Error",
         ),
-        Error2::FileTypeNotAllowed => create_json_error_response(
+        Error::FileTypeNotAllowed => create_json_error_response(
             StatusCode::BAD_REQUEST,
             "File type not allowed",
             "Bad Request",
         ),
-        Error2::NotFound { msg } => {
+        Error::NotFound { msg } => {
             create_json_error_response(StatusCode::NOT_FOUND, msg.as_str(), "Not Found")
         }
-        Error2::InvalidAuthToken => create_json_error_response(
+        Error::InvalidAuthToken => create_json_error_response(
             StatusCode::UNAUTHORIZED,
             "Invalid auth token",
             "Unauthorized",
         ),
-        Error2::InsufficientAuthScope => create_json_error_response(
+        Error::InsufficientAuthScope => create_json_error_response(
             StatusCode::UNAUTHORIZED,
             "Insufficient auth scope",
             "Unauthorized",
         ),
-        Error2::NoAuthToken => {
+        Error::NoAuthToken => {
             create_json_error_response(StatusCode::UNAUTHORIZED, "No auth token", "Unauthorized")
         }
-        Error2::InvalidClient => {
+        Error::InvalidClient => {
             create_json_error_response(StatusCode::UNAUTHORIZED, "Invalid client", "Unauthorized")
         }
-        Error2::RequiresAuth => create_json_error_response(
+        Error::RequiresAuth => create_json_error_response(
             StatusCode::UNAUTHORIZED,
             "Requires authentication",
             "Unauthorized",
         ),
-        Error2::InvalidPassword => create_json_error_response(
+        Error::InvalidPassword => create_json_error_response(
             StatusCode::UNAUTHORIZED,
             "Invalid username or password",
             "Unauthorized",
         ),
-        Error2::InactiveUser => {
+        Error::InactiveUser => {
             create_json_error_response(StatusCode::UNAUTHORIZED, "Inactive user", "Unauthorized")
         }
-        Error2::UserNotFound => {
+        Error::UserNotFound => {
             create_json_error_response(StatusCode::UNAUTHORIZED, "User not found", "Unauthorized")
         }
-        Error2::InvalidRoles { .. } => {
+        Error::InvalidRoles { .. } => {
             create_json_error_response(StatusCode::BAD_REQUEST, "Invalid roles", "Bad Request")
         }
-        Error2::InvalidPermissions { .. } => create_json_error_response(
+        Error::InvalidPermissions { .. } => create_json_error_response(
             StatusCode::BAD_REQUEST,
             "Invalid permissions",
             "Bad Request",

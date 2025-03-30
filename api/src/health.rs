@@ -4,7 +4,7 @@ use deadpool_diesel::sqlite::Pool;
 use tracing::error;
 
 use crate::{
-    Result2,
+    Result,
     bucket::test_read_bucket,
     config::Config,
     storage::{create_storage_client, test_list_hmac_keys},
@@ -47,14 +47,14 @@ impl HealthChecks {
     }
 }
 
-pub async fn check_liveness() -> Result2<LiveStatus> {
+pub async fn check_liveness() -> Result<LiveStatus> {
     // Nothing much to check, if it hits this function, it's alive
     Ok(LiveStatus {
         status: "UP".to_string(),
     })
 }
 
-pub async fn check_readiness(config: &Config, db_pool: &Pool) -> Result2<HealthStatus> {
+pub async fn check_readiness(config: &Config, db_pool: &Pool) -> Result<HealthStatus> {
     let checks = perform_checks(config, db_pool).await?;
     let mut status = "DOWN".to_string();
     let mut message = "One or more health checks are failing".to_string();
@@ -71,7 +71,7 @@ pub async fn check_readiness(config: &Config, db_pool: &Pool) -> Result2<HealthS
     })
 }
 
-async fn perform_checks(config: &Config, db_pool: &Pool) -> Result2<HealthChecks> {
+async fn perform_checks(config: &Config, db_pool: &Pool) -> Result<HealthChecks> {
     let mut checks = HealthChecks::new();
 
     checks.cloud_storage = check_cloud_storage(config).await?;
@@ -80,7 +80,7 @@ async fn perform_checks(config: &Config, db_pool: &Pool) -> Result2<HealthChecks
     Ok(checks)
 }
 
-async fn check_cloud_storage(config: &Config) -> Result2<String> {
+async fn check_cloud_storage(config: &Config) -> Result<String> {
     let client = create_storage_client(config.cloud.credentials.as_str()).await?;
     match test_list_hmac_keys(&client, config.cloud.project_id.as_str()).await {
         Ok(_) => Ok("UP".to_string()),
@@ -92,7 +92,7 @@ async fn check_cloud_storage(config: &Config) -> Result2<String> {
     }
 }
 
-async fn check_database(db_pool: &Pool) -> Result2<String> {
+async fn check_database(db_pool: &Pool) -> Result<String> {
     match test_read_bucket(db_pool).await {
         Ok(_) => Ok("UP".to_string()),
         Err(e) => {

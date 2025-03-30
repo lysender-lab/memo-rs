@@ -7,7 +7,7 @@ use snafu::{ResultExt, ensure};
 use validator::Validate;
 
 use super::password::hash_password;
-use crate::Result2;
+use crate::Result;
 use crate::error::{
     DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, InvalidRolesSnafu, MaxUsersReachedSnafu,
     ValidationSnafu,
@@ -64,7 +64,7 @@ pub struct NewUser {
 
 const MAX_USERS_PER_CLIENT: i32 = 50;
 
-pub async fn list_users(db_pool: &Pool, client_id: &str) -> Result2<Vec<User>> {
+pub async fn list_users(db_pool: &Pool, client_id: &str) -> Result<Vec<User>> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let client_id = client_id.to_string();
@@ -86,7 +86,7 @@ pub async fn list_users(db_pool: &Pool, client_id: &str) -> Result2<Vec<User>> {
     Ok(items)
 }
 
-pub async fn create_user(db_pool: &Pool, client_id: &str, data: &NewUser) -> Result2<User> {
+pub async fn create_user(db_pool: &Pool, client_id: &str, data: &NewUser) -> Result<User> {
     let errors = data.validate();
     ensure!(
         errors.is_ok(),
@@ -145,7 +145,7 @@ pub async fn create_user(db_pool: &Pool, client_id: &str, data: &NewUser) -> Res
     Ok(dir)
 }
 
-pub async fn get_user(pool: &Pool, id: &str) -> Result2<Option<User>> {
+pub async fn get_user(pool: &Pool, id: &str) -> Result<Option<User>> {
     let db = pool.get().await.context(DbPoolSnafu)?;
 
     let id = id.to_string();
@@ -167,7 +167,7 @@ pub async fn get_user(pool: &Pool, id: &str) -> Result2<Option<User>> {
     Ok(user)
 }
 
-pub async fn find_user_by_username(pool: &Pool, username: &str) -> Result2<Option<User>> {
+pub async fn find_user_by_username(pool: &Pool, username: &str) -> Result<Option<User>> {
     let db = pool.get().await.context(DbPoolSnafu)?;
 
     let username = username.to_string();
@@ -189,7 +189,7 @@ pub async fn find_user_by_username(pool: &Pool, username: &str) -> Result2<Optio
     Ok(user)
 }
 
-pub async fn count_client_users(db_pool: &Pool, client_id: &str) -> Result2<i64> {
+pub async fn count_client_users(db_pool: &Pool, client_id: &str) -> Result<i64> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let client_id = client_id.to_string();
@@ -210,7 +210,7 @@ pub async fn count_client_users(db_pool: &Pool, client_id: &str) -> Result2<i64>
     Ok(count)
 }
 
-pub async fn update_user_status(db_pool: &Pool, id: &str, status: &str) -> Result2<bool> {
+pub async fn update_user_status(db_pool: &Pool, id: &str, status: &str) -> Result<bool> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let id = id.to_string();
@@ -233,7 +233,7 @@ pub async fn update_user_status(db_pool: &Pool, id: &str, status: &str) -> Resul
     Ok(affected > 0)
 }
 
-pub async fn update_user_password(db_pool: &Pool, id: &str, password: &str) -> Result2<bool> {
+pub async fn update_user_password(db_pool: &Pool, id: &str, password: &str) -> Result<bool> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let id = id.to_string();
@@ -256,7 +256,7 @@ pub async fn update_user_password(db_pool: &Pool, id: &str, password: &str) -> R
     Ok(affected > 0)
 }
 
-pub async fn delete_user(db_pool: &Pool, id: &str) -> Result2<()> {
+pub async fn delete_user(db_pool: &Pool, id: &str) -> Result<()> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     // It is okay to delete user even if there are potential references

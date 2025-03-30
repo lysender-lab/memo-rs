@@ -25,7 +25,7 @@ use crate::{
     },
     error::{
         CreateFileSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, MissingUploadFileSnafu,
-        Result2, UploadDirSnafu, WhateverSnafu,
+        Result, UploadDirSnafu, WhateverSnafu,
     },
     file::{FileObject, FilePayload, ListFilesParams, create_file, delete_file, list_files},
     health::{check_liveness, check_readiness},
@@ -53,7 +53,7 @@ pub struct AppMeta {
 pub async fn authenticate_handler(
     State(state): State<AppState>,
     payload: CoreResult<Json<Credentials>, JsonRejection>,
-) -> Result2<JsonResponse> {
+) -> Result<JsonResponse> {
     let credentials = payload.context(JsonRejectionSnafu {
         msg: "Invalid credentials payload",
     })?;
@@ -62,19 +62,19 @@ pub async fn authenticate_handler(
     Ok(JsonResponse::new(serde_json::to_string(&res).unwrap()))
 }
 
-pub async fn profile_handler(Extension(actor): Extension<Actor>) -> Result2<JsonResponse> {
+pub async fn profile_handler(Extension(actor): Extension<Actor>) -> Result<JsonResponse> {
     Ok(JsonResponse::new(
         serde_json::to_string(&actor.user).unwrap(),
     ))
 }
 
-pub async fn user_permissions(Extension(actor): Extension<Actor>) -> Result2<JsonResponse> {
+pub async fn user_permissions(Extension(actor): Extension<Actor>) -> Result<JsonResponse> {
     let mut items: Vec<String> = actor.permissions.iter().map(|p| p.to_string()).collect();
     items.sort();
     Ok(JsonResponse::new(serde_json::to_string(&items).unwrap()))
 }
 
-pub async fn user_authz(Extension(actor): Extension<Actor>) -> Result2<JsonResponse> {
+pub async fn user_authz(Extension(actor): Extension<Actor>) -> Result<JsonResponse> {
     Ok(JsonResponse::new(serde_json::to_string(&actor).unwrap()))
 }
 
@@ -96,12 +96,12 @@ pub async fn not_found_handler(State(_state): State<AppState>) -> impl IntoRespo
     )
 }
 
-pub async fn health_live_handler() -> Result2<JsonResponse> {
+pub async fn health_live_handler() -> Result<JsonResponse> {
     let health = check_liveness().await?;
     Ok(JsonResponse::new(serde_json::to_string(&health).unwrap()))
 }
 
-pub async fn health_ready_handler(State(state): State<AppState>) -> Result2<JsonResponse> {
+pub async fn health_ready_handler(State(state): State<AppState>) -> Result<JsonResponse> {
     let health = check_readiness(&state.config, &state.db_pool).await?;
     let status = if health.is_healthy() {
         StatusCode::OK
@@ -114,7 +114,7 @@ pub async fn health_ready_handler(State(state): State<AppState>) -> Result2<Json
     ))
 }
 
-pub async fn list_clients_handler(State(state): State<AppState>) -> Result2<JsonResponse> {
+pub async fn list_clients_handler(State(state): State<AppState>) -> Result<JsonResponse> {
     let clients = list_clients(&state.db_pool).await?;
     Ok(JsonResponse::new(serde_json::to_string(&clients).unwrap()))
 }
@@ -123,7 +123,7 @@ pub async fn create_client_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
     payload: CoreResult<Json<NewClient>, JsonRejection>,
-) -> Result2<JsonResponse> {
+) -> Result<JsonResponse> {
     let permissions = vec![Permission::ClientsCreate];
     ensure!(
         actor.has_permissions(&permissions),
@@ -140,7 +140,7 @@ pub async fn create_client_handler(
     Ok(JsonResponse::new(serde_json::to_string(&created).unwrap()))
 }
 
-pub async fn get_client_handler(Extension(client): Extension<ClientDto>) -> Result2<JsonResponse> {
+pub async fn get_client_handler(Extension(client): Extension<ClientDto>) -> Result<JsonResponse> {
     Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()))
 }
 
@@ -149,7 +149,7 @@ pub async fn update_client_handler(
     Extension(actor): Extension<Actor>,
     Extension(client): Extension<ClientDto>,
     payload: CoreResult<Json<UpdateClient>, JsonRejection>,
-) -> Result2<JsonResponse> {
+) -> Result<JsonResponse> {
     let permissions = vec![Permission::ClientsEdit];
     ensure!(
         actor.has_permissions(&permissions),
@@ -187,7 +187,7 @@ pub async fn delete_client_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
     Extension(client): Extension<ClientDto>,
-) -> Result2<JsonResponse> {
+) -> Result<JsonResponse> {
     let permissions = vec![Permission::ClientsDelete];
     ensure!(
         actor.has_permissions(&permissions),
@@ -215,7 +215,7 @@ pub async fn update_default_bucket_handler(
     Extension(actor): Extension<Actor>,
     Extension(client): Extension<ClientDto>,
     payload: CoreResult<Json<ClientDefaultBucket>, JsonRejection>,
-) -> Result2<JsonResponse> {
+) -> Result<JsonResponse> {
     let permissions = vec![Permission::ClientsEdit];
     ensure!(
         actor.has_permissions(&permissions),
@@ -253,12 +253,12 @@ pub async fn update_default_bucket_handler(
 pub async fn list_buckets_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
-) -> Result2<JsonResponse> {
+) -> Result<JsonResponse> {
     let buckets = list_buckets(&state.db_pool, &actor.client_id).await?;
     Ok(JsonResponse::new(serde_json::to_string(&buckets).unwrap()))
 }
 
-pub async fn get_bucket_handler(Extension(bucket): Extension<BucketDto>) -> Result2<JsonResponse> {
+pub async fn get_bucket_handler(Extension(bucket): Extension<BucketDto>) -> Result<JsonResponse> {
     Ok(JsonResponse::new(serde_json::to_string(&bucket).unwrap()))
 }
 
@@ -267,7 +267,7 @@ pub async fn list_dirs_handler(
     State(state): State<AppState>,
     Path(bucket_id): Path<String>,
     query: Query<ListDirsParams>,
-) -> Result2<JsonResponse> {
+) -> Result<JsonResponse> {
     //let Some(params) = query else {
     //    return Err(Error::BadRequest("Invalid query parameters".to_string()));
     //};
@@ -281,7 +281,7 @@ pub async fn create_dir_handler(
     Extension(actor): Extension<Actor>,
     Path(bucket_id): Path<String>,
     payload: CoreResult<Json<NewDir>, JsonRejection>,
-) -> Result2<JsonResponse> {
+) -> Result<JsonResponse> {
     let permissions = vec![Permission::DirsCreate];
     ensure!(
         actor.has_permissions(&permissions),
@@ -301,7 +301,7 @@ pub async fn create_dir_handler(
     ))
 }
 
-pub async fn get_dir_handler(Extension(dir): Extension<Dir>) -> Result2<JsonResponse> {
+pub async fn get_dir_handler(Extension(dir): Extension<Dir>) -> Result<JsonResponse> {
     Ok(JsonResponse::new(serde_json::to_string(&dir).unwrap()))
 }
 
@@ -312,7 +312,7 @@ pub async fn update_dir_handler(
     Extension(dir): Extension<Dir>,
     Path(params): Path<Params>,
     payload: CoreResult<Json<UpdateDir>, JsonRejection>,
-) -> Result2<JsonResponse> {
+) -> Result<JsonResponse> {
     let permissions = vec![Permission::DirsEdit];
     ensure!(
         actor.has_permissions(&permissions),
@@ -335,7 +335,7 @@ pub async fn update_dir_handler(
     }
 }
 
-async fn get_dir_as_response(state: &AppState, id: &str) -> Result2<JsonResponse> {
+async fn get_dir_as_response(state: &AppState, id: &str) -> Result<JsonResponse> {
     let res = get_dir(&state.db_pool, id).await?;
     let dir = res.context(WhateverSnafu {
         msg: "Error getting directory",
@@ -348,7 +348,7 @@ pub async fn delete_dir_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
     Path(params): Path<Params>,
-) -> Result2<JsonResponse> {
+) -> Result<JsonResponse> {
     let permissions = vec![Permission::DirsDelete];
     ensure!(
         actor.has_permissions(&permissions),
@@ -372,7 +372,7 @@ pub async fn list_files_handler(
     Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<Dir>,
     query: Query<ListFilesParams>,
-) -> Result2<JsonResponse> {
+) -> Result<JsonResponse> {
     let permissions = vec![Permission::FilesList, Permission::FilesView];
     ensure!(
         actor.has_permissions(&permissions),
@@ -407,7 +407,7 @@ pub async fn create_file_handler(
     Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<Dir>,
     mut multipart: Multipart,
-) -> Result2<JsonResponse> {
+) -> Result<JsonResponse> {
     let permissions = vec![Permission::FilesCreate];
     ensure!(
         actor.has_permissions(&permissions),
@@ -486,7 +486,7 @@ pub async fn get_file_handler(
     Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<Dir>,
     Extension(file): Extension<FileObject>,
-) -> Result2<JsonResponse> {
+) -> Result<JsonResponse> {
     let storage_client = state.storage_client;
     // Extract dir from the middleware extension
     let file_dto: FileDto = file.clone().into();
@@ -500,7 +500,7 @@ pub async fn delete_file_handler(
     Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<Dir>,
     Extension(file): Extension<FileObject>,
-) -> Result2<JsonResponse> {
+) -> Result<JsonResponse> {
     let permissions = vec![Permission::FilesDelete];
     ensure!(
         actor.has_permissions(&permissions),

@@ -4,11 +4,11 @@ use argon2::{
 };
 
 use crate::{
-    Result2,
+    Result,
     error::{HashPasswordSnafu, InvalidPasswordSnafu, VerifyPasswordHashSnafu},
 };
 
-pub fn hash_password(password: &str) -> Result2<String> {
+pub fn hash_password(password: &str) -> Result<String> {
     let pwd = password.as_bytes();
     let salt = SaltString::generate(&mut OsRng);
     let gon = Argon2::default();
@@ -21,7 +21,7 @@ pub fn hash_password(password: &str) -> Result2<String> {
     }
 }
 
-pub fn verify_password(password: &str, hash: &str) -> Result2<()> {
+pub fn verify_password(password: &str, hash: &str) -> Result<()> {
     let Ok(parsed_hash) = PasswordHash::new(&hash) else {
         return VerifyPasswordHashSnafu {
             msg: "Invalid password hash".to_string(),
