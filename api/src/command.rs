@@ -1,3 +1,4 @@
+use snafu::{ResultExt, ensure};
 use text_io::read;
 
 use crate::Result2;
@@ -7,6 +8,7 @@ use crate::bucket::{get_bucket, list_buckets};
 use crate::client::{NewClient, find_admin_client};
 use crate::config::{BucketCommand, Config, UserCommand};
 use crate::db::create_db_pool;
+use crate::error::{PasswordPromptSnafu, ValidationSnafu};
 use crate::storage::create_storage_client;
 
 use crate::auth::user::NewUser;
@@ -17,9 +19,11 @@ pub async fn run_setup(config: &Config) -> Result2<()> {
     print!("Enter username for the admin user: ");
     let username: String = read!("{}\n");
 
-    let Ok(password) = rpassword::prompt_password("Enter password for the admin user: ") else {
-        return Err("Failed to read password".into());
-    };
+    let password = rpassword::prompt_password("Enter password for the admin user: ").context(
+        PasswordPromptSnafu {
+            msg: "Failed to read password",
+        },
+    )?;
 
     let password = password.trim().to_string();
     let new_user = NewUser {
@@ -61,7 +65,7 @@ pub async fn run_setup(config: &Config) -> Result2<()> {
     Ok(())
 }
 
-pub async fn run_user_command(cmd: UserCommand, config: &Config) -> Result<()> {
+pub async fn run_user_command(cmd: UserCommand, config: &Config) -> Result2<()> {
     match cmd {
         UserCommand::List { client_id } => run_list_users(config, client_id).await,
         UserCommand::Create {
@@ -76,7 +80,7 @@ pub async fn run_user_command(cmd: UserCommand, config: &Config) -> Result<()> {
     }
 }
 
-async fn run_list_users(config: &Config, client_id: String) -> Result<()> {
+async fn run_list_users(config: &Config, client_id: String) -> Result2<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
     let users = list_users(&db_pool, &client_id).await?;
     for user in users.iter() {
@@ -93,10 +97,12 @@ async fn run_create_user(
     client_id: String,
     username: String,
     roles: String,
-) -> Result<()> {
-    let Ok(password) = rpassword::prompt_password("Enter password for the new user: ") else {
-        return Err("Failed to read password".into());
-    };
+) -> Result2<()> {
+    let password = rpassword::prompt_password("Enter password for the new user: ").context(
+        PasswordPromptSnafu {
+            msg: "Failed to read password",
+        },
+    )?;
 
     let password = password.trim().to_string();
     let new_user = NewUser {
@@ -115,7 +121,7 @@ async fn run_create_user(
     Ok(())
 }
 
-async fn run_set_user_password(config: &Config, id: String) -> Result<()> {
+async fn run_set_user_password(config: &Config, id: String) -> Result2<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
     let user = get_user(&db_pool, &id).await?;
     if let Some(node) = user {
@@ -124,12 +130,13 @@ async fn run_set_user_password(config: &Config, id: String) -> Result<()> {
             return Err("Failed to read password".into());
         };
         let password = password.trim().to_string();
-        if password.len() < 8 {
-            return Err("Password must be at least 8 characters".into());
-        }
-        if password.len() > 100 {
-            return Err("Password must be at most 100 characters".into());
-        }
+        let pwdlen = password.len();
+        ensure!(
+            pwdlen >= 8 && pwdlen <= 100,
+            ValidationSnafu {
+                msg: "Password must be between 8 to 60 characters".to_string()
+            }
+        );
         let _ = update_user_password(&db_pool, &id, &password).await?;
         println!("Password updated.");
     } else {
@@ -138,7 +145,7 @@ async fn run_set_user_password(config: &Config, id: String) -> Result<()> {
     Ok(())
 }
 
-async fn run_disable_user(config: &Config, id: String) -> Result<()> {
+async fn run_disable_user(config: &Config, id: String) -> Result2<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
     let user = get_user(&db_pool, &id).await?;
     if let Some(node) = user {
@@ -154,7 +161,7 @@ async fn run_disable_user(config: &Config, id: String) -> Result<()> {
     Ok(())
 }
 
-async fn run_enable_user(config: &Config, id: String) -> Result<()> {
+async fn run_enable_user(config: &Config, id: String) -> Result2<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
     let user = get_user(&db_pool, &id).await?;
     if let Some(node) = user {
@@ -170,7 +177,7 @@ async fn run_enable_user(config: &Config, id: String) -> Result<()> {
     Ok(())
 }
 
-async fn run_delete_user(config: &Config, id: String) -> Result<()> {
+async fn run_delete_user(config: &Config, id: String) -> Result2<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
     let user = get_user(&db_pool, &id).await?;
     if let Some(_) = user {
@@ -182,7 +189,7 @@ async fn run_delete_user(config: &Config, id: String) -> Result<()> {
     Ok(())
 }
 
-pub async fn run_bucket_command(cmd: BucketCommand, config: &Config) -> Result<()> {
+pub async fn run_bucket_command(cmd: BucketCommand, config: &Config) -> Result2<()> {
     match cmd {
         BucketCommand::List { client_id } => run_list_buckets(config, client_id).await,
         BucketCommand::Create {
@@ -194,7 +201,7 @@ pub async fn run_bucket_command(cmd: BucketCommand, config: &Config) -> Result<(
     }
 }
 
-async fn run_list_buckets(config: &Config, client_id: String) -> Result<()> {
+async fn run_list_buckets(config: &Config, client_id: String) -> Result2<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
     let buckets = list_buckets(&db_pool, &client_id).await?;
     for bucket in buckets.iter() {
@@ -211,14 +218,19 @@ async fn run_create_bucket(
     client_id: String,
     name: String,
     images_only: String,
-) -> Result<()> {
+) -> Result2<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
     let storage_client = create_storage_client(config.cloud.credentials.as_str()).await?;
 
-    let res: Result<bool> = match images_only.as_str() {
+    let res: Result2<bool> = match images_only.as_str() {
         "true" => Ok(true),
         "false" => Ok(false),
-        _ => Err("Invalid boolean".into()),
+        _ => {
+            return ValidationSnafu {
+                msg: "Invalid boolean".to_string(),
+            }
+            .fail();
+        }
     };
 
     let Ok(img_only) = res else {
@@ -238,7 +250,7 @@ async fn run_create_bucket(
     Ok(())
 }
 
-async fn run_delete_bucket(config: &Config, id: String) -> Result<()> {
+async fn run_delete_bucket(config: &Config, id: String) -> Result2<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
     let bucket = get_bucket(&db_pool, &id).await?;
     if let Some(_) = bucket {

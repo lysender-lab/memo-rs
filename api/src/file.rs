@@ -323,7 +323,7 @@ pub async fn create_file(
         cleanup(data, None);
 
         return ValidationSnafu {
-            msg: "Bucket only accepts images".into(),
+            msg: "Bucket only accepts images".to_string(),
         }
         .fail();
     }

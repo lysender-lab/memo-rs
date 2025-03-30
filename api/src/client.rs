@@ -7,13 +7,13 @@ use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use validator::Validate;
 
+use crate::Result2;
 use crate::auth::user::count_client_users;
 use crate::bucket::{count_client_buckets, find_client_bucket, get_bucket};
 use crate::error::{
     DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, MaxClientsReachedSnafu, ValidationSnafu,
 };
 use crate::schema::clients::{self, dsl};
-use crate::{Error, Error2, Result, Result2};
 use memo::{utils::generate_id, validators::flatten_errors};
 
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]

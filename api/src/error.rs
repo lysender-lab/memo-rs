@@ -53,6 +53,13 @@ pub enum Error2 {
         backtrace: Backtrace,
     },
 
+    #[snafu(display("{} - {}", msg, source))]
+    PasswordPrompt {
+        msg: String,
+        source: std::io::Error,
+        backtrace: Backtrace,
+    },
+
     #[snafu(display("{}", msg))]
     Validation { msg: String },
 

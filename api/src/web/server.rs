@@ -7,7 +7,7 @@ use tower::ServiceBuilder;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::{Level, info};
 
-use crate::Result;
+use crate::Result2;
 use crate::config::Config;
 use crate::db::create_db_pool;
 use crate::storage::create_storage_client;
@@ -20,7 +20,7 @@ pub struct AppState {
     pub db_pool: Pool,
 }
 
-pub async fn run_web_server(config: &Config) -> Result<()> {
+pub async fn run_web_server(config: &Config) -> Result2<()> {
     let port = config.server.port;
 
     let storage_client = create_storage_client(config.cloud.credentials.as_str()).await?;
