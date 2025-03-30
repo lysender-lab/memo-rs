@@ -9,7 +9,6 @@ axum.workspace = true
 chrono.workspace = true
 clap.workspace = true
 deadpool-diesel.workspace = true
-derive_more.workspace = true
 diesel.workspace = true
 google-cloud-storage.workspace = true
 image.workspace = true

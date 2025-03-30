@@ -112,7 +112,6 @@ dependencies = [
  "chrono",
  "clap",
  "deadpool-diesel",
- "derive_more",
  "diesel",
  "google-cloud-storage",
  "image",

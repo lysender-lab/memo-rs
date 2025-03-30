@@ -36,15 +36,15 @@ fn public_routes(state: AppState) -> Router<AppState> {
         .route("/", get(home_handler))
         .route("/health/liveness", get(health_live_handler))
         .route("/health/readiness", get(health_ready_handler))
-        .route("/v1/auth/token", post(authenticate_handler))
+        .route("/auth/token", post(authenticate_handler))
         .with_state(state)
 }
 
 fn private_routes(state: AppState) -> Router<AppState> {
     Router::new()
-        .nest("/v1/clients", clients_routes(state.clone()))
-        .nest("/v1/buckets", buckets_routes(state.clone()))
-        .nest("/v1/user", user_routes(state.clone()))
+        .nest("/clients", clients_routes(state.clone()))
+        .nest("/buckets", buckets_routes(state.clone()))
+        .nest("/user", user_routes(state.clone()))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             require_auth_middleware,
