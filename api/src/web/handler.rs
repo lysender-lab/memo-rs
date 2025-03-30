@@ -6,6 +6,7 @@ use axum::{
 };
 use core::result::Result as CoreResult;
 use serde::Serialize;
+use snafu::{OptionExt, ResultExt, ensure};
 use tokio::{fs::File, fs::create_dir_all, io::AsyncWriteExt};
 
 use crate::{
@@ -22,20 +23,22 @@ use crate::{
         Dir, ListDirsParams, NewDir, UpdateDir, create_dir, delete_dir, get_dir, list_dirs,
         update_dir,
     },
+    error::{
+        CreateFileSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, MissingUploadFileSnafu,
+        Result2, UploadDirSnafu, WhateverSnafu,
+    },
     file::{FileObject, FilePayload, ListFilesParams, create_file, delete_file, list_files},
     health::{check_liveness, check_readiness},
     storage::{delete_file_object, format_file, format_files},
     web::{params::Params, response::JsonResponse, server::AppState},
 };
 use memo::{
-    Error, Result,
     dto::{
         bucket::BucketDto,
         client::ClientDto,
         file::{FileDto, ImgVersion},
         pagination::Paginated,
     },
-    error::ErrorResponse,
     role::Permission,
     utils::slugify_prefixed,
 };
@@ -50,28 +53,28 @@ pub struct AppMeta {
 pub async fn authenticate_handler(
     State(state): State<AppState>,
     payload: CoreResult<Json<Credentials>, JsonRejection>,
-) -> Result<JsonResponse> {
-    let Ok(credentials) = payload else {
-        return Err(Error::BadRequest("Invalid credentials payload".into()));
-    };
+) -> Result2<JsonResponse> {
+    let credentials = payload.context(JsonRejectionSnafu {
+        msg: "Invalid credentials payload",
+    })?;
 
     let res = authenticate(&state, &credentials).await?;
     Ok(JsonResponse::new(serde_json::to_string(&res).unwrap()))
 }
 
-pub async fn profile_handler(Extension(actor): Extension<Actor>) -> Result<JsonResponse> {
+pub async fn profile_handler(Extension(actor): Extension<Actor>) -> Result2<JsonResponse> {
     Ok(JsonResponse::new(
         serde_json::to_string(&actor.user).unwrap(),
     ))
 }
 
-pub async fn user_permissions(Extension(actor): Extension<Actor>) -> Result<JsonResponse> {
+pub async fn user_permissions(Extension(actor): Extension<Actor>) -> Result2<JsonResponse> {
     let mut items: Vec<String> = actor.permissions.iter().map(|p| p.to_string()).collect();
     items.sort();
     Ok(JsonResponse::new(serde_json::to_string(&items).unwrap()))
 }
 
-pub async fn user_authz(Extension(actor): Extension<Actor>) -> Result<JsonResponse> {
+pub async fn user_authz(Extension(actor): Extension<Actor>) -> Result2<JsonResponse> {
     Ok(JsonResponse::new(serde_json::to_string(&actor).unwrap()))
 }
 
@@ -93,12 +96,12 @@ pub async fn not_found_handler(State(_state): State<AppState>) -> impl IntoRespo
     )
 }
 
-pub async fn health_live_handler() -> Result<JsonResponse> {
+pub async fn health_live_handler() -> Result2<JsonResponse> {
     let health = check_liveness().await?;
     Ok(JsonResponse::new(serde_json::to_string(&health).unwrap()))
 }
 
-pub async fn health_ready_handler(State(state): State<AppState>) -> Result<JsonResponse> {
+pub async fn health_ready_handler(State(state): State<AppState>) -> Result2<JsonResponse> {
     let health = check_readiness(&state.config, &state.db_pool).await?;
     let status = if health.is_healthy() {
         StatusCode::OK
@@ -111,7 +114,7 @@ pub async fn health_ready_handler(State(state): State<AppState>) -> Result<JsonR
     ))
 }
 
-pub async fn list_clients_handler(State(state): State<AppState>) -> Result<JsonResponse> {
+pub async fn list_clients_handler(State(state): State<AppState>) -> Result2<JsonResponse> {
     let clients = list_clients(&state.db_pool).await?;
     Ok(JsonResponse::new(serde_json::to_string(&clients).unwrap()))
 }
@@ -120,21 +123,24 @@ pub async fn create_client_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
     payload: CoreResult<Json<NewClient>, JsonRejection>,
-) -> Result<JsonResponse> {
+) -> Result2<JsonResponse> {
     let permissions = vec![Permission::ClientsCreate];
-    if !actor.has_permissions(&permissions) {
-        return Err(Error::Forbidden("Insufficient permissions".to_string()));
-    }
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
 
-    let Ok(data) = payload else {
-        return Err(Error::BadRequest("Invalid request payload".to_string()));
-    };
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
 
     let created = create_client(&state.db_pool, &data, false).await?;
     Ok(JsonResponse::new(serde_json::to_string(&created).unwrap()))
 }
 
-pub async fn get_client_handler(Extension(client): Extension<ClientDto>) -> Result<JsonResponse> {
+pub async fn get_client_handler(Extension(client): Extension<ClientDto>) -> Result2<JsonResponse> {
     Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()))
 }
 
@@ -143,15 +149,18 @@ pub async fn update_client_handler(
     Extension(actor): Extension<Actor>,
     Extension(client): Extension<ClientDto>,
     payload: CoreResult<Json<UpdateClient>, JsonRejection>,
-) -> Result<JsonResponse> {
+) -> Result2<JsonResponse> {
     let permissions = vec![Permission::ClientsEdit];
-    if !actor.has_permissions(&permissions) {
-        return Err(Error::Forbidden("Insufficient permissions".to_string()));
-    }
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
 
-    let Ok(data) = payload else {
-        return Err(Error::BadRequest("Invalid request payload".to_string()));
-    };
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
 
     // No changes, just return the client
     if data.name.is_none() && data.default_bucket_id.is_none() && data.status.is_none() {
@@ -165,9 +174,10 @@ pub async fn update_client_handler(
     }
 
     let updated_client = get_client(&state.db_pool, client.id.as_str()).await?;
-    let Some(updated_client) = updated_client else {
-        return Err("Unable to find updated client".into());
-    };
+    let updated_client = updated_client.context(WhateverSnafu {
+        msg: "Unable to find updated client",
+    })?;
+
     Ok(JsonResponse::new(
         serde_json::to_string(&updated_client).unwrap(),
     ))
@@ -177,15 +187,20 @@ pub async fn delete_client_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
     Extension(client): Extension<ClientDto>,
-) -> Result<JsonResponse> {
+) -> Result2<JsonResponse> {
     let permissions = vec![Permission::ClientsDelete];
-    if !actor.has_permissions(&permissions) {
-        return Err(Error::Forbidden("Insufficient permissions".to_string()));
-    }
-
-    if client.admin {
-        return Err(Error::Forbidden("Cannot delete admin client".to_string()));
-    }
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+    ensure!(
+        !client.admin,
+        ForbiddenSnafu {
+            msg: "Cannot delete admin client"
+        }
+    );
 
     let _ = delete_client(&state.db_pool, &client.id).await?;
 
@@ -200,15 +215,18 @@ pub async fn update_default_bucket_handler(
     Extension(actor): Extension<Actor>,
     Extension(client): Extension<ClientDto>,
     payload: CoreResult<Json<ClientDefaultBucket>, JsonRejection>,
-) -> Result<JsonResponse> {
+) -> Result2<JsonResponse> {
     let permissions = vec![Permission::ClientsEdit];
-    if !actor.has_permissions(&permissions) {
-        return Err(Error::Forbidden("Insufficient permissions".to_string()));
-    }
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
 
-    let Ok(data) = payload else {
-        return Err(Error::BadRequest("Invalid request payload".to_string()));
-    };
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
 
     let data = UpdateClient {
         name: None,
@@ -223,9 +241,10 @@ pub async fn update_default_bucket_handler(
     }
 
     let updated_client = get_client(&state.db_pool, client.id.as_str()).await?;
-    let Some(updated_client) = updated_client else {
-        return Err("Unable to find updated client".into());
-    };
+    let updated_client = updated_client.context(WhateverSnafu {
+        msg: "Unable to find updated client",
+    })?;
+
     Ok(JsonResponse::new(
         serde_json::to_string(&updated_client).unwrap(),
     ))
@@ -234,12 +253,12 @@ pub async fn update_default_bucket_handler(
 pub async fn list_buckets_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
-) -> Result<JsonResponse> {
+) -> Result2<JsonResponse> {
     let buckets = list_buckets(&state.db_pool, &actor.client_id).await?;
     Ok(JsonResponse::new(serde_json::to_string(&buckets).unwrap()))
 }
 
-pub async fn get_bucket_handler(Extension(bucket): Extension<BucketDto>) -> Result<JsonResponse> {
+pub async fn get_bucket_handler(Extension(bucket): Extension<BucketDto>) -> Result2<JsonResponse> {
     Ok(JsonResponse::new(serde_json::to_string(&bucket).unwrap()))
 }
 
@@ -248,7 +267,7 @@ pub async fn list_dirs_handler(
     State(state): State<AppState>,
     Path(bucket_id): Path<String>,
     query: Query<ListDirsParams>,
-) -> Result<JsonResponse> {
+) -> Result2<JsonResponse> {
     //let Some(params) = query else {
     //    return Err(Error::BadRequest("Invalid query parameters".to_string()));
     //};
@@ -262,15 +281,19 @@ pub async fn create_dir_handler(
     Extension(actor): Extension<Actor>,
     Path(bucket_id): Path<String>,
     payload: CoreResult<Json<NewDir>, JsonRejection>,
-) -> Result<JsonResponse> {
+) -> Result2<JsonResponse> {
     let permissions = vec![Permission::DirsCreate];
-    if !actor.has_permissions(&permissions) {
-        return Err(Error::Forbidden("Insufficient permissions".to_string()));
-    }
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
 
-    let Ok(data) = payload else {
-        return Err(Error::BadRequest("Invalid request payload".to_string()));
-    };
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
+
     let dir = create_dir(&state.db_pool, &bucket_id, &data).await?;
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,
@@ -278,7 +301,7 @@ pub async fn create_dir_handler(
     ))
 }
 
-pub async fn get_dir_handler(Extension(dir): Extension<Dir>) -> Result<JsonResponse> {
+pub async fn get_dir_handler(Extension(dir): Extension<Dir>) -> Result2<JsonResponse> {
     Ok(JsonResponse::new(serde_json::to_string(&dir).unwrap()))
 }
 
@@ -289,16 +312,19 @@ pub async fn update_dir_handler(
     Extension(dir): Extension<Dir>,
     Path(params): Path<Params>,
     payload: CoreResult<Json<UpdateDir>, JsonRejection>,
-) -> Result<JsonResponse> {
+) -> Result2<JsonResponse> {
     let permissions = vec![Permission::DirsEdit];
-    if !actor.has_permissions(&permissions) {
-        return Err(Error::Forbidden("Insufficient permissions".to_string()));
-    }
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
 
     let dir_id = params.dir_id.clone().expect("dir_id is required");
-    let Ok(data) = payload else {
-        return Err(Error::BadRequest("Invalid request payload".to_string()));
-    };
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
 
     let updated = update_dir(&state.db_pool, &dir_id, &data).await?;
 
@@ -309,15 +335,11 @@ pub async fn update_dir_handler(
     }
 }
 
-async fn get_dir_as_response(state: &AppState, id: &str) -> Result<JsonResponse> {
-    let res = get_dir(&state.db_pool, id).await;
-    let Ok(dir_res) = res else {
-        return Err("Error getting directory".into());
-    };
-
-    let Some(dir) = dir_res else {
-        return Err("Error getting directory this time".into());
-    };
+async fn get_dir_as_response(state: &AppState, id: &str) -> Result2<JsonResponse> {
+    let res = get_dir(&state.db_pool, id).await?;
+    let dir = res.context(WhateverSnafu {
+        msg: "Error getting directory",
+    })?;
 
     Ok(JsonResponse::new(serde_json::to_string(&dir).unwrap()))
 }
@@ -326,11 +348,14 @@ pub async fn delete_dir_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
     Path(params): Path<Params>,
-) -> Result<JsonResponse> {
+) -> Result2<JsonResponse> {
     let permissions = vec![Permission::DirsDelete];
-    if !actor.has_permissions(&permissions) {
-        return Err(Error::Forbidden("Insufficient permissions".to_string()));
-    }
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
 
     let dir_id = params.dir_id.clone().expect("dir_id is required");
     let _ = delete_dir(&state.db_pool, &dir_id).await?;
@@ -347,15 +372,19 @@ pub async fn list_files_handler(
     Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<Dir>,
     query: Query<ListFilesParams>,
-) -> Result<JsonResponse> {
+) -> Result2<JsonResponse> {
     let permissions = vec![Permission::FilesList, Permission::FilesView];
-    if !actor.has_permissions(&permissions) {
-        return Err(Error::Forbidden("Insufficient permissions".to_string()));
-    }
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
 
     //let Some(params) = query else {
     //    return Err(Error::BadRequest("Invalid query parameters".to_string()));
     //};
+
     let files = list_files(&state.db_pool, &dir, &query).await?;
     let storage_client = state.storage_client;
 
@@ -378,11 +407,14 @@ pub async fn create_file_handler(
     Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<Dir>,
     mut multipart: Multipart,
-) -> Result<JsonResponse> {
+) -> Result2<JsonResponse> {
     let permissions = vec![Permission::FilesCreate];
-    if !actor.has_permissions(&permissions) {
-        return Err(Error::Forbidden("Insufficient permissions".to_string()));
-    }
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
 
     let mut payload: Option<FilePayload> = None;
 
@@ -404,16 +436,16 @@ pub async fn create_file_handler(
             .upload_dir
             .clone()
             .join(ImgVersion::Original.to_string());
-        let dir_res = create_dir_all(orig_dir.clone()).await;
-        if let Err(_) = dir_res {
-            return Err("Unable to create upload dir".into());
-        }
+
+        let _ = create_dir_all(orig_dir.clone())
+            .await
+            .context(UploadDirSnafu)?;
 
         // Prepare to save to file
         let file_path = orig_dir.as_path().join(&filename);
-        let Ok(mut file) = File::create(&file_path).await else {
-            return Err("Unable to create file".into());
-        };
+        let mut file = File::create(&file_path)
+            .await
+            .context(CreateFileSnafu { path: file_path })?;
 
         // Stream contents to file
         let mut size: usize = 0;
@@ -433,24 +465,20 @@ pub async fn create_file_handler(
         })
     }
 
-    let Some(payload) = payload else {
-        return Err(Error::MissingUploadFile("Missing upload file".to_string()));
-    };
+    let payload = payload.context(MissingUploadFileSnafu {
+        msg: "Missing upload file",
+    })?;
 
     let db_pool = state.db_pool.clone();
     let storage_client = state.storage_client;
-    let res = create_file(&db_pool, &storage_client, &bucket, &dir, &payload).await;
-    match res {
-        Ok(file) => {
-            let file_dto: FileDto = file.into();
-            let file_dto = format_file(&storage_client, &bucket.name, &dir.name, file_dto).await?;
-            Ok(JsonResponse::with_status(
-                StatusCode::CREATED,
-                serde_json::to_string(&file_dto).unwrap(),
-            ))
-        }
-        Err(e) => Err(e),
-    }
+    let file = create_file(&db_pool, &storage_client, &bucket, &dir, &payload).await?;
+    let file_dto: FileDto = file.into();
+    let file_dto = format_file(&storage_client, &bucket.name, &dir.name, file_dto).await?;
+
+    Ok(JsonResponse::with_status(
+        StatusCode::CREATED,
+        serde_json::to_string(&file_dto).unwrap(),
+    ))
 }
 
 pub async fn get_file_handler(
@@ -458,7 +486,7 @@ pub async fn get_file_handler(
     Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<Dir>,
     Extension(file): Extension<FileObject>,
-) -> Result<JsonResponse> {
+) -> Result2<JsonResponse> {
     let storage_client = state.storage_client;
     // Extract dir from the middleware extension
     let file_dto: FileDto = file.clone().into();
@@ -472,11 +500,14 @@ pub async fn delete_file_handler(
     Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<Dir>,
     Extension(file): Extension<FileObject>,
-) -> Result<JsonResponse> {
+) -> Result2<JsonResponse> {
     let permissions = vec![Permission::FilesDelete];
-    if !actor.has_permissions(&permissions) {
-        return Err(Error::Forbidden("Insufficient permissions".to_string()));
-    }
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
 
     // Delete record
     let db_pool = state.db_pool.clone();

@@ -8,7 +8,7 @@ use axum::{
 };
 
 use crate::{
-    Error,
+    Error2,
     auth::{actor::Actor, authenticate_token},
     bucket::get_bucket,
     client::get_client,
@@ -39,7 +39,7 @@ pub async fn auth_middleware(
     if let Some(auth_header) = auth_header {
         // At this point, authentication must be verified
         if !auth_header.starts_with("Bearer ") {
-            return to_json_error_response(Error::InvalidAuthToken);
+            return to_json_error_response(Error2::InvalidAuthToken);
         }
         let token = auth_header.replace("Bearer ", "");
 
@@ -67,7 +67,7 @@ pub async fn require_auth_middleware(
     next: Next,
 ) -> Response<Body> {
     if !actor.has_auth_scope() {
-        return to_json_error_response(Error::InsufficientAuthScope);
+        return to_json_error_response(Error2::InsufficientAuthScope);
     }
 
     next.run(request).await
