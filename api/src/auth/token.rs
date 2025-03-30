@@ -1,9 +1,13 @@
 use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
 use super::actor::ActorPayload;
-use crate::{Error, Result};
+use crate::{
+    Result2,
+    error::{InvalidAuthTokenSnafu, WhateverSnafu},
+};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct Claims {
@@ -17,7 +21,7 @@ struct Claims {
 // Duration in seconds
 const EXP_DURATION: i64 = 60 * 60 * 24 * 7; // 1 week
 
-pub fn create_auth_token(actor: &ActorPayload, secret: &str) -> Result<String> {
+pub fn create_auth_token(actor: &ActorPayload, secret: &str) -> Result2<String> {
     let exp = Utc::now() + Duration::seconds(EXP_DURATION);
     let data = actor.clone();
 
@@ -34,27 +38,26 @@ pub fn create_auth_token(actor: &ActorPayload, secret: &str) -> Result<String> {
         &claims,
         &EncodingKey::from_secret(secret.as_bytes()),
     ) else {
-        return Err("Error creating JWT token".into());
+        return WhateverSnafu {
+            msg: "Error creating JWT token".to_string(),
+        }
+        .fail();
     };
 
     Ok(token)
 }
 
-pub fn verify_auth_token(token: &str, secret: &str) -> Result<ActorPayload> {
+pub fn verify_auth_token(token: &str, secret: &str) -> Result2<ActorPayload> {
     let Ok(decoded) = decode::<Claims>(
         token,
         &DecodingKey::from_secret(secret.as_bytes()),
         &Validation::default(),
     ) else {
-        return Err(Error::InvalidAuthToken);
+        return InvalidAuthTokenSnafu {}.fail();
     };
 
-    if decoded.claims.sub.len() == 0 {
-        return Err(Error::InvalidAuthToken);
-    }
-    if decoded.claims.scope.len() == 0 {
-        return Err(Error::InvalidAuthToken);
-    }
+    ensure!(decoded.claims.sub.len() > 0, InvalidAuthTokenSnafu {});
+    ensure!(decoded.claims.scope.len() > 0, InvalidAuthTokenSnafu {});
 
     Ok(ActorPayload {
         id: decoded.claims.sub,

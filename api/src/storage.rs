@@ -1,32 +1,33 @@
+use std::path::PathBuf;
+use std::time::Duration;
+
 use google_cloud_storage::client::google_cloud_auth::credentials::CredentialsFile;
-use google_cloud_storage::client::{Client, ClientConfig, google_cloud_auth};
+use google_cloud_storage::client::{Client, ClientConfig};
 use google_cloud_storage::http::Error as CloudError;
 use google_cloud_storage::http::buckets::get::GetBucketRequest;
 use google_cloud_storage::http::hmac_keys::list::ListHmacKeysRequest;
 use google_cloud_storage::http::objects::delete::DeleteObjectRequest;
 use google_cloud_storage::http::objects::upload::{Media, UploadObjectRequest, UploadType};
 use google_cloud_storage::sign::SignedURLOptions;
-use snafu::{Backtrace, ResultExt, Snafu, ensure};
-use std::path::PathBuf;
-use std::time::Duration;
 
+use crate::Result2;
 use crate::dir::Dir;
+use crate::error::{GoogleSnafu, ValidationSnafu};
 use crate::file::ORIGINAL_PATH;
 use memo::dto::bucket::BucketDto;
 use memo::dto::file::{FileDto, ImgVersionDto};
 
-pub async fn create_storage_client(key_file: &str) -> Result<Client, StorageError> {
-    let creds = CredentialsFile::new_from_file(key_file.to_string())
-        .await
-        .context(CredentialsSnafu)?;
-    let config = ClientConfig::default()
-        .with_credentials(creds)
-        .await
-        .context(CredentialsSnafu)?;
-    Ok(Client::new(config))
+pub async fn create_storage_client(key_file: &str) -> Result2<Client> {
+    match CredentialsFile::new_from_file(key_file.to_string()).await {
+        Ok(creds) => match ClientConfig::default().with_credentials(creds).await {
+            Ok(config) => Ok(Client::new(config)),
+            Err(err) => Err(format!("Error creating Cloud Storage config: {}", err).into()),
+        },
+        Err(err) => Err(format!("Error reading credentials file: {}", err).into()),
+    }
 }
 
-pub async fn read_bucket(client: &Client, name: &str) -> Result<String, StorageError> {
+pub async fn read_bucket(client: &Client, name: &str) -> Result2<String> {
     let res = client
         .get_bucket(&GetBucketRequest {
             bucket: name.to_string(),
@@ -39,9 +40,9 @@ pub async fn read_bucket(client: &Client, name: &str) -> Result<String, StorageE
         Err(e) => match e {
             CloudError::Response(gerr) => {
                 if gerr.code >= 400 && gerr.code < 500 {
-                    Err(Error::ValidationError(gerr.message))
+                    ValidationSnafu { msg: gerr.message }.fail()
                 } else {
-                    Err(format!("Google error: {}", gerr.message).as_str().into())
+                    GoogleSnafu { msg: gerr.message }.fail()
                 }
             }
             _ => Err("Failed to read bucket from cloud storage.".into()),
@@ -55,7 +56,7 @@ pub async fn upload_object(
     dir: &Dir,
     source_dir: &PathBuf,
     file: &FileDto,
-) -> Result<()> {
+) -> Result2<()> {
     match file.is_image {
         true => upload_image_object(client, bucket, dir, source_dir, file).await,
         false => upload_regular_object(client, bucket, dir, source_dir, file).await,
@@ -68,7 +69,7 @@ async fn upload_regular_object(
     dir: &Dir,
     source_dir: &PathBuf,
     file: &FileDto,
-) -> Result<()> {
+) -> Result2<()> {
     // Prepare media
     let file_path = format!("{}/{}/{}", &dir.name, ORIGINAL_PATH, &file.filename);
     let mut media = Media::new(file_path.clone());
@@ -97,9 +98,9 @@ async fn upload_regular_object(
         Err(e) => match e {
             CloudError::Response(gerr) => {
                 if gerr.code >= 400 && gerr.code < 500 {
-                    Err(Error::ValidationError(gerr.message))
+                    ValidationSnafu { msg: gerr.message }.fail()
                 } else {
-                    Err(format!("Google error: {}", gerr.message).as_str().into())
+                    GoogleSnafu { msg: gerr.message }.fail()
                 }
             }
             _ => Err("Failed to upload object to cloud storage.".into()),
@@ -113,7 +114,7 @@ async fn upload_image_object(
     dir: &Dir,
     source_dir: &PathBuf,
     file: &FileDto,
-) -> Result<()> {
+) -> Result2<()> {
     if let Some(versions) = &file.img_versions {
         for version in versions.iter() {
             let _ = upload_image_version(&client, bucket, dir, source_dir, &file, version).await?;
@@ -130,7 +131,7 @@ async fn upload_image_version(
     source_dir: &PathBuf,
     file: &FileDto,
     version: &ImgVersionDto,
-) -> Result<()> {
+) -> Result2<()> {
     // Prepare media
     let version_dir: String = version.version.to_string();
     let file_path = format!("{}/{}/{}", &dir.name, &version_dir, &file.filename);
@@ -160,9 +161,9 @@ async fn upload_image_version(
         Err(e) => match e {
             CloudError::Response(gerr) => {
                 if gerr.code >= 400 && gerr.code < 500 {
-                    Err(Error::ValidationError(gerr.message))
+                    ValidationSnafu { msg: gerr.message }.fail()
                 } else {
-                    Err(format!("Google error: {}", gerr.message).as_str().into())
+                    GoogleSnafu { msg: gerr.message }.fail()
                 }
             }
             _ => Err("Failed to upload object to cloud storage.".into()),
@@ -175,7 +176,7 @@ pub async fn delete_file_object(
     bucket_name: &str,
     dir_name: &str,
     file: &FileDto,
-) -> Result<()> {
+) -> Result2<()> {
     if file.is_image {
         // Delete all versions
         if let Some(versions) = &file.img_versions {
@@ -197,7 +198,7 @@ pub async fn delete_file_object(
     Ok(())
 }
 
-async fn delete_object_by_path(client: &Client, bucket_name: &str, path: &str) -> Result<()> {
+async fn delete_object_by_path(client: &Client, bucket_name: &str, path: &str) -> Result2<()> {
     let res = client
         .delete_object(&DeleteObjectRequest {
             bucket: bucket_name.to_string(),
@@ -211,9 +212,9 @@ async fn delete_object_by_path(client: &Client, bucket_name: &str, path: &str) -
         Err(e) => match e {
             CloudError::Response(gerr) => {
                 if gerr.code >= 400 && gerr.code < 500 {
-                    Err(Error::ValidationError(gerr.message))
+                    ValidationSnafu { msg: gerr.message }.fail()
                 } else {
-                    Err(format!("Google error: {}", gerr.message).as_str().into())
+                    GoogleSnafu { msg: gerr.message }.fail()
                 }
             }
             _ => Err("Failed to delete object from cloud storage.".into()),
@@ -226,7 +227,7 @@ pub async fn format_files(
     bucket_name: &str,
     dir: &str,
     files: Vec<FileDto>,
-) -> Result<Vec<FileDto>> {
+) -> Result2<Vec<FileDto>> {
     let mut tasks = Vec::with_capacity(files.len());
     for file in files.iter() {
         let client_copy = client.clone();
@@ -256,7 +257,7 @@ pub async fn format_file(
     bucket_name: &str,
     dir_name: &str,
     file: FileDto,
-) -> Result<FileDto> {
+) -> Result2<FileDto> {
     format_file_single(&client, bucket_name, dir_name, file).await
 }
 
@@ -265,7 +266,7 @@ async fn format_file_single(
     bucket_name: &str,
     dir_name: &str,
     mut file: FileDto,
-) -> Result<FileDto> {
+) -> Result2<FileDto> {
     if file.is_image {
         if let Some(versions) = &file.img_versions {
             let mut updated_versions: Vec<ImgVersionDto> = Vec::with_capacity(versions.len());
@@ -302,7 +303,7 @@ async fn format_file_single(
     Ok(file)
 }
 
-async fn generate_url(client: &Client, bucket_name: &str, file_path: &str) -> Result<String> {
+async fn generate_url(client: &Client, bucket_name: &str, file_path: &str) -> Result2<String> {
     let expires = Duration::from_secs(3600 * 12);
     let mut options = SignedURLOptions::default();
     options.expires = expires;
@@ -317,7 +318,7 @@ async fn generate_url(client: &Client, bucket_name: &str, file_path: &str) -> Re
     }
 }
 
-pub async fn test_list_hmac_keys(client: &Client, project_id: &str) -> Result<()> {
+pub async fn test_list_hmac_keys(client: &Client, project_id: &str) -> Result2<()> {
     let res = client
         .list_hmac_keys(&ListHmacKeysRequest {
             project_id: project_id.to_string(),
@@ -330,9 +331,9 @@ pub async fn test_list_hmac_keys(client: &Client, project_id: &str) -> Result<()
         Err(e) => match e {
             CloudError::Response(gerr) => {
                 if gerr.code >= 400 && gerr.code < 500 {
-                    Err(Error::ValidationError(gerr.message))
+                    ValidationSnafu { msg: gerr.message }.fail()
                 } else {
-                    Err(format!("Google error: {}", gerr.message).as_str().into())
+                    GoogleSnafu { msg: gerr.message }.fail()
                 }
             }
             _ => Err("Failed to list buckets from cloud storage.".into()),

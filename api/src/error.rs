@@ -1,6 +1,7 @@
 use axum::response::IntoResponse;
 use axum::{body::Body, http::StatusCode, response::Response};
 use deadpool_diesel::{InteractError, PoolError};
+use memo::role::{InvalidPermissionsError, InvalidRolesError};
 use serde::{Deserialize, Serialize};
 use snafu::{Backtrace, Snafu};
 use thiserror::Error;
@@ -58,6 +59,9 @@ pub enum Error2 {
     #[snafu(display("Maximum number of clients reached: 10"))]
     MaxClientsReached,
 
+    #[snafu(display("Maximum number of users reached: 100"))]
+    MaxUsersReached,
+
     #[snafu(display("Maximum number of buckets reached: 50"))]
     MaxBucketsReached,
 
@@ -69,6 +73,63 @@ pub enum Error2 {
 
     #[snafu(display("Google Cloud error: {}", msg))]
     Google { msg: String },
+
+    #[snafu(display("{}", msg))]
+    BadRequest { msg: String },
+
+    #[snafu(display("{}", msg))]
+    Forbidden { msg: String },
+
+    #[snafu(display("{}", msg))]
+    MissingUploadFile { msg: String },
+
+    #[snafu(display("File type not allowed"))]
+    FileTypeNotAllowed,
+
+    #[snafu(display("{}", msg))]
+    NotFound { msg: String },
+
+    #[snafu(display("Invalid auth token"))]
+    InvalidAuthToken,
+
+    #[snafu(display("Insufficient auth scope"))]
+    InsufficientAuthScope,
+
+    #[snafu(display("No auth token"))]
+    NoAuthToken,
+
+    #[snafu(display("Invalid client"))]
+    InvalidClient,
+
+    #[snafu(display("Requires authentication"))]
+    RequiresAuth,
+
+    #[snafu(display("{}", msg))]
+    HashPassword { msg: String },
+
+    #[snafu(display("{}", msg))]
+    VerifyPasswordHash { msg: String },
+
+    #[snafu(display("Invalid username or password"))]
+    InvalidPassword,
+
+    #[snafu(display("Inactive user"))]
+    InactiveUser,
+
+    #[snafu(display("User not found"))]
+    UserNotFound,
+
+    #[snafu(display("{}", source))]
+    InvalidRoles {
+        source: InvalidRolesError,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("{}", source))]
+    InvalidPermissions {
+        source: InvalidPermissionsError,
+        backtrace: Backtrace,
+    },
 
     #[snafu(display("{}", msg))]
     Whatever { msg: String },

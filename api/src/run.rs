@@ -18,7 +18,7 @@ pub async fn run_command(args: CliArgs) -> Result2<()> {
     }
 }
 
-pub async fn check_health(config: &Config) -> Result<()> {
+pub async fn check_health(config: &Config) -> Result2<()> {
     let pool = create_db_pool(config.db.url.as_str());
     let health = check_readiness(config, &pool).await?;
 

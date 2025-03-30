@@ -2,9 +2,13 @@ use validator::Validate;
 
 use actor::{Actor, ActorPayload, AuthResponse, Credentials};
 use password::verify_password;
+use snafu::{OptionExt, ensure};
 use token::{create_auth_token, verify_auth_token};
 
-use crate::{Error, Result, client::get_client, web::server::AppState};
+use crate::error::{
+    InactiveUserSnafu, InvalidClientSnafu, InvalidPasswordSnafu, UserNotFoundSnafu, ValidationSnafu,
+};
+use crate::{Result2, client::get_client, web::server::AppState};
 use memo::validators::flatten_errors;
 use user::{find_user_by_username, get_user};
 
@@ -13,32 +17,27 @@ pub mod password;
 pub mod token;
 pub mod user;
 
-pub async fn authenticate(state: &AppState, credentials: &Credentials) -> Result<AuthResponse> {
-    if let Err(errors) = credentials.validate() {
-        return Err(Error::ValidationError(flatten_errors(&errors)));
-    }
+pub async fn authenticate(state: &AppState, credentials: &Credentials) -> Result2<AuthResponse> {
+    let errors = credentials.validate();
+    ensure!(
+        errors.is_ok(),
+        ValidationSnafu {
+            msg: flatten_errors(&errors.unwrap_err()),
+        }
+    );
 
     let db_pool = state.db_pool.clone();
 
     // Validate user
     let user = find_user_by_username(&db_pool, &credentials.username).await?;
-    let Some(user) = user else {
-        return Err(Error::InvalidPassword);
-    };
+    let user = user.context(InvalidPasswordSnafu)?;
 
-    if &user.status != "active" {
-        return Err(Error::InactiveUser);
-    }
+    ensure!(&user.status == "active", InactiveUserSnafu);
 
     // Validate client
     let client = get_client(&db_pool, &user.client_id).await?;
-    let Some(client) = client else {
-        return Err(Error::InvalidClient);
-    };
-
-    if &client.status != "active" {
-        return Err(Error::InvalidClient);
-    }
+    let client = client.context(InvalidClientSnafu)?;
+    ensure!(&client.status == "active", InvalidClientSnafu);
 
     // Validate password
     let _ = verify_password(&credentials.password, &user.password)?;
@@ -57,25 +56,18 @@ pub async fn authenticate(state: &AppState, credentials: &Credentials) -> Result
     })
 }
 
-pub async fn authenticate_token(state: &AppState, token: &str) -> Result<Actor> {
+pub async fn authenticate_token(state: &AppState, token: &str) -> Result2<Actor> {
     let actor = verify_auth_token(token, &state.config.jwt_secret)?;
 
     // Validate client
     let db_pool = state.db_pool.clone();
     let client = get_client(&db_pool, &actor.client_id).await?;
-    let Some(client) = client else {
-        return Err(Error::InvalidClient);
-    };
-    if &client.status != "active" {
-        return Err(Error::InvalidClient);
-    }
+    let client = client.context(InvalidClientSnafu)?;
+    ensure!(&client.status == "active", InvalidClientSnafu);
+
     let user = get_user(&db_pool, &actor.id).await?;
-    let Some(user) = user else {
-        return Err(Error::UserNotFound);
-    };
-    if &user.client_id != &client.id {
-        return Err(Error::UserNotFound);
-    }
+    let user = user.context(UserNotFoundSnafu)?;
+    ensure!(&user.client_id == &client.id, UserNotFoundSnafu);
 
     Ok(Actor::new(actor, user.into()))
 }

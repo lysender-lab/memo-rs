@@ -1,16 +1,18 @@
-use serde::{Deserialize, Serialize};
-use validator::Validate;
-
 use deadpool_diesel::sqlite::Pool;
-
 use diesel::dsl::count_star;
 use diesel::prelude::*;
 use diesel::{QueryDsl, SelectableHelper};
-use tracing::error;
+use serde::{Deserialize, Serialize};
+use snafu::{ResultExt, ensure};
+use validator::Validate;
 
 use super::password::hash_password;
+use crate::Result2;
+use crate::error::{
+    DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, InvalidRolesSnafu, MaxUsersReachedSnafu,
+    ValidationSnafu,
+};
 use crate::schema::users::{self, dsl};
-use crate::{Error, Result};
 use memo::dto::user::UserDto;
 use memo::role::to_roles;
 use memo::utils::generate_id;
@@ -62,13 +64,11 @@ pub struct NewUser {
 
 const MAX_USERS_PER_CLIENT: i32 = 50;
 
-pub async fn list_users(db_pool: &Pool, client_id: &str) -> Result<Vec<User>> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn list_users(db_pool: &Pool, client_id: &str) -> Result2<Vec<User>> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let client_id = client_id.to_string();
-    let conn_result = db
+    let select_res = db
         .interact(move |conn| {
             dsl::users
                 .filter(dsl::client_id.eq(&client_id))
@@ -76,55 +76,42 @@ pub async fn list_users(db_pool: &Pool, client_id: &str) -> Result<Vec<User>> {
                 .order(dsl::username.asc())
                 .load::<User>(conn)
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(select_res) => match select_res {
-            Ok(items) => Ok(items),
-            Err(e) => {
-                error!("{e}");
-                Err("Error reading users".into())
-            }
-        },
-        Err(e) => {
-            error!("{e}");
-            Err("Error using the db connection".into())
-        }
-    }
+    let items = select_res.context(DbQuerySnafu {
+        table: "users".to_string(),
+    })?;
+
+    Ok(items)
 }
 
-pub async fn create_user(db_pool: &Pool, client_id: &str, data: &NewUser) -> Result<User> {
-    if let Err(errors) = data.validate() {
-        return Err(Error::ValidationError(flatten_errors(&errors)));
-    }
-
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
-
-    // Limit the number of directories per bucket
-    let _ = match count_client_users(db_pool, client_id).await {
-        Ok(count) => {
-            if count >= MAX_USERS_PER_CLIENT as i64 {
-                return Err(Error::ValidationError(
-                    "Maximum number of users reached".to_string(),
-                ));
-            }
+pub async fn create_user(db_pool: &Pool, client_id: &str, data: &NewUser) -> Result2<User> {
+    let errors = data.validate();
+    ensure!(
+        errors.is_ok(),
+        ValidationSnafu {
+            msg: flatten_errors(&errors.unwrap_err()),
         }
-        Err(e) => return Err(e),
-    };
+    );
+
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
+    let count = count_client_users(db_pool, client_id).await?;
+    ensure!(count < MAX_USERS_PER_CLIENT as i64, MaxUsersReachedSnafu);
 
     // Username must be unique
-    if let Some(_) = find_user_by_username(db_pool, &data.username).await? {
-        return Err(Error::ValidationError(
-            "Username already exists".to_string(),
-        ));
-    }
+    let existing = find_user_by_username(db_pool, &data.username).await?;
+    ensure!(
+        existing.is_none(),
+        ValidationSnafu {
+            msg: "Username already exists".to_string(),
+        }
+    );
 
     // Roles must be all valid
     let roles: Vec<String> = data.roles.split(",").map(|item| item.to_string()).collect();
     // Validate roles
-    let _ = to_roles(roles)?;
+    let _ = to_roles(roles).context(InvalidRolesSnafu)?;
 
     let data_copy = data.clone();
     let today = chrono::Utc::now().timestamp();
@@ -142,36 +129,27 @@ pub async fn create_user(db_pool: &Pool, client_id: &str, data: &NewUser) -> Res
     };
 
     let user_copy = dir.clone();
-    let conn_result = db
+    let inser_res = db
         .interact(move |conn| {
             diesel::insert_into(users::table)
                 .values(&user_copy)
                 .execute(conn)
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(insert_res) => match insert_res {
-            Ok(_) => Ok(dir),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error creating a user".into())
-            }
-        },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
-    }
+    let _ = inser_res.context(DbQuerySnafu {
+        table: "users".to_string(),
+    })?;
+
+    Ok(dir)
 }
 
-pub async fn get_user(pool: &Pool, id: &str) -> Result<Option<User>> {
-    let Ok(db) = pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn get_user(pool: &Pool, id: &str) -> Result2<Option<User>> {
+    let db = pool.get().await.context(DbPoolSnafu)?;
 
     let id = id.to_string();
-    let conn_result = db
+    let select_res = db
         .interact(move |conn| {
             dsl::users
                 .find(&id)
@@ -179,30 +157,21 @@ pub async fn get_user(pool: &Pool, id: &str) -> Result<Option<User>> {
                 .first::<User>(conn)
                 .optional()
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(select_res) => match select_res {
-            Ok(user) => Ok(user),
-            Err(e) => {
-                error!("{e}");
-                Err("Error reading users".into())
-            }
-        },
-        Err(e) => {
-            error!("{e}");
-            Err("Error using the db connection".into())
-        }
-    }
+    let user = select_res.context(DbQuerySnafu {
+        table: "users".to_string(),
+    })?;
+
+    Ok(user)
 }
 
-pub async fn find_user_by_username(pool: &Pool, username: &str) -> Result<Option<User>> {
-    let Ok(db) = pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn find_user_by_username(pool: &Pool, username: &str) -> Result2<Option<User>> {
+    let db = pool.get().await.context(DbPoolSnafu)?;
 
     let username = username.to_string();
-    let conn_result = db
+    let select_res = db
         .interact(move |conn| {
             dsl::users
                 .filter(dsl::username.eq(&username))
@@ -210,140 +179,97 @@ pub async fn find_user_by_username(pool: &Pool, username: &str) -> Result<Option
                 .first::<User>(conn)
                 .optional()
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(select_res) => match select_res {
-            Ok(user) => Ok(user),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error finding user".into())
-            }
-        },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
-    }
+    let user = select_res.context(DbQuerySnafu {
+        table: "users".to_string(),
+    })?;
+
+    Ok(user)
 }
 
-pub async fn count_client_users(db_pool: &Pool, client_id: &str) -> Result<i64> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn count_client_users(db_pool: &Pool, client_id: &str) -> Result2<i64> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let client_id = client_id.to_string();
-    let conn_result = db
+    let count_res = db
         .interact(move |conn| {
             dsl::users
                 .filter(dsl::client_id.eq(&client_id))
                 .select(count_star())
                 .get_result::<i64>(conn)
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(count_res) => match count_res {
-            Ok(count) => Ok(count),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error counting users".into())
-            }
-        },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
-    }
+    let count = count_res.context(DbQuerySnafu {
+        table: "users".to_string(),
+    })?;
+
+    Ok(count)
 }
 
-pub async fn update_user_status(db_pool: &Pool, id: &str, status: &str) -> Result<bool> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn update_user_status(db_pool: &Pool, id: &str, status: &str) -> Result2<bool> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let id = id.to_string();
     let status = status.to_string();
     let today = chrono::Utc::now().timestamp();
-    let conn_result = db
+    let update_res = db
         .interact(move |conn| {
             diesel::update(dsl::users)
                 .filter(dsl::id.eq(&id))
                 .set((dsl::status.eq(&status), dsl::updated_at.eq(today)))
                 .execute(conn)
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(update_res) => match update_res {
-            Ok(affected) => Ok(affected > 0),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error updating user".into())
-            }
-        },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
-    }
+    let affected = update_res.context(DbQuerySnafu {
+        table: "users".to_string(),
+    })?;
+
+    Ok(affected > 0)
 }
 
-pub async fn update_user_password(db_pool: &Pool, id: &str, password: &str) -> Result<bool> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn update_user_password(db_pool: &Pool, id: &str, password: &str) -> Result2<bool> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     let id = id.to_string();
     let today = chrono::Utc::now().timestamp();
     let hashed = hash_password(&password)?;
-    let conn_result = db
+    let update_res = db
         .interact(move |conn| {
             diesel::update(dsl::users)
                 .filter(dsl::id.eq(&id))
                 .set((dsl::password.eq(&hashed), dsl::updated_at.eq(today)))
                 .execute(conn)
         })
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(update_res) => match update_res {
-            Ok(affected) => Ok(affected > 0),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error updating user password".into())
-            }
-        },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
-    }
+    let affected = update_res.context(DbQuerySnafu {
+        table: "users".to_string(),
+    })?;
+
+    Ok(affected > 0)
 }
 
-pub async fn delete_user(db_pool: &Pool, id: &str) -> Result<()> {
-    let Ok(db) = db_pool.get().await else {
-        return Err("Error getting db connection".into());
-    };
+pub async fn delete_user(db_pool: &Pool, id: &str) -> Result2<()> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
 
     // It is okay to delete user even if there are potential references
     // to created buckets, dirs or files
     let id = id.to_string();
-    let conn_result = db
+    let delete_res = db
         .interact(move |conn| diesel::delete(dsl::users.filter(dsl::id.eq(&id))).execute(conn))
-        .await;
+        .await
+        .context(DbInteractSnafu)?;
 
-    match conn_result {
-        Ok(delete_res) => match delete_res {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                error!("{}", e);
-                Err("Error deleting user".into())
-            }
-        },
-        Err(e) => {
-            error!("{}", e);
-            Err("Error using the db connection".into())
-        }
-    }
+    let _ = delete_res.context(DbQuerySnafu {
+        table: "users".to_string(),
+    })?;
+
+    Ok(())
 }
