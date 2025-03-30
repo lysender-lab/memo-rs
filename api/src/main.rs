@@ -20,7 +20,7 @@ mod storage;
 mod web;
 
 // Re-export error types for convenience
-pub use error::{Error, Error2, Result, Result2};
+pub use error::{Error2, Result2};
 
 #[tokio::main]
 async fn main() {
