@@ -25,7 +25,7 @@ pub async fn authenticate(api_url: &str, data: AuthPayload) -> Result<AuthRespon
     body.insert("username", data.username);
     body.insert("password", data.password);
 
-    let url = format!("{}/v1/auth/token", api_url);
+    let url = format!("{}/auth/token", api_url);
     let response = Client::new()
         .post(url.as_str())
         .json(&body)
@@ -52,7 +52,7 @@ pub async fn authenticate(api_url: &str, data: AuthPayload) -> Result<AuthRespon
 }
 
 pub async fn authenticate_token(api_url: &str, token: &str) -> Result<Actor> {
-    let url = format!("{}/v1/user/authz", api_url);
+    let url = format!("{}/user/authz", api_url);
     let response = Client::new()
         .get(url.as_str())
         .header("Authorization", format!("Bearer {}", token))
