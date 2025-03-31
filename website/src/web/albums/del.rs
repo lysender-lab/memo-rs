@@ -3,7 +3,6 @@ use axum::Form;
 use axum::http::{Method, StatusCode};
 use axum::{Extension, body::Body, extract::State, response::Response};
 
-use crate::Error;
 use crate::models::{DeleteAlbumForm, Pref};
 use crate::run::AppState;
 use crate::services::{create_csrf_token, delete_album};
@@ -32,17 +31,18 @@ pub async fn delete_album_handler(
     let actor = ctx.actor();
     let default_bucket_id = actor.default_bucket_id.clone();
     let Some(bucket_id) = default_bucket_id else {
+        let error = ErrorInfo::new("No default bucket.".to_string());
+        return handle_error(&state, Some(actor.clone()), &pref, error, false);
+    };
+
+    if let Err(err) = enforce_policy(actor, Resource::Album, Action::Delete) {
         return handle_error(
             &state,
             Some(actor.clone()),
             &pref,
-            Error::NoDefaultBucket.into(),
+            ErrorInfo::from(&err),
             false,
         );
-    };
-
-    if let Err(err) = enforce_policy(actor, Resource::Album, Action::Delete) {
-        return handle_error(&state, Some(actor.clone()), &pref, err.into(), false);
     }
 
     let Ok(token) = create_csrf_token(&album.id, &config.jwt_secret) else {
@@ -73,7 +73,7 @@ pub async fn delete_album_handler(
                     .unwrap();
             }
             Err(err) => {
-                let error_info: ErrorInfo = err.into();
+                let error_info = ErrorInfo::from(&err);
                 error_message = Some(error_info.message);
                 status_code = error_info.status_code;
             }

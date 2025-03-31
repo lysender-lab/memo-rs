@@ -4,7 +4,6 @@ use axum::extract::Query;
 use axum::http::HeaderMap;
 use axum::{Extension, body::Body, extract::State, response::Response};
 
-use crate::Error;
 use crate::models::{Pref, UploadParams};
 use crate::run::AppState;
 use crate::services::{create_csrf_token, upload_photo};
@@ -41,7 +40,13 @@ pub async fn upload_page_handler(
     let actor = ctx.actor();
 
     if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Create) {
-        return handle_error(&state, Some(actor.clone()), &pref, err.into(), true);
+        return handle_error(
+            &state,
+            Some(actor.clone()),
+            &pref,
+            ErrorInfo::from(&err),
+            true,
+        );
     }
     let Ok(token) = create_csrf_token(&album.id, &config.jwt_secret) else {
         let error = ErrorInfo::new("Failed to initialize upload photos form.".to_string());
@@ -78,7 +83,7 @@ pub async fn upload_handler(
             &state,
             Some(actor.clone()),
             &pref,
-            Error::NoDefaultBucket.into(),
+            ErrorInfo::new("No default bucket.".to_string()),
             false,
         );
     };

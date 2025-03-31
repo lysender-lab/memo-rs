@@ -23,7 +23,9 @@ pub fn enforce_policy(actor: &Actor, resource: Resource, action: Action) -> Resu
 
     match result {
         Ok(_) => Ok(()),
-        Err(message) => Err(Error::Forbidden(message.to_string())),
+        Err(message) => Err(Error::Forbidden {
+            msg: message.to_string(),
+        }),
     }
 }
 

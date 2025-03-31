@@ -12,7 +12,7 @@ use crate::{
     models::Pref,
     run::AppState,
     services::authenticate_token,
-    web::{AUTH_TOKEN_COOKIE, handle_error},
+    web::{AUTH_TOKEN_COOKIE, error::ErrorInfo, handle_error},
 };
 
 pub async fn require_auth_middleware(
@@ -42,14 +42,14 @@ pub async fn require_auth_middleware(
             req.extensions_mut().insert(ctx);
         }
         Err(err) => match err {
-            Error::LoginRequired(_) => {
+            Error::LoginRequired => {
                 if full_page {
                     return Redirect::to("/login").into_response();
                 } else {
-                    return handle_error(&state, None, &pref, err.into(), full_page);
+                    return handle_error(&state, None, &pref, ErrorInfo::from(&err), full_page);
                 }
             }
-            _ => return handle_error(&state, None, &pref, err.into(), full_page),
+            _ => return handle_error(&state, None, &pref, ErrorInfo::from(&err), full_page),
         },
     }
 

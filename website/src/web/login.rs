@@ -90,7 +90,7 @@ pub async fn post_login_handler(
         if errors.contains(&"captcha".to_string()) {
             error_message = "Click the I'm not a robot checkbox.".to_string();
         }
-        return handle_error(Error::ValidationError(error_message));
+        return handle_error(Error::Validation { msg: error_message });
     }
 
     // Validate captcha
@@ -130,7 +130,7 @@ pub async fn post_login_handler(
 }
 
 fn handle_error(error: Error) -> Response<Body> {
-    let error_info: ErrorInfo = error.into();
+    let error_info = ErrorInfo::from(&error);
 
     let url = format!("/login?error={}", error_info.message);
     Redirect::to(url.as_str()).into_response()

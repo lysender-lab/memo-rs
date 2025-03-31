@@ -12,7 +12,7 @@ use crate::{
 };
 use crate::{models::Pref, run::AppState};
 
-use super::{Action, Resource, enforce_policy, handle_error};
+use super::{Action, ErrorInfo, Resource, enforce_policy, handle_error};
 
 #[derive(Template)]
 #[template(path = "pages/index.html")]
@@ -29,7 +29,13 @@ pub async fn index_handler(
 ) -> Response<Body> {
     let actor = ctx.actor();
     if let Err(err) = enforce_policy(actor, Resource::Album, Action::Read) {
-        return handle_error(&state, Some(actor.clone()), &pref, err.into(), true);
+        return handle_error(
+            &state,
+            Some(actor.clone()),
+            &pref,
+            ErrorInfo::from(&err),
+            true,
+        );
     }
 
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);

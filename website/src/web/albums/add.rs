@@ -2,7 +2,6 @@ use askama::Template;
 use axum::http::StatusCode;
 use axum::{Extension, Form, body::Body, extract::State, response::Response};
 
-use crate::Error;
 use crate::models::{NewAlbumForm, Pref};
 use crate::run::AppState;
 use crate::services::create_csrf_token;
@@ -37,7 +36,13 @@ pub async fn new_album_handler(
     let actor = ctx.actor();
 
     if let Err(err) = enforce_policy(actor, Resource::Album, Action::Create) {
-        return handle_error(&state, Some(actor.clone()), &pref, err.into(), true);
+        return handle_error(
+            &state,
+            Some(actor.clone()),
+            &pref,
+            ErrorInfo::from(&err),
+            true,
+        );
     }
 
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
@@ -76,17 +81,18 @@ pub async fn post_new_album_handler(
     let actor = ctx.actor();
     let default_bucket_id = actor.default_bucket_id.clone();
     let Some(bucket_id) = default_bucket_id else {
+        let error = ErrorInfo::new("No default bucket.".to_string());
+        return handle_error(&state, Some(actor.clone()), &pref, error, false);
+    };
+
+    if let Err(err) = enforce_policy(actor, Resource::Album, Action::Create) {
         return handle_error(
             &state,
             Some(actor.clone()),
             &pref,
-            Error::NoDefaultBucket.into(),
+            ErrorInfo::from(&err),
             false,
         );
-    };
-
-    if let Err(err) = enforce_policy(actor, Resource::Album, Action::Create) {
-        return handle_error(&state, Some(actor.clone()), &pref, err.into(), false);
     }
 
     let Ok(token) = create_csrf_token("new_album", &config.jwt_secret) else {
@@ -125,7 +131,7 @@ pub async fn post_new_album_handler(
                 .unwrap();
         }
         Err(err) => {
-            let error_info: ErrorInfo = err.into();
+            let error_info = ErrorInfo::from(&err);
             status = error_info.status_code;
             tpl.error_message = Some(error_info.message);
         }

@@ -91,7 +91,12 @@ pub async fn photo_listing_handler(
     let actor = ctx.actor();
     let default_bucket_id = actor.default_bucket_id.clone();
     let Some(bucket_id) = default_bucket_id else {
-        return build_error_response(tpl, Error::NoDefaultBucket);
+        return build_error_response(
+            tpl,
+            Error::Whatever {
+                msg: "No default bucket".to_string(),
+            },
+        );
     };
 
     let result = list_photos(&config.api_url, ctx.token(), &bucket_id, &album_id, &query).await;
@@ -124,7 +129,7 @@ fn build_response(tpl: PhotoGridTemnplate) -> Response<Body> {
 }
 
 fn build_error_response(mut tpl: PhotoGridTemnplate, error: Error) -> Response<Body> {
-    let error_info: ErrorInfo = error.into();
+    let error_info = ErrorInfo::from(&error);
     tpl.error_message = Some(error_info.message);
 
     Response::builder()

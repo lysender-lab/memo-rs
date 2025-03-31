@@ -57,9 +57,10 @@ pub async fn confirm_delete_photo_handler(
     }
 
     let Ok(token) = create_csrf_token(&photo.id, &config.jwt_secret) else {
-        return handle_error_message(Error::AnyError(
-            "Failed to initialize delete photo form.".into(),
-        ));
+        let error = Error::Whatever {
+            msg: "Failed to initialize delete photo form.".to_string(),
+        };
+        return handle_error_message(&error);
     };
 
     // Just render the form on first load or on error
@@ -86,7 +87,9 @@ pub async fn exec_delete_photo_handler(
     let actor = ctx.actor();
     let default_bucket_id = actor.default_bucket_id.clone();
     let Some(bucket_id) = default_bucket_id else {
-        return handle_error_message(Error::NoDefaultBucket);
+        return handle_error_message(&Error::Whatever {
+            msg: "No default bucket.".to_string(),
+        });
     };
 
     if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Delete) {
@@ -94,9 +97,9 @@ pub async fn exec_delete_photo_handler(
     }
 
     let Ok(token) = create_csrf_token(&photo.id, &config.jwt_secret) else {
-        return handle_error_message(Error::AnyError(
-            "Failed to initialize delete photo form.".to_string(),
-        ));
+        return handle_error_message(&Error::Whatever {
+            msg: "Failed to initialize delete photo form.".to_string(),
+        });
     };
 
     let status_code;
@@ -120,7 +123,7 @@ pub async fn exec_delete_photo_handler(
                 .unwrap();
         }
         Err(err) => {
-            let error_info: ErrorInfo = err.into();
+            let error_info = ErrorInfo::from(&err);
             error_message = Some(error_info.message);
             status_code = error_info.status_code;
         }

@@ -42,7 +42,12 @@ pub async fn album_listing_handler(
     };
 
     let Some(bucket_id) = default_bucket_id else {
-        return build_error_response(tpl, Error::NoDefaultBucket);
+        return build_error_response(
+            tpl,
+            Error::Whatever {
+                msg: "No default bucket".to_string(),
+            },
+        );
     };
 
     return match list_albums(&config.api_url, ctx.token(), &bucket_id, &query).await {
@@ -67,7 +72,7 @@ fn build_response(tpl: AlbumsTemplate) -> Response<Body> {
 }
 
 fn build_error_response(mut tpl: AlbumsTemplate, error: Error) -> Response<Body> {
-    let error_info: ErrorInfo = error.into();
+    let error_info = ErrorInfo::from(&error);
     tpl.error_message = Some(error_info.message);
 
     Response::builder()

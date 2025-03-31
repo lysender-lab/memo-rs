@@ -6,12 +6,11 @@ use axum::{
 };
 
 use crate::{
-    Error,
     ctx::Ctx,
     models::{AlbumParams, Pref},
     run::AppState,
     services::get_album,
-    web::{Action, Resource, enforce_policy, handle_error},
+    web::{Action, Resource, enforce_policy, error::ErrorInfo, handle_error},
 };
 
 pub async fn album_listing_middleware(
@@ -28,7 +27,7 @@ pub async fn album_listing_middleware(
             &state,
             Some(ctx.actor().clone()),
             &pref,
-            err.into(),
+            ErrorInfo::from(&err),
             full_page,
         );
     }
@@ -50,7 +49,7 @@ pub async fn album_middleware(
             &state,
             Some(ctx.actor().clone()),
             &pref,
-            err.into(),
+            ErrorInfo::from(&err),
             full_page,
         );
     }
@@ -58,13 +57,8 @@ pub async fn album_middleware(
     let actor = ctx.actor();
     let default_bucket_id = actor.default_bucket_id.clone();
     let Some(bucket_id) = default_bucket_id else {
-        return handle_error(
-            &state,
-            Some(ctx.actor().clone()),
-            &pref,
-            Error::NoDefaultBucket.into(),
-            full_page,
-        );
+        let error = ErrorInfo::new("No default bucket.".to_string());
+        return handle_error(&state, Some(ctx.actor().clone()), &pref, error, full_page);
     };
 
     let album_id = params.album_id.expect("album_id is required");
@@ -79,7 +73,7 @@ pub async fn album_middleware(
                 &state,
                 Some(ctx.actor().clone()),
                 &pref,
-                err.into(),
+                ErrorInfo::from(&err),
                 full_page,
             );
         }

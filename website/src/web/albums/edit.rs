@@ -59,7 +59,13 @@ pub async fn edit_album_handler(
     let actor = ctx.actor();
 
     if let Err(err) = enforce_policy(actor, Resource::Album, Action::Update) {
-        return handle_error(&state, Some(actor.clone()), &pref, err.into(), false);
+        return handle_error(
+            &state,
+            Some(actor.clone()),
+            &pref,
+            ErrorInfo::from(&err),
+            false,
+        );
     }
     let Ok(token) = create_csrf_token(&album.id, &config.jwt_secret) else {
         let error = ErrorInfo::new("Failed to initialize edit album form.".to_string());
@@ -93,17 +99,13 @@ pub async fn post_edit_album_handler(
     let actor = ctx.actor();
     let default_bucket_id = actor.default_bucket_id.clone();
     let Some(bucket_id) = default_bucket_id else {
-        return handle_error(
-            &state,
-            Some(actor.clone()),
-            &pref,
-            Error::NoDefaultBucket.into(),
-            false,
-        );
+        let error = ErrorInfo::new("No default bucket.".to_string());
+        return handle_error(&state, Some(actor.clone()), &pref, error, false);
     };
 
     if let Err(err) = enforce_policy(actor, Resource::Album, Action::Update) {
-        return handle_error(&state, Some(actor.clone()), &pref, err.into(), false);
+        let error = ErrorInfo::from(&err);
+        return handle_error(&state, Some(actor.clone()), &pref, error, false);
     }
     let Ok(token) = create_csrf_token(&album.id, &config.jwt_secret) else {
         let error = ErrorInfo::new("Failed to initialize edit album form.".to_string());
@@ -130,13 +132,13 @@ pub async fn post_edit_album_handler(
             tpl.updated = true;
         }
         Err(err) => match err {
-            Error::ValidationError(msg) => {
+            Error::Validation { msg } => {
                 status = 400;
                 tpl.error_message = Some(msg);
             }
-            Error::LoginRequired(msg) => {
+            Error::LoginRequired => {
                 status = 401;
-                tpl.error_message = Some(msg);
+                tpl.error_message = Some("Login required.".to_string());
             }
             any_err => {
                 status = 500;
