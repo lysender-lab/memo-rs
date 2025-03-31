@@ -34,7 +34,7 @@ async fn main() {
     if let Err(e) = run_command(args).await {
         eprintln!("Application error: {}", e);
         if let Some(bt) = ErrorCompat::backtrace(&e) {
-            eprintln!("{:?}", bt);
+            println!("{}", bt);
         }
         process::exit(1);
     }

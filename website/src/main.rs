@@ -1,5 +1,6 @@
 mod config;
 mod ctx;
+mod error;
 mod models;
 mod run;
 mod services;
@@ -12,7 +13,7 @@ use config::{Args, Config};
 use run::run;
 
 // Re-exports
-pub use memo::{Error, Result};
+pub use error::{Error, Result};
 
 #[tokio::main]
 async fn main() {
