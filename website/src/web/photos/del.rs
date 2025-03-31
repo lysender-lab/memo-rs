@@ -31,7 +31,7 @@ pub async fn pre_delete_photo_handler(
     let actor = ctx.actor();
 
     if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Delete) {
-        return handle_error_message(err);
+        return handle_error_message(&err);
     }
 
     // Just render the form on first load or on error
@@ -53,7 +53,7 @@ pub async fn confirm_delete_photo_handler(
     let actor = ctx.actor();
 
     if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Delete) {
-        return handle_error_message(err);
+        return handle_error_message(&err);
     }
 
     let Ok(token) = create_csrf_token(&photo.id, &config.jwt_secret) else {
@@ -90,7 +90,7 @@ pub async fn exec_delete_photo_handler(
     };
 
     if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Delete) {
-        return handle_error_message(err);
+        return handle_error_message(&err);
     }
 
     let Ok(token) = create_csrf_token(&photo.id, &config.jwt_secret) else {

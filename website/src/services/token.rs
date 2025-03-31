@@ -1,8 +1,9 @@
 use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
-use crate::{Error, Result};
+use crate::{Error, Result, error::CsrfTokenSnafu};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct Claims {
@@ -36,13 +37,10 @@ pub fn verify_csrf_token(token: &str, secret: &str) -> Result<String> {
         &DecodingKey::from_secret(secret.as_bytes()),
         &Validation::default(),
     ) else {
-        return Err(Error::InvalidCsrfToken);
+        return Err(Error::CsrfToken);
     };
 
-    if decoded.claims.sub.len() == 0 {
-        return Err(Error::InvalidCsrfToken);
-    }
-
+    ensure!(decoded.claims.sub.len() > 0, CsrfTokenSnafu);
     Ok(decoded.claims.sub)
 }
 

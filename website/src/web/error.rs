@@ -2,10 +2,11 @@ use askama::Template;
 use axum::{body::Body, extract::State, http::StatusCode, response::Response};
 
 use crate::{
+    Error,
+    error::to_error_name,
     models::{Actor, Pref, TemplateData},
     run::AppState,
 };
-use memo::Error;
 
 #[derive(Clone, Template)]
 #[template(path = "pages/error.html")]
@@ -46,109 +47,14 @@ impl ErrorInfo {
     }
 }
 
-impl From<Error> for ErrorInfo {
-    fn from(e: Error) -> Self {
-        match e {
-            Error::AnyError(msg) => Self {
-                status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                title: "Internal Server Error".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::ValidationError(msg) => Self {
-                status_code: StatusCode::BAD_REQUEST,
-                title: "Validation Error".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::BadRequest(msg) => Self {
-                status_code: StatusCode::BAD_REQUEST,
-                title: "Bad Request".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::Forbidden(msg) => Self {
-                status_code: StatusCode::FORBIDDEN,
-                title: "Forbidden".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::LoginFailed(msg) => Self {
-                status_code: StatusCode::UNAUTHORIZED,
-                title: "Unauthorized".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::InvalidCaptcha(msg) => Self {
-                status_code: StatusCode::BAD_REQUEST,
-                title: "Invalid Captcha".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::CaptchaResponseError(msg) => Self {
-                status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                title: "Captcha Error".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::LoginRequired(msg) => Self {
-                status_code: StatusCode::UNAUTHORIZED,
-                title: "Unauthorized".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::NoDefaultBucket => Self {
-                status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                title: "Internal Server Error".to_string(),
-                message: "No default bucket".to_string(),
-                description: "No default bucket configured".to_string(),
-            },
-            Error::AlbumNotFound => Self {
-                status_code: StatusCode::NOT_FOUND,
-                title: "Not Found".to_string(),
-                message: "Album not found".to_string(),
-                description: "The album you are looking for does not exist".to_string(),
-            },
-            Error::PhotoNotFound => Self {
-                status_code: StatusCode::NOT_FOUND,
-                title: "Not Found".to_string(),
-                message: "Photo not found".to_string(),
-                description: "The photo you are looking for does not exist".to_string(),
-            },
-            Error::NoAuthCookie => Self {
-                status_code: StatusCode::UNAUTHORIZED,
-                title: "Unauthorized".to_string(),
-                message: "Login to continue".to_string(),
-                description: "You need to login to view this page".to_string(),
-            },
-            Error::InvalidCsrfToken => Self {
-                status_code: StatusCode::BAD_REQUEST,
-                title: "Bad Request".to_string(),
-                message: "Stale form data. Refresh the page and try again".to_string(),
-                description:
-                    "The form data you are using is out of date. Refresh the page and try again."
-                        .to_string(),
-            },
-            Error::JsonParseError(msg) => Self {
-                status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                title: "Bad Request".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::ServiceError(msg) => Self {
-                status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                title: "Internal Server Error".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-
-            // Catch all other errors
-            _ => Self {
-                status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                title: "Internal Server Error".to_string(),
-                message: "An unknown error occurred".to_string(),
-                description: "An unknown error occurred".to_string(),
-            },
+impl From<&Error> for ErrorInfo {
+    fn from(e: &Error) -> Self {
+        let msg = e.to_string();
+        Self {
+            status_code: e.into(),
+            title: to_error_name(&e),
+            message: msg.clone(),
+            description: msg.clone(),
         }
     }
 }
@@ -205,7 +111,7 @@ pub fn handle_error(
 }
 
 /// Render a simple error message
-pub fn handle_error_message(error: Error) -> Response<Body> {
+pub fn handle_error_message(error: &Error) -> Response<Body> {
     let error_info: ErrorInfo = error.into();
     let tpl = ErrorMessageData {
         message: error_info.message,

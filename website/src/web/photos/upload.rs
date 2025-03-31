@@ -111,6 +111,6 @@ pub async fn upload_handler(
                 .body(Body::from(tpl.render().unwrap()))
                 .unwrap()
         }
-        Err(err) => handle_error_message(err),
+        Err(err) => handle_error_message(&err),
     }
 }
