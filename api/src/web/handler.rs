@@ -49,7 +49,6 @@ pub struct AppMeta {
     pub version: String,
 }
 
-#[axum::debug_handler]
 pub async fn authenticate_handler(
     State(state): State<AppState>,
     payload: CoreResult<Json<Credentials>, JsonRejection>,
@@ -262,7 +261,6 @@ pub async fn get_bucket_handler(Extension(bucket): Extension<BucketDto>) -> Resu
     Ok(JsonResponse::new(serde_json::to_string(&bucket).unwrap()))
 }
 
-#[axum::debug_handler]
 pub async fn list_dirs_handler(
     State(state): State<AppState>,
     Path(bucket_id): Path<String>,
@@ -275,7 +273,6 @@ pub async fn list_dirs_handler(
     Ok(JsonResponse::new(serde_json::to_string(&dirs).unwrap()))
 }
 
-#[axum::debug_handler]
 pub async fn create_dir_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
@@ -305,7 +302,6 @@ pub async fn get_dir_handler(Extension(dir): Extension<Dir>) -> Result<JsonRespo
     Ok(JsonResponse::new(serde_json::to_string(&dir).unwrap()))
 }
 
-#[axum::debug_handler]
 pub async fn update_dir_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
@@ -365,7 +361,6 @@ pub async fn delete_dir_handler(
     ))
 }
 
-#[axum::debug_handler]
 pub async fn list_files_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
@@ -400,7 +395,6 @@ pub async fn list_files_handler(
     Ok(JsonResponse::new(serde_json::to_string(&listing).unwrap()))
 }
 
-#[axum::debug_handler]
 pub async fn create_file_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
