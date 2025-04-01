@@ -211,38 +211,6 @@ impl From<&Error> for StatusCode {
     }
 }
 
-pub fn to_error_name(error: &Error) -> String {
-    match error {
-        Error::Validation { .. } => "Bad Request".to_string(),
-        Error::MaxClientsReached => "Bad Request".to_string(),
-        Error::MaxUsersReached => "Bad Request".to_string(),
-        Error::MaxBucketsReached => "Bad Request".to_string(),
-        Error::MaxDirsReached => "Bad Request".to_string(),
-        Error::MaxFilesReached => "Bad Request".to_string(),
-        Error::BadRequest { .. } => "Bad Request".to_string(),
-        Error::Forbidden { .. } => "Forbidden".to_string(),
-        Error::JsonRejection { .. } => "Bad Request".to_string(),
-        Error::MissingUploadFile { .. } => "Bad Request".to_string(),
-        Error::FileTypeNotAllowed => "File Type Not Allowed".to_string(),
-        Error::NotFound { .. } => "Not Found".to_string(),
-        Error::InvalidAuthToken => "Unauthorized".to_string(),
-        Error::InsufficientAuthScope => "Unauthorized".to_string(),
-        Error::NoAuthToken => "Unauthorized".to_string(),
-        Error::InvalidClient => "Unauthorized".to_string(),
-        Error::RequiresAuth => "Unauthorized".to_string(),
-        Error::InvalidPassword => "Unauthorized".to_string(),
-        Error::InactiveUser => "Unauthorized".to_string(),
-        Error::UserNotFound => "Unauthorized".to_string(),
-        Error::InvalidRoles { .. } => "Bad Request".to_string(),
-        Error::InvalidPermissions { .. } => "Bad Request".to_string(),
-        Error::LoginFailed { .. } => "Unauthorized".to_string(),
-        Error::LoginRequired => "Unauthorized".to_string(),
-        Error::AlbumNotFound => "Not Found".to_string(),
-        Error::CsrfToken => "Bad Request".to_string(),
-        _ => "Internal Server Error".to_string(),
-    }
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct ErrorResponse {
     pub status_code: u16,

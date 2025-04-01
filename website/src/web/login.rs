@@ -30,7 +30,6 @@ struct LoginTemplate {
     error_message: Option<String>,
 }
 
-#[axum::debug_handler]
 pub async fn login_handler(
     State(state): State<AppState>,
     Query(query): Query<HashMap<String, String>>,
@@ -68,7 +67,6 @@ pub async fn login_handler(
         .unwrap()
 }
 
-#[axum::debug_handler]
 pub async fn post_login_handler(
     cookies: Cookies,
     State(state): State<AppState>,

@@ -26,7 +26,6 @@ struct AlbumFormTemplate {
     error_message: Option<String>,
 }
 
-#[axum::debug_handler]
 pub async fn new_album_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(pref): Extension<Pref>,
@@ -70,7 +69,6 @@ pub async fn new_album_handler(
         .unwrap()
 }
 
-#[axum::debug_handler]
 pub async fn post_new_album_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(pref): Extension<Pref>,

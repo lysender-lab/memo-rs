@@ -3,7 +3,6 @@ use axum::{body::Body, extract::State, http::StatusCode, response::Response};
 
 use crate::{
     Error,
-    error::to_error_name,
     models::{Actor, Pref, TemplateData},
     run::AppState,
 };
@@ -49,17 +48,17 @@ impl ErrorInfo {
 
 impl From<&Error> for ErrorInfo {
     fn from(e: &Error) -> Self {
+        let status_code = e.into();
         let msg = e.to_string();
         Self {
-            status_code: e.into(),
-            title: to_error_name(&e),
+            status_code,
+            title: status_code.canonical_reason().unwrap().to_string(),
             message: msg,
             backtrace: None,
         }
     }
 }
 
-#[axum::debug_handler]
 pub async fn error_handler(State(state): State<AppState>) -> Response<Body> {
     let actor = None;
     let pref = Pref::new();
