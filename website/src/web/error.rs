@@ -32,7 +32,7 @@ pub struct ErrorInfo {
     pub status_code: StatusCode,
     pub title: String,
     pub message: String,
-    pub description: String,
+    pub backtrace: Option<String>,
 }
 
 impl ErrorInfo {
@@ -41,8 +41,8 @@ impl ErrorInfo {
         Self {
             status_code: StatusCode::INTERNAL_SERVER_ERROR,
             title: "Internal Server Error".to_string(),
-            message: message.clone(),
-            description: message,
+            message,
+            backtrace: None,
         }
     }
 }
@@ -53,8 +53,8 @@ impl From<&Error> for ErrorInfo {
         Self {
             status_code: e.into(),
             title: to_error_name(&e),
-            message: msg.clone(),
-            description: msg.clone(),
+            message: msg,
+            backtrace: None,
         }
     }
 }
@@ -71,8 +71,8 @@ pub async fn error_handler(State(state): State<AppState>) -> Response<Body> {
         ErrorInfo {
             status_code: StatusCode::NOT_FOUND,
             title: String::from("Not Found"),
-            message: String::from("Page not found"),
-            description: String::from("The page you are looking for cannot be found."),
+            message: String::from("The page you are looking for cannot be found."),
+            backtrace: None,
         },
         true,
     )
