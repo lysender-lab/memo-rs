@@ -356,8 +356,7 @@ pub async fn create_file(
     if file_dto.is_image {
         let exif_info = match parse_exif_info(&data.path) {
             Ok(info) => info,
-            Err(e) => {
-                error!("Unable to parse exif into: {}", e);
+            Err(_) => {
                 // It's okay to continue without exif info
                 PhotoExif::default()
             }
