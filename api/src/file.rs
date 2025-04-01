@@ -17,7 +17,9 @@ use validator::Validate;
 
 use crate::Result;
 use crate::dir::{Dir, update_dir_timestamp};
-use crate::error::{DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, ValidationSnafu};
+use crate::error::{
+    DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, ExifInfoSnafu, UploadFileSnafu, ValidationSnafu,
+};
 use crate::schema::files::{self, dsl};
 use crate::storage::upload_object;
 use memo::dto::bucket::BucketDto;
@@ -691,15 +693,13 @@ fn get_content_type(path: &PathBuf) -> Result<String> {
 }
 
 fn parse_exif_info(path: &PathBuf) -> Result<PhotoExif> {
-    let Ok(file) = File::open(path) else {
-        return Err("Unable to open file to read exif into".into());
-    };
+    let file = File::open(path).context(UploadFileSnafu)?;
 
     let mut buf_reader = std::io::BufReader::new(&file);
     let exit_reader = exif::Reader::new();
-    let Ok(exif) = exit_reader.read_from_container(&mut buf_reader) else {
-        return Err("Unable to read exif info from file".into());
-    };
+    let exif = exit_reader
+        .read_from_container(&mut buf_reader)
+        .context(ExifInfoSnafu)?;
 
     // Default to 1 if cannot identify orientation
     let orientation = match exif.get_field(Tag::Orientation, In::PRIMARY) {
