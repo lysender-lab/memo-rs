@@ -1,5 +1,5 @@
 use axum::extract::FromRef;
-use axum::{Router, middleware, response::Response};
+use axum::{Router, body::Body, middleware, response::Response};
 use deadpool_diesel::sqlite::Pool;
 use google_cloud_storage::client::Client;
 use tokio::net::TcpListener;
@@ -10,7 +10,7 @@ use tracing::{Level, error, info};
 use crate::Result;
 use crate::config::Config;
 use crate::db::create_db_pool;
-use crate::error::ErrorInfo;
+use crate::error::{ErrorInfo, ErrorResponse};
 use crate::storage::create_storage_client;
 use crate::web::routes::all_routes;
 
@@ -60,15 +60,27 @@ pub async fn run_web_server(config: &Config) -> Result<()> {
 }
 
 async fn response_mapper(res: Response) -> Response {
-    let status = res.status();
-    if status.is_server_error() {
-        let error = res.extensions().get::<ErrorInfo>();
-        if let Some(e) = error {
+    let error = res.extensions().get::<ErrorInfo>();
+    if let Some(e) = error {
+        if e.status_code.is_server_error() {
+            // Build the error response
             error!("{}", e.message);
             if let Some(bt) = &e.backtrace {
                 error!("{}", bt);
             }
         }
+
+        let body = ErrorResponse {
+            status_code: e.status_code.as_u16(),
+            message: e.message.as_str(),
+            error: e.status_code.canonical_reason().unwrap(),
+        };
+
+        return Response::builder()
+            .status(e.status_code)
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_string(&body).unwrap()))
+            .unwrap();
     }
     res
 }
