@@ -1,15 +1,16 @@
-use axum::Router;
 use axum::extract::FromRef;
+use axum::{Router, middleware, response::Response};
 use deadpool_diesel::sqlite::Pool;
 use google_cloud_storage::client::Client;
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
-use tracing::{Level, info};
+use tracing::{Level, error, info};
 
 use crate::Result;
 use crate::config::Config;
 use crate::db::create_db_pool;
+use crate::error::ErrorInfo;
 use crate::storage::create_storage_client;
 use crate::web::routes::all_routes;
 
@@ -31,13 +32,16 @@ pub async fn run_web_server(config: &Config) -> Result<()> {
         db_pool: pool,
     };
 
-    let routes_all = Router::new().merge(all_routes(state)).layer(
-        ServiceBuilder::new().layer(
-            TraceLayer::new_for_http()
-                .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
-                .on_response(DefaultOnResponse::new().level(Level::INFO)),
-        ),
-    );
+    let routes_all = Router::new()
+        .merge(all_routes(state))
+        .layer(middleware::map_response(response_mapper))
+        .layer(
+            ServiceBuilder::new().layer(
+                TraceLayer::new_for_http()
+                    .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+                    .on_response(DefaultOnResponse::new().level(Level::INFO)),
+            ),
+        );
 
     // Setup the server
     let ip = "127.0.0.1";
@@ -53,6 +57,20 @@ pub async fn run_web_server(config: &Config) -> Result<()> {
     info!("HTTP server stopped");
 
     Ok(())
+}
+
+async fn response_mapper(res: Response) -> Response {
+    let status = res.status();
+    if status.is_server_error() {
+        let error = res.extensions().get::<ErrorInfo>();
+        if let Some(e) = error {
+            error!("{}", e.message);
+            if let Some(bt) = &e.backtrace {
+                error!("{}", bt);
+            }
+        }
+    }
+    res
 }
 
 async fn shutdown_signal() {

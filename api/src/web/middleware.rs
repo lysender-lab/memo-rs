@@ -2,18 +2,22 @@ use axum::{
     Extension,
     body::Body,
     extract::{Path, Request, State},
-    http::{StatusCode, header},
+    http::header,
     middleware::Next,
     response::Response,
 };
+use snafu::{OptionExt, ensure};
 
 use crate::{
-    Error,
+    Result,
     auth::{actor::Actor, authenticate_token},
     bucket::get_bucket,
     client::get_client,
     dir::get_dir,
-    error::{create_json_error_response, to_json_error_response},
+    error::{
+        BadRequestSnafu, ForbiddenSnafu, InsufficientAuthScopeSnafu, InvalidAuthTokenSnafu,
+        NotFoundSnafu,
+    },
     file::get_file,
     web::{params::Params, server::AppState},
 };
@@ -25,7 +29,7 @@ pub async fn auth_middleware(
     State(state): State<AppState>,
     mut request: Request,
     next: Next,
-) -> Response<Body> {
+) -> Result<Response<Body>> {
     // Middleware to extract actor information from the request
     // Do not enforce authentication here, just extract the actor information
     let auth_header = request
@@ -38,60 +42,48 @@ pub async fn auth_middleware(
 
     if let Some(auth_header) = auth_header {
         // At this point, authentication must be verified
-        if !auth_header.starts_with("Bearer ") {
-            return to_json_error_response(Error::InvalidAuthToken);
-        }
+        ensure!(auth_header.starts_with("Bearer "), InvalidAuthTokenSnafu);
         let token = auth_header.replace("Bearer ", "");
 
-        let res = authenticate_token(&state, &token).await;
-        match res {
-            Ok(data) => {
-                actor = data;
-            }
-            Err(e) => {
-                return to_json_error_response(e);
-            }
-        }
+        actor = authenticate_token(&state, &token).await?;
     }
 
     // Forward to the next middleware/handler passing the actor information
     request.extensions_mut().insert(actor);
 
     let response = next.run(request).await;
-    response
+    Ok(response)
 }
 
 pub async fn require_auth_middleware(
     actor: Extension<Actor>,
     request: Request,
     next: Next,
-) -> Response<Body> {
-    if !actor.has_auth_scope() {
-        return to_json_error_response(Error::InsufficientAuthScope);
-    }
+) -> Result<Response<Body>> {
+    ensure!(actor.has_auth_scope(), InsufficientAuthScopeSnafu);
 
-    next.run(request).await
+    Ok(next.run(request).await)
 }
 
 pub async fn clients_admin_middleware(
     actor: Extension<Actor>,
     request: Request,
     next: Next,
-) -> Response<Body> {
+) -> Result<Response<Body>> {
     let permissions = vec![
         Permission::ClientsList,
         Permission::ClientsView,
         Permission::ClientsManage,
     ];
-    if !actor.has_permissions(&permissions) {
-        return create_json_error_response(
-            StatusCode::FORBIDDEN,
-            "Insufficient permissions",
-            "Forbidden",
-        );
-    }
 
-    next.run(request).await
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    Ok(next.run(request).await)
 }
 
 pub async fn client_middleware(
@@ -100,41 +92,31 @@ pub async fn client_middleware(
     Path(params): Path<ClientParams>,
     mut request: Request,
     next: Next,
-) -> Response<Body> {
+) -> Result<Response<Body>> {
     let permissions = vec![Permission::ClientsView];
-    if !actor.has_permissions(&permissions) {
-        return create_json_error_response(
-            StatusCode::FORBIDDEN,
-            "Insufficient permissions",
-            "Forbidden",
-        );
-    }
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
 
-    if !valid_id(&params.client_id) {
-        return create_json_error_response(
-            StatusCode::BAD_REQUEST,
-            "Invalid client id",
-            "Bad Request",
-        );
-    }
+    ensure!(
+        valid_id(&params.client_id),
+        BadRequestSnafu {
+            msg: "Invalid client id"
+        }
+    );
 
-    let client = get_client(&state.db_pool, &params.client_id).await;
-    let Ok(client) = client else {
-        return create_json_error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Error getting client",
-            "Internal Server Error",
-        );
-    };
-
-    let Some(client) = client else {
-        return create_json_error_response(StatusCode::NOT_FOUND, "Client not found", "Not Found");
-    };
+    let client = get_client(&state.db_pool, &params.client_id).await?;
+    let client = client.context(NotFoundSnafu {
+        msg: "Client not found",
+    })?;
 
     // Forward to the next middleware/handler passing the client information
     request.extensions_mut().insert(client);
     let response = next.run(request).await;
-    response
+    Ok(response)
 }
 
 pub async fn bucket_middleware(
@@ -143,52 +125,45 @@ pub async fn bucket_middleware(
     Path(params): Path<Params>,
     mut request: Request,
     next: Next,
-) -> Response<Body> {
-    if !actor.has_files_scope() {
-        return create_json_error_response(
-            StatusCode::FORBIDDEN,
-            "Insufficient auth scope",
-            "Forbidden",
-        );
-    }
+) -> Result<Response<Body>> {
+    ensure!(
+        actor.has_files_scope(),
+        ForbiddenSnafu {
+            msg: "Insufficient auth scope"
+        }
+    );
+
     let permissions = vec![Permission::BucketsList, Permission::BucketsView];
-    if !actor.has_permissions(&permissions) {
-        return create_json_error_response(
-            StatusCode::FORBIDDEN,
-            "Insufficient permissions",
-            "Forbidden",
-        );
-    }
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
 
-    if !valid_id(&params.bucket_id) {
-        return create_json_error_response(
-            StatusCode::BAD_REQUEST,
-            "Invalid bucket id",
-            "Bad Request",
-        );
-    }
+    ensure!(
+        valid_id(&params.bucket_id),
+        BadRequestSnafu {
+            msg: "Invalid bucket id"
+        }
+    );
 
-    let bucket = get_bucket(&state.db_pool, &params.bucket_id).await;
-    let Ok(bucket) = bucket else {
-        return create_json_error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Error getting bucket",
-            "Internal Server Error",
-        );
-    };
+    let bucket = get_bucket(&state.db_pool, &params.bucket_id).await?;
+    let bucket = bucket.context(NotFoundSnafu {
+        msg: "Bucket not found",
+    })?;
 
-    let Some(bucket) = bucket else {
-        return create_json_error_response(StatusCode::NOT_FOUND, "Bucket not found", "Not Found");
-    };
-
-    if &bucket.client_id != &actor.client_id {
-        return create_json_error_response(StatusCode::NOT_FOUND, "Bucket not found", "Not Found");
-    }
+    ensure!(
+        &bucket.client_id == &actor.client_id,
+        NotFoundSnafu {
+            msg: "Bucket not found"
+        }
+    );
 
     // Forward to the next middleware/handler passing the bucket information
     request.extensions_mut().insert(bucket);
     let response = next.run(request).await;
-    response
+    Ok(response)
 }
 
 pub async fn dir_middleware(
@@ -197,54 +172,40 @@ pub async fn dir_middleware(
     Path(params): Path<Params>,
     mut request: Request,
     next: Next,
-) -> Response<Body> {
-    if !actor.has_files_scope() {
-        return create_json_error_response(
-            StatusCode::FORBIDDEN,
-            "Insufficient auth scope",
-            "Forbidden",
-        );
-    }
+) -> Result<Response<Body>> {
+    ensure!(
+        actor.has_files_scope(),
+        ForbiddenSnafu {
+            msg: "Insufficient auth scope"
+        }
+    );
 
     let permissions = vec![Permission::DirsList, Permission::DirsView];
-    if !actor.has_permissions(&permissions) {
-        return create_json_error_response(
-            StatusCode::FORBIDDEN,
-            "Insufficient permissions",
-            "Forbidden",
-        );
-    }
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
 
     let did = params.dir_id.clone().expect("dir_id is required");
-    let query_res = get_dir(&state.db_pool, &did).await;
-    let Ok(dir_res) = query_res else {
-        return create_json_error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Error getting directory",
-            "Internal Server Error",
-        );
-    };
+    let dir_res = get_dir(&state.db_pool, &did).await?;
 
-    let Some(dir) = dir_res else {
-        return create_json_error_response(
-            StatusCode::NOT_FOUND,
-            "Directory not found",
-            "Not Found",
-        );
-    };
+    let dir = dir_res.context(NotFoundSnafu {
+        msg: "Directory not found",
+    })?;
 
-    if &dir.bucket_id != &params.bucket_id {
-        return create_json_error_response(
-            StatusCode::NOT_FOUND,
-            "Directory not found",
-            "Not Found",
-        );
-    }
+    ensure!(
+        &dir.bucket_id == &params.bucket_id,
+        NotFoundSnafu {
+            msg: "Directory not found"
+        }
+    );
 
     // Forward to the next middleware/handler passing the directory information
     request.extensions_mut().insert(dir);
     let response = next.run(request).await;
-    response
+    Ok(response)
 }
 
 pub async fn file_middleware(
@@ -253,37 +214,31 @@ pub async fn file_middleware(
     Path(params): Path<Params>,
     mut request: Request,
     next: Next,
-) -> Response<Body> {
+) -> Result<Response<Body>> {
     let permissions = vec![Permission::FilesList, Permission::FilesView];
-    if !actor.has_permissions(&permissions) {
-        return create_json_error_response(
-            StatusCode::FORBIDDEN,
-            "Insufficient permissions",
-            "Forbidden",
-        );
-    }
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
 
     let did = params.dir_id.clone().expect("dir_id is required");
     let fid = params.file_id.clone().expect("file_id is required");
-    let query_res = get_file(&state.db_pool, &fid).await;
-    let Ok(file_res) = query_res else {
-        return create_json_error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Error getting file",
-            "Internal Server Error",
-        );
-    };
+    let file_res = get_file(&state.db_pool, &fid).await?;
+    let file = file_res.context(NotFoundSnafu {
+        msg: "File not found",
+    })?;
 
-    let Some(file) = file_res else {
-        return create_json_error_response(StatusCode::NOT_FOUND, "File not found", "Not Found");
-    };
-
-    if &file.dir_id != &did {
-        return create_json_error_response(StatusCode::NOT_FOUND, "File not found", "Not Found");
-    }
+    ensure!(
+        &file.dir_id == &did,
+        NotFoundSnafu {
+            msg: "File not found"
+        }
+    );
 
     // Forward to the next middleware/handler passing the file information
     request.extensions_mut().insert(file);
     let response = next.run(request).await;
-    response
+    Ok(response)
 }

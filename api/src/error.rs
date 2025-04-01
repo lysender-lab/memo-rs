@@ -6,7 +6,7 @@ use axum::{body::Body, http::StatusCode, response::Response};
 use deadpool_diesel::{InteractError, PoolError};
 use memo::role::{InvalidPermissionsError, InvalidRolesError};
 use serde::{Deserialize, Serialize};
-use snafu::{Backtrace, Snafu};
+use snafu::{Backtrace, ErrorCompat, Snafu};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -206,8 +206,22 @@ impl From<Error> for StatusCode {
 // Allow errors to be rendered as response
 impl IntoResponse for Error {
     fn into_response(self) -> Response<Body> {
-        to_json_error_response(self)
+        let message = format!("{}", self);
+        let mut backtrace: Option<String> = None;
+        if let Some(bt) = ErrorCompat::backtrace(&self) {
+            backtrace = Some(format!("{}", bt));
+        }
+        let mut res = to_json_error_response(self);
+        res.extensions_mut()
+            .insert(ErrorInfo { message, backtrace });
+        res
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct ErrorInfo {
+    pub message: String,
+    pub backtrace: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
