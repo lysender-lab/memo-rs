@@ -1,10 +1,14 @@
+use axum::http::StatusCode;
+use axum::{
+    body::Body,
+    extract::rejection::JsonRejection,
+    response::{IntoResponse, Response},
+};
+use serde::{Deserialize, Serialize};
+use snafu::{Backtrace, ErrorCompat, Snafu};
 use std::path::PathBuf;
 
-use axum::extract::rejection::JsonRejection;
-use axum::http::StatusCode;
 use memo::role::{InvalidPermissionsError, InvalidRolesError};
-use serde::{Deserialize, Serialize};
-use snafu::{Backtrace, Snafu};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -211,6 +215,34 @@ impl From<&Error> for StatusCode {
     }
 }
 
+// Allow errors to be rendered as response
+impl IntoResponse for Error {
+    fn into_response(self) -> Response<Body> {
+        let status_code = StatusCode::from(&self);
+        let title = status_code.canonical_reason().unwrap().to_string();
+        let message = format!("{}", self);
+        let mut backtrace: Option<String> = None;
+        if let Some(bt) = ErrorCompat::backtrace(&self) {
+            backtrace = Some(format!("{}", bt));
+        }
+
+        // Build a dummy response
+        let mut res = Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(Body::empty())
+            .unwrap();
+
+        res.extensions_mut().insert(ErrorInfo {
+            status_code,
+            title,
+            message,
+            backtrace,
+        });
+
+        res
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct ErrorResponse {
     pub status_code: u16,
@@ -250,4 +282,3 @@ impl From<&Error> for ErrorInfo {
         }
     }
 }
-

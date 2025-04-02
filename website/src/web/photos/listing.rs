@@ -45,7 +45,7 @@ pub async fn photos_page_handler(
     State(state): State<AppState>,
 ) -> Response<Body> {
     let config = state.config.clone();
-    let actor = ctx.actor();
+    let actor = ctx.actor().expect("actor is required");
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
 
     t.title = format!("Photos - {}", &album.label);
@@ -88,7 +88,7 @@ pub async fn photo_listing_handler(
     };
 
     let config = state.config.clone();
-    let actor = ctx.actor();
+    let actor = ctx.actor().expect("actor is required");
     let default_bucket_id = actor.default_bucket_id.clone();
     let Some(bucket_id) = default_bucket_id else {
         return build_error_response(
@@ -99,7 +99,8 @@ pub async fn photo_listing_handler(
         );
     };
 
-    let result = list_photos(&config.api_url, ctx.token(), &bucket_id, &album_id, &query).await;
+    let auth_token = ctx.token().expect("token is required");
+    let result = list_photos(&config.api_url, auth_token, &bucket_id, &album_id, &query).await;
 
     return match result {
         Ok(listing) => {

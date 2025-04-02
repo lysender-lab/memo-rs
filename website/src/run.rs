@@ -1,18 +1,14 @@
-use std::sync::Arc;
-
 use axum::Router;
 use axum::extract::FromRef;
-use axum::middleware;
-use axum::response::Response;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 use tower_cookies::CookieManagerLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
-use tracing::{Level, error, info};
+use tracing::{Level, info};
 
 use crate::Result;
 use crate::config::Config;
-use crate::error::ErrorInfo;
 use crate::web::all_routes;
 
 #[derive(Clone, FromRef)]
@@ -29,7 +25,6 @@ pub async fn run(config: Config) -> Result<()> {
 
     let routes_all = Router::new()
         .merge(all_routes(state, &frontend_dir))
-        .layer(middleware::map_response(response_mapper))
         .layer(CookieManagerLayer::new())
         .layer(
             ServiceBuilder::new().layer(
@@ -53,20 +48,6 @@ pub async fn run(config: Config) -> Result<()> {
     info!("HTTP Server stopped");
 
     Ok(())
-}
-
-async fn response_mapper(res: Response) -> Response {
-    let status = res.status();
-    if status.is_server_error() {
-        let error = res.extensions().get::<ErrorInfo>();
-        if let Some(e) = error {
-            error!("{}", e.message);
-            if let Some(bt) = &e.backtrace {
-                error!("{}", bt);
-            }
-        }
-    }
-    res
 }
 
 async fn shutdown_signal() {

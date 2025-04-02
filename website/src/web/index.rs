@@ -28,7 +28,7 @@ pub async fn index_handler(
     State(state): State<AppState>,
     Query(query): Query<ListAlbumsParams>,
 ) -> Response<Body> {
-    let actor = ctx.actor();
+    let actor = ctx.actor().expect("actor is required");
     if let Err(err) = enforce_policy(actor, Resource::Album, Action::Read) {
         return handle_error(
             &state,

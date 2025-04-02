@@ -22,11 +22,12 @@ pub async fn photo_middleware(
     mut req: Request,
     next: Next,
 ) -> Response {
+    let actor = ctx.actor().expect("actor is required");
     let full_page = req.headers().get("HX-Request").is_none();
-    if let Err(err) = enforce_policy(ctx.actor(), Resource::Photo, Action::Read) {
+    if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Read) {
         return handle_error(
             &state,
-            Some(ctx.actor().clone()),
+            Some(actor.clone()),
             &pref,
             ErrorInfo::from(&err),
             full_page,
@@ -36,22 +37,15 @@ pub async fn photo_middleware(
     let album_id = params.album_id.expect("album_id is required");
     let photo_id = params.photo_id.expect("photo_id is required");
 
-    let actor = ctx.actor();
     let default_bucket_id = actor.default_bucket_id.clone();
     let Some(bucket_id) = default_bucket_id else {
         let error = ErrorInfo::new("No default bucket.".to_string());
-        return handle_error(&state, Some(ctx.actor().clone()), &pref, error, full_page);
+        return handle_error(&state, Some(actor.clone()), &pref, error, full_page);
     };
 
+    let token = ctx.token().expect("token is required");
     let config = state.config.clone();
-    let result = get_photo(
-        &config.api_url,
-        ctx.token(),
-        &bucket_id,
-        &album_id,
-        &photo_id,
-    )
-    .await;
+    let result = get_photo(&config.api_url, token, &bucket_id, &album_id, &photo_id).await;
 
     match result {
         Ok(photo) => {
@@ -60,7 +54,7 @@ pub async fn photo_middleware(
         Err(err) => {
             return handle_error(
                 &state,
-                Some(ctx.actor().clone()),
+                Some(actor.clone()),
                 &pref,
                 ErrorInfo::from(&err),
                 full_page,

@@ -8,7 +8,7 @@ use axum_extra::extract::CookieJar;
 
 use crate::{
     Error,
-    ctx::Ctx,
+    ctx::{Ctx, CtxValue},
     error::ErrorInfo,
     models::Pref,
     run::AppState,
@@ -16,7 +16,8 @@ use crate::{
     web::{AUTH_TOKEN_COOKIE, handle_error},
 };
 
-pub async fn require_auth_middleware(
+/// Validates auth token but does not require its validity
+pub async fn auth_middleware(
     Extension(pref): Extension<Pref>,
     State(state): State<AppState>,
     cookies: CookieJar,
@@ -28,30 +29,49 @@ pub async fn require_auth_middleware(
         .get(AUTH_TOKEN_COOKIE)
         .map(|c| c.value().to_string());
 
-    let Some(token) = token else {
-        return Redirect::to("/login").into_response();
-    };
-
     let full_page = req.headers().get("HX-Request").is_none();
 
-    // Validate token
-    let result = authenticate_token(&config.api_url, &token).await;
+    // Allow ctx to be always present
+    let mut ctx: Ctx = Ctx::new(None);
 
-    match result {
-        Ok(actor) => {
-            let ctx = Ctx::new(token, actor);
-            req.extensions_mut().insert(ctx);
-        }
-        Err(err) => match err {
-            Error::LoginRequired => {
-                if full_page {
-                    return Redirect::to("/login").into_response();
-                } else {
-                    return handle_error(&state, None, &pref, ErrorInfo::from(&err), full_page);
-                }
+    if let Some(token) = token {
+        // Validate token
+        let result = authenticate_token(&config.api_url, &token).await;
+
+        match result {
+            Ok(actor) => {
+                ctx = Ctx::new(Some(CtxValue::new(token, actor)));
             }
-            _ => return handle_error(&state, None, &pref, ErrorInfo::from(&err), full_page),
-        },
+            Err(err) => match err {
+                Error::LoginRequired => {
+                    // Allow passing through
+                    ()
+                }
+                _ => return handle_error(&state, None, &pref, ErrorInfo::from(&err), full_page),
+            },
+        }
+    }
+
+    req.extensions_mut().insert(ctx);
+    next.run(req).await
+}
+
+pub async fn require_auth_middleware(
+    Extension(ctx): Extension<Ctx>,
+    Extension(pref): Extension<Pref>,
+    State(state): State<AppState>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let full_page = req.headers().get("HX-Request").is_none();
+
+    if ctx.value.is_none() {
+        if full_page {
+            return Redirect::to("/login").into_response();
+        } else {
+            let error = ErrorInfo::from(&Error::LoginRequired);
+            return handle_error(&state, None, &pref, error, full_page);
+        }
     }
 
     next.run(req).await

@@ -27,7 +27,7 @@ pub async fn pre_delete_photo_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(photo): Extension<Photo>,
 ) -> Response<Body> {
-    let actor = ctx.actor();
+    let actor = ctx.actor().expect("actor is required");
 
     if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Delete) {
         return handle_error_message(&err);
@@ -49,7 +49,7 @@ pub async fn confirm_delete_photo_handler(
     State(state): State<AppState>,
 ) -> Response<Body> {
     let config = state.config.clone();
-    let actor = ctx.actor();
+    let actor = ctx.actor().expect("actor is required");
 
     if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Delete) {
         return handle_error_message(&err);
@@ -83,7 +83,7 @@ pub async fn exec_delete_photo_handler(
     payload: Form<DeletePhotoForm>,
 ) -> Response<Body> {
     let config = state.config.clone();
-    let actor = ctx.actor();
+    let actor = ctx.actor().expect("actor is required");
     let default_bucket_id = actor.default_bucket_id.clone();
     let Some(bucket_id) = default_bucket_id else {
         return handle_error_message(&Error::Whatever {
@@ -104,9 +104,10 @@ pub async fn exec_delete_photo_handler(
     let status_code;
     let error_message;
 
+    let auth_token = ctx.token().expect("token is required");
     let result = delete_photo(
         &config,
-        ctx.token(),
+        auth_token,
         &bucket_id,
         &album.id,
         &photo.id,

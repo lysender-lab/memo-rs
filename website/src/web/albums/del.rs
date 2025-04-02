@@ -29,7 +29,8 @@ pub async fn delete_album_handler(
     payload: Form<DeleteAlbumForm>,
 ) -> Response<Body> {
     let config = state.config.clone();
-    let actor = ctx.actor();
+    let actor = ctx.actor().expect("actor is required");
+
     let default_bucket_id = actor.default_bucket_id.clone();
     let Some(bucket_id) = default_bucket_id else {
         let error = ErrorInfo::new("No default bucket.".to_string());
@@ -53,10 +54,10 @@ pub async fn delete_album_handler(
 
     let mut error_message: Option<String> = None;
     let mut status_code: StatusCode = StatusCode::OK;
+    let auth_token = ctx.token().expect("token is required");
 
     if method == Method::POST {
-        let result =
-            delete_album(&config, ctx.token(), &bucket_id, &album.id, &payload.token).await;
+        let result = delete_album(&config, auth_token, &bucket_id, &album.id, &payload.token).await;
         match result {
             Ok(_) => {
                 // Render same form but trigger a redirect to home

@@ -34,13 +34,14 @@ pub async fn edit_album_controls_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(album): Extension<Album>,
 ) -> Response<Body> {
+    let actor = ctx.actor().expect("actor is required");
     let tpl = EditAlbumControlsTemplate {
         album,
         updated: false,
-        can_edit: enforce_policy(ctx.actor(), Resource::Album, Action::Update).is_ok(),
-        can_delete: enforce_policy(ctx.actor(), Resource::Album, Action::Delete).is_ok(),
-        can_add_photos: enforce_policy(ctx.actor(), Resource::Photo, Action::Create).is_ok(),
-        can_delete_photos: enforce_policy(ctx.actor(), Resource::Photo, Action::Delete).is_ok(),
+        can_edit: enforce_policy(actor, Resource::Album, Action::Update).is_ok(),
+        can_delete: enforce_policy(actor, Resource::Album, Action::Delete).is_ok(),
+        can_add_photos: enforce_policy(actor, Resource::Photo, Action::Create).is_ok(),
+        can_delete_photos: enforce_policy(actor, Resource::Photo, Action::Delete).is_ok(),
     };
 
     Response::builder()
@@ -57,7 +58,7 @@ pub async fn edit_album_handler(
     State(state): State<AppState>,
 ) -> Response<Body> {
     let config = state.config.clone();
-    let actor = ctx.actor();
+    let actor = ctx.actor().expect("actor is required");
 
     if let Err(err) = enforce_policy(actor, Resource::Album, Action::Update) {
         return handle_error(
@@ -97,7 +98,7 @@ pub async fn post_edit_album_handler(
 ) -> Response<Body> {
     let config = state.config.clone();
     let album_id = album.id.clone();
-    let actor = ctx.actor();
+    let actor = ctx.actor().expect("actor is required");
     let default_bucket_id = actor.default_bucket_id.clone();
     let Some(bucket_id) = default_bucket_id else {
         let error = ErrorInfo::new("No default bucket.".to_string());
@@ -126,7 +127,8 @@ pub async fn post_edit_album_handler(
     let mut status = 200;
     tpl.payload.label = payload.label.clone();
 
-    let result = update_album(&config, ctx.token(), &bucket_id, &album_id, &payload).await;
+    let token = ctx.token().expect("token is required");
+    let result = update_album(&config, token, &bucket_id, &album_id, &payload).await;
     match result {
         Ok(updated_album) => {
             tpl.album = updated_album;

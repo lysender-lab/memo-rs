@@ -1,13 +1,18 @@
-use axum::extract::DefaultBodyLimit;
+use axum::extract::{DefaultBodyLimit, State};
 use axum::handler::HandlerWithoutStateExt;
-use axum::response::IntoResponse;
+use axum::http::HeaderMap;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, get_service, post};
-use axum::{Router, middleware};
+use axum::{Extension, Router, middleware};
 use reqwest::StatusCode;
 use std::path::PathBuf;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::services::{ServeDir, ServeFile};
+use tracing::error;
 
+use crate::ctx::Ctx;
+use crate::error::ErrorInfo;
+use crate::models::Pref;
 use crate::run::AppState;
 use crate::web::{
     error_handler, index_handler, login_handler, logout_handler, new_album_handler,
@@ -15,9 +20,9 @@ use crate::web::{
 };
 
 use super::{
-    album_listing_handler, album_listing_middleware, album_middleware,
+    album_listing_handler, album_listing_middleware, album_middleware, auth_middleware,
     confirm_delete_photo_handler, dark_theme_handler, delete_album_handler,
-    edit_album_controls_handler, edit_album_handler, exec_delete_photo_handler,
+    edit_album_controls_handler, edit_album_handler, exec_delete_photo_handler, handle_error,
     light_theme_handler, photo_middleware, post_edit_album_handler, pre_delete_photo_handler,
     pref_middleware, require_auth_middleware, upload_handler, upload_page_handler,
 };
@@ -60,9 +65,17 @@ pub fn private_routes(state: AppState) -> Router {
         .route("/prefs/theme/light", post(light_theme_handler))
         .route("/prefs/theme/dark", post(dark_theme_handler))
         .nest("/albums", album_routes(state.clone()))
+        .layer(middleware::map_response_with_state(
+            state.clone(),
+            response_mapper,
+        ))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_auth_middleware,
+        ))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
         ))
         .route_layer(middleware::from_fn(pref_middleware))
         .with_state(state)
@@ -128,5 +141,38 @@ pub fn public_routes(state: AppState) -> Router {
     Router::new()
         .route("/login", get(login_handler).post(post_login_handler))
         .route("/logout", post(logout_handler))
+        .layer(middleware::map_response_with_state(
+            state.clone(),
+            response_mapper,
+        ))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ))
+        .route_layer(middleware::from_fn(pref_middleware))
         .with_state(state)
+}
+
+async fn response_mapper(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<Ctx>,
+    Extension(pref): Extension<Pref>,
+    headers: HeaderMap,
+    res: Response,
+) -> Response {
+    let error = res.extensions().get::<ErrorInfo>();
+    if let Some(e) = error {
+        if e.status_code.is_server_error() {
+            // Build the error response
+            error!("{}", e.message);
+            if let Some(bt) = &e.backtrace {
+                error!("{}", bt);
+            }
+        }
+
+        let full_page = headers.get("HX-Request").is_none();
+        let actor = ctx.actor().map(|t| t.clone());
+        return handle_error(&state, actor, &pref, e.clone(), full_page);
+    }
+    res
 }

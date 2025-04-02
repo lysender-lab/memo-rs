@@ -33,7 +33,7 @@ pub async fn new_album_handler(
     State(state): State<AppState>,
 ) -> Response<Body> {
     let config = state.config.clone();
-    let actor = ctx.actor();
+    let actor = ctx.actor().expect("actor is required");
 
     if let Err(err) = enforce_policy(actor, Resource::Album, Action::Create) {
         return handle_error(
@@ -77,7 +77,7 @@ pub async fn post_new_album_handler(
     payload: Form<NewAlbumForm>,
 ) -> Response<Body> {
     let config = state.config.clone();
-    let actor = ctx.actor();
+    let actor = ctx.actor().expect("actor is required");
     let default_bucket_id = actor.default_bucket_id.clone();
     let Some(bucket_id) = default_bucket_id else {
         let error = ErrorInfo::new("No default bucket.".to_string());
@@ -117,7 +117,8 @@ pub async fn post_new_album_handler(
         token: payload.token.clone(),
     };
 
-    let result = create_album(&config, ctx.token(), &bucket_id, album).await;
+    let token = ctx.token().expect("token is required");
+    let result = create_album(&config, token, &bucket_id, album).await;
 
     match result {
         Ok(album) => {

@@ -38,7 +38,7 @@ pub async fn upload_page_handler(
     State(state): State<AppState>,
 ) -> Response<Body> {
     let config = state.config.clone();
-    let actor = ctx.actor();
+    let actor = ctx.actor().expect("actor is required");
 
     if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Create) {
         return handle_error(
@@ -76,7 +76,7 @@ pub async fn upload_handler(
     body: Bytes,
 ) -> Response<Body> {
     let config = state.config.clone();
-    let actor = ctx.actor();
+    let actor = ctx.actor().expect("actor is required");
     let default_bucket_id = actor.default_bucket_id.clone();
 
     let Some(bucket_id) = default_bucket_id else {
@@ -94,9 +94,10 @@ pub async fn upload_handler(
         return handle_error(&state, Some(actor.clone()), &pref, error, true);
     };
 
+    let auth_token = ctx.token().expect("token is required");
     let result = upload_photo(
         &config,
-        ctx.token(),
+        auth_token,
         &bucket_id,
         &album.id,
         &headers,
