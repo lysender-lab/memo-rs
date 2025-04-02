@@ -7,9 +7,10 @@ use axum::{Extension, body::Body, extract::State, response::Response};
 use crate::models::{Pref, UploadParams};
 use crate::run::AppState;
 use crate::services::{create_csrf_token, upload_photo};
-use crate::web::{ErrorInfo, handle_error, handle_error_message};
+use crate::web::{handle_error, handle_error_message};
 use crate::{
     ctx::Ctx,
+    error::ErrorInfo,
     models::{Album, Photo, TemplateData},
 };
 

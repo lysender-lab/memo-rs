@@ -7,10 +7,11 @@ use axum::{
 
 use crate::{
     ctx::Ctx,
+    error::ErrorInfo,
     models::{PhotoParams, Pref},
     run::AppState,
     services::get_photo,
-    web::{Action, Resource, enforce_policy, error::ErrorInfo, handle_error},
+    web::{Action, Resource, enforce_policy, handle_error},
 };
 
 pub async fn photo_middleware(

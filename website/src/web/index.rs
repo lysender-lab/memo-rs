@@ -8,11 +8,12 @@ use axum::{
 
 use crate::{
     ctx::Ctx,
+    error::ErrorInfo,
     models::{ListAlbumsParams, TemplateData},
 };
 use crate::{models::Pref, run::AppState};
 
-use super::{Action, ErrorInfo, Resource, enforce_policy, handle_error};
+use super::{Action, Resource, enforce_policy, handle_error};
 
 #[derive(Template)]
 #[template(path = "pages/index.html")]

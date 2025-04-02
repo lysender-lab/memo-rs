@@ -2,12 +2,13 @@ use askama::Template;
 use axum::http::StatusCode;
 use axum::{Extension, Form, body::Body, extract::State, response::Response};
 
+use crate::error::ErrorInfo;
 use crate::models::{NewAlbumForm, Pref};
 use crate::run::AppState;
 use crate::services::create_csrf_token;
 use crate::{ctx::Ctx, models::TemplateData, services::create_album};
 
-use crate::web::{Action, ErrorInfo, Resource, enforce_policy, handle_error};
+use crate::web::{Action, Resource, enforce_policy, handle_error};
 
 #[derive(Template)]
 #[template(path = "pages/new_album.html")]

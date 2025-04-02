@@ -9,10 +9,11 @@ use axum_extra::extract::CookieJar;
 use crate::{
     Error,
     ctx::Ctx,
+    error::ErrorInfo,
     models::Pref,
     run::AppState,
     services::authenticate_token,
-    web::{AUTH_TOKEN_COOKIE, error::ErrorInfo, handle_error},
+    web::{AUTH_TOKEN_COOKIE, handle_error},
 };
 
 pub async fn require_auth_middleware(

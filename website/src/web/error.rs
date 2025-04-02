@@ -3,6 +3,7 @@ use axum::{body::Body, extract::State, http::StatusCode, response::Response};
 
 use crate::{
     Error,
+    error::ErrorInfo,
     models::{Actor, Pref, TemplateData},
     run::AppState,
 };
@@ -24,39 +25,6 @@ struct ErrorWidgetData {
 #[template(path = "widgets/error_message.html")]
 struct ErrorMessageData {
     message: String,
-}
-
-#[derive(Clone)]
-pub struct ErrorInfo {
-    pub status_code: StatusCode,
-    pub title: String,
-    pub message: String,
-    pub backtrace: Option<String>,
-}
-
-impl ErrorInfo {
-    /// Creates a generic internal server error
-    pub fn new(message: String) -> Self {
-        Self {
-            status_code: StatusCode::INTERNAL_SERVER_ERROR,
-            title: "Internal Server Error".to_string(),
-            message,
-            backtrace: None,
-        }
-    }
-}
-
-impl From<&Error> for ErrorInfo {
-    fn from(e: &Error) -> Self {
-        let status_code = e.into();
-        let msg = e.to_string();
-        Self {
-            status_code,
-            title: status_code.canonical_reason().unwrap().to_string(),
-            message: msg,
-            backtrace: None,
-        }
-    }
 }
 
 pub async fn error_handler(State(state): State<AppState>) -> Response<Body> {

@@ -12,7 +12,8 @@ use tracing::{Level, error, info};
 
 use crate::Result;
 use crate::config::Config;
-use crate::web::{ErrorInfo, all_routes};
+use crate::error::ErrorInfo;
+use crate::web::all_routes;
 
 #[derive(Clone, FromRef)]
 pub struct AppState {

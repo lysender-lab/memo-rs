@@ -16,11 +16,12 @@ use crate::{
     services::{AuthPayload, authenticate, validate_catpcha},
 };
 use crate::{
+    error::ErrorInfo,
     models::{Actor, Pref},
     run::AppState,
 };
 
-use super::{AUTH_TOKEN_COOKIE, ErrorInfo};
+use super::AUTH_TOKEN_COOKIE;
 
 #[derive(Template)]
 #[template(path = "pages/login.html")]

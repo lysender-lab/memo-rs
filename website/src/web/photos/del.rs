@@ -5,9 +5,8 @@ use axum::{Extension, body::Body, extract::State, response::Response};
 use crate::models::{DeletePhotoForm, Photo};
 use crate::run::AppState;
 use crate::services::{create_csrf_token, delete_photo};
-use crate::{Error, ctx::Ctx, models::Album};
-
-use crate::web::{Action, ErrorInfo, Resource, enforce_policy, handle_error_message};
+use crate::web::{Action, Resource, enforce_policy, handle_error_message};
+use crate::{Error, ctx::Ctx, error::ErrorInfo, models::Album};
 
 #[derive(Template)]
 #[template(path = "widgets/pre_delete_photo_form.html")]

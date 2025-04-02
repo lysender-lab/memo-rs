@@ -7,10 +7,11 @@ use axum::{
 
 use crate::{
     ctx::Ctx,
+    error::ErrorInfo,
     models::{AlbumParams, Pref},
     run::AppState,
     services::get_album,
-    web::{Action, Resource, enforce_policy, error::ErrorInfo, handle_error},
+    web::{Action, Resource, enforce_policy, handle_error},
 };
 
 pub async fn album_listing_middleware(

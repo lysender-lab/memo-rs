@@ -10,9 +10,10 @@ use urlencoding::encode;
 use crate::{
     Error,
     ctx::Ctx,
+    error::ErrorInfo,
     models::{Album, ListAlbumsParams},
     services::list_albums,
-    web::{Action, ErrorInfo, Resource, enforce_policy},
+    web::{Action, Resource, enforce_policy},
 };
 use crate::{models::PaginationLinks, run::AppState};
 

@@ -3,12 +3,13 @@ use axum::Form;
 use axum::http::{Method, StatusCode};
 use axum::{Extension, body::Body, extract::State, response::Response};
 
+use crate::error::ErrorInfo;
 use crate::models::{DeleteAlbumForm, Pref};
 use crate::run::AppState;
 use crate::services::{create_csrf_token, delete_album};
 use crate::{ctx::Ctx, models::Album};
 
-use crate::web::{Action, ErrorInfo, Resource, enforce_policy, handle_error};
+use crate::web::{Action, Resource, enforce_policy, handle_error};
 
 #[derive(Template)]
 #[template(path = "widgets/delete_album_form.html")]

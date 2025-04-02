@@ -4,10 +4,10 @@ use axum::{Extension, body::Body, extract::State, response::Response};
 
 use crate::models::{ListPhotosParams, PaginatedMeta, Pref};
 use crate::run::AppState;
-use crate::web::ErrorInfo;
 use crate::{
     Error,
     ctx::Ctx,
+    error::ErrorInfo,
     models::{Album, Photo, TemplateData},
     services::list_photos,
 };
