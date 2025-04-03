@@ -35,6 +35,7 @@ pub async fn login_handler(
     State(state): State<AppState>,
     Query(query): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
+    // Errors are handled via redirect with query params
     let pref = Pref::new();
     let actor: Option<Actor> = None;
     let mut t = TemplateData::new(&state, actor, &pref);

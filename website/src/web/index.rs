@@ -7,13 +7,13 @@ use axum::{
 };
 
 use crate::{
+    Result,
     ctx::Ctx,
-    error::ErrorInfo,
     models::{ListAlbumsParams, TemplateData},
 };
 use crate::{models::Pref, run::AppState};
 
-use super::{Action, Resource, enforce_policy, handle_error};
+use super::{Action, Resource, enforce_policy};
 
 #[derive(Template)]
 #[template(path = "pages/index.html")]
@@ -27,17 +27,9 @@ pub async fn index_handler(
     Extension(pref): Extension<Pref>,
     State(state): State<AppState>,
     Query(query): Query<ListAlbumsParams>,
-) -> Response<Body> {
+) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
-    if let Err(err) = enforce_policy(actor, Resource::Album, Action::Read) {
-        return handle_error(
-            &state,
-            Some(actor.clone()),
-            &pref,
-            ErrorInfo::from(&err),
-            true,
-        );
-    }
+    let _ = enforce_policy(actor, Resource::Album, Action::Read)?;
 
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
     t.title = String::from("Home");
@@ -48,7 +40,7 @@ pub async fn index_handler(
     };
 
     // Prevent caching the home page
-    Response::builder()
+    Ok(Response::builder()
         .status(200)
         .header("Surrogate-Control", "no-store")
         .header(
@@ -58,5 +50,5 @@ pub async fn index_handler(
         .header("Pragma", "no-cache")
         .header("Expires", 0)
         .body(Body::from(tpl.render().unwrap()))
-        .unwrap()
+        .unwrap())
 }
