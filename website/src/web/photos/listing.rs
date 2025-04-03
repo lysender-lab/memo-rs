@@ -3,7 +3,7 @@ use axum::extract::Query;
 use axum::{Extension, body::Body, extract::State, response::Response};
 use snafu::{OptionExt, ResultExt};
 
-use crate::error::{TemplateSnafu, WhateverSnafu};
+use crate::error::{ResponseBuilderSnafu, TemplateSnafu, WhateverSnafu};
 use crate::{
     Error, Result,
     ctx::Ctx,
@@ -65,7 +65,7 @@ pub async fn photos_page_handler(
     Ok(Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .unwrap())
+        .context(ResponseBuilderSnafu)?)
 }
 
 pub async fn photo_listing_handler(
@@ -121,7 +121,7 @@ fn build_response(tpl: PhotoGridTemnplate) -> Result<Response<Body>> {
     Ok(Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .unwrap())
+        .context(ResponseBuilderSnafu)?)
 }
 
 fn build_error_response(mut tpl: PhotoGridTemnplate, error: Error) -> Result<Response<Body>> {
@@ -131,5 +131,5 @@ fn build_error_response(mut tpl: PhotoGridTemnplate, error: Error) -> Result<Res
     Ok(Response::builder()
         .status(error_info.status_code)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .unwrap())
+        .context(ResponseBuilderSnafu)?)
 }

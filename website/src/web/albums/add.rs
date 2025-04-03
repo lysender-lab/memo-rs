@@ -3,7 +3,7 @@ use axum::http::StatusCode;
 use axum::{Extension, Form, body::Body, extract::State, response::Response};
 use snafu::{OptionExt, ResultExt};
 
-use crate::error::{TemplateSnafu, WhateverSnafu};
+use crate::error::{ResponseBuilderSnafu, TemplateSnafu, WhateverSnafu};
 use crate::{
     Result,
     ctx::Ctx,
@@ -61,7 +61,7 @@ pub async fn new_album_handler(
     Ok(Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .unwrap())
+        .context(ResponseBuilderSnafu)?)
 }
 
 pub async fn post_new_album_handler(
@@ -109,7 +109,7 @@ pub async fn post_new_album_handler(
                 .status(200)
                 .header("HX-Redirect", next_url)
                 .body(Body::from("".to_string()))
-                .unwrap());
+                .context(ResponseBuilderSnafu)?);
         }
         Err(err) => {
             let error_info = ErrorInfo::from(&err);
@@ -125,5 +125,5 @@ pub async fn post_new_album_handler(
     Ok(Response::builder()
         .status(status)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .unwrap())
+        .context(ResponseBuilderSnafu)?)
 }

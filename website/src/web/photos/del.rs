@@ -3,6 +3,7 @@ use axum::Form;
 use axum::{Extension, body::Body, extract::State, response::Response};
 use snafu::ResultExt;
 
+use crate::error::ResponseBuilderSnafu;
 use crate::{
     Error, Result,
     ctx::Ctx,
@@ -44,7 +45,7 @@ pub async fn pre_delete_photo_handler(
     Ok(Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .unwrap())
+        .context(ResponseBuilderSnafu)?)
 }
 
 /// Shows delete/cancel form controls
@@ -77,7 +78,7 @@ pub async fn confirm_delete_photo_handler(
     Ok(Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .unwrap())
+        .context(ResponseBuilderSnafu)?)
 }
 
 pub async fn exec_delete_photo_handler(
@@ -125,7 +126,7 @@ pub async fn exec_delete_photo_handler(
                 .status(204)
                 .header("HX-Trigger", "PhotoDeletedEvent")
                 .body(Body::from("".to_string()))
-                .unwrap());
+                .context(ResponseBuilderSnafu)?);
         }
         Err(err) => {
             let error_info = ErrorInfo::from(&err);
@@ -145,5 +146,5 @@ pub async fn exec_delete_photo_handler(
     Ok(Response::builder()
         .status(status_code)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .unwrap())
+        .context(ResponseBuilderSnafu)?)
 }

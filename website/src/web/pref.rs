@@ -3,7 +3,11 @@ use axum::{body::Body, extract::State, response::Response};
 use snafu::ResultExt;
 use tower_cookies::{Cookie, Cookies, cookie::time::Duration};
 
-use crate::{Result, error::TemplateSnafu, run::AppState};
+use crate::{
+    Result,
+    error::{ResponseBuilderSnafu, TemplateSnafu},
+    run::AppState,
+};
 
 use super::THEME_COOKIE;
 
@@ -56,5 +60,5 @@ async fn theme_handler(
         .status(200)
         .header("HX-Trigger", event)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .unwrap())
+        .context(ResponseBuilderSnafu)?)
 }

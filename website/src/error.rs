@@ -1,4 +1,4 @@
-use axum::http::StatusCode;
+use axum::http::{self, StatusCode};
 use axum::{
     body::Body,
     extract::rejection::JsonRejection,
@@ -51,6 +51,12 @@ pub enum Error {
     #[snafu(display("Failed to render template: {}", source))]
     Template {
         source: askama::Error,
+        backtrace: Backtrace,
+    },
+
+    #[snafu(display("Response builder error: {}", source))]
+    ResponseBuilder {
+        source: http::Error,
         backtrace: Backtrace,
     },
 

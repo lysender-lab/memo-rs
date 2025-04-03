@@ -13,7 +13,7 @@ use validator::Validate;
 
 use crate::{
     Error, Result,
-    error::TemplateSnafu,
+    error::{ResponseBuilderSnafu, TemplateSnafu},
     models::{LoginFormPayload, TemplateData},
     services::{AuthPayload, authenticate, validate_catpcha},
 };
@@ -68,7 +68,7 @@ pub async fn login_handler(
         .header("Pragma", "no-cache")
         .header("Expires", 0)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .unwrap())
+        .context(ResponseBuilderSnafu)?)
 }
 
 pub async fn post_login_handler(

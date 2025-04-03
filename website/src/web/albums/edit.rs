@@ -5,7 +5,7 @@ use snafu::{OptionExt, ResultExt};
 use crate::{
     Error, Result,
     ctx::Ctx,
-    error::{TemplateSnafu, WhateverSnafu},
+    error::{ResponseBuilderSnafu, TemplateSnafu, WhateverSnafu},
     models::{Album, UpdateAlbumForm},
     run::AppState,
     services::{create_csrf_token, update_album},
@@ -51,7 +51,7 @@ pub async fn edit_album_controls_handler(
     Ok(Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .unwrap())
+        .context(ResponseBuilderSnafu)?)
 }
 
 /// Renders the edit album form
@@ -78,7 +78,7 @@ pub async fn edit_album_handler(
     Ok(Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .unwrap())
+        .context(ResponseBuilderSnafu)?)
 }
 
 /// Handles the edit album submission
@@ -149,11 +149,11 @@ pub async fn post_edit_album_handler(
         Ok(Response::builder()
             .status(status)
             .body(Body::from(tpl.render().context(TemplateSnafu)?))
-            .unwrap())
+            .context(ResponseBuilderSnafu)?)
     } else {
         Ok(Response::builder()
             .status(status)
             .body(Body::from(tpl.render().context(TemplateSnafu)?))
-            .unwrap())
+            .context(ResponseBuilderSnafu)?)
     }
 }

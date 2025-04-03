@@ -67,7 +67,7 @@ pub fn handle_error(
             .body(Body::from(
                 tpl.render().expect("Error template must render"),
             ))
-            .unwrap()
+            .expect("Response builder must succeed")
     } else {
         let status_code = error.status_code;
         let tpl = ErrorWidgetData { error };
@@ -77,7 +77,7 @@ pub fn handle_error(
             .body(Body::from(
                 tpl.render().expect("Error template must render"),
             ))
-            .unwrap()
+            .expect("Response builder must succeed")
     }
 }
 
@@ -93,5 +93,5 @@ pub fn handle_error_message(error: &Error) -> Response<Body> {
         .body(Body::from(
             tpl.render().expect("Error template must render"),
         ))
-        .unwrap()
+        .expect("Response builder must succeed")
 }

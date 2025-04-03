@@ -5,6 +5,7 @@ use axum::http::HeaderMap;
 use axum::{Extension, body::Body, extract::State, response::Response};
 use snafu::{OptionExt, ResultExt};
 
+use crate::error::ResponseBuilderSnafu;
 use crate::{
     Result,
     ctx::Ctx,
@@ -52,7 +53,7 @@ pub async fn upload_page_handler(
     Ok(Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .unwrap())
+        .context(ResponseBuilderSnafu)?)
 }
 
 pub async fn upload_handler(
@@ -96,7 +97,7 @@ pub async fn upload_handler(
                 .status(201)
                 .header("X-Next-Token", token)
                 .body(Body::from(tpl.render().context(TemplateSnafu)?))
-                .unwrap())
+                .context(ResponseBuilderSnafu)?)
         }
         Err(err) => Ok(handle_error_message(&err)),
     }

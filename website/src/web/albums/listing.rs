@@ -11,7 +11,7 @@ use urlencoding::encode;
 use crate::{
     Error, Result,
     ctx::Ctx,
-    error::{ErrorInfo, TemplateSnafu, WhateverSnafu},
+    error::{ErrorInfo, ResponseBuilderSnafu, TemplateSnafu, WhateverSnafu},
     models::{Album, ListAlbumsParams, PaginationLinks},
     run::AppState,
     services::list_albums,
@@ -66,7 +66,7 @@ fn build_response(tpl: AlbumsTemplate) -> Result<Response<Body>> {
     Ok(Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .unwrap())
+        .context(ResponseBuilderSnafu)?)
 }
 
 fn build_error_response(mut tpl: AlbumsTemplate, error: Error) -> Result<Response<Body>> {
@@ -76,5 +76,5 @@ fn build_error_response(mut tpl: AlbumsTemplate, error: Error) -> Result<Respons
     Ok(Response::builder()
         .status(error_info.status_code)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .unwrap())
+        .context(ResponseBuilderSnafu)?)
 }

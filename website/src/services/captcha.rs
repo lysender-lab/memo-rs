@@ -2,7 +2,10 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 
-use crate::{Result, error::HttpClientSnafu};
+use crate::{
+    Result,
+    error::{HttpClientSnafu, HttpResponseParseSnafu},
+};
 
 const VERIFY_URL: &str =
     "https://recaptchaenterprise.googleapis.com/v1/projects/lysender-misc-project/assessments?key=";
@@ -87,7 +90,9 @@ pub async fn validate_catpcha(site_key: &str, api_key: &str, response: &str) -> 
     if response.status().is_success() {
         Ok(())
     } else {
-        let err_str = response.text().await.context(HttpResponseParseSnafu);
+        let err_str = response.text().await.context(HttpResponseParseSnafu {
+            msg: "Unable to parse captcha error response",
+        })?;
         Err(format!("Unable to validate captcha: {}", err_str).into())
     }
 }

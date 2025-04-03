@@ -4,12 +4,12 @@ use axum::http::{Method, StatusCode};
 use axum::{Extension, body::Body, extract::State, response::Response};
 use snafu::{OptionExt, ResultExt};
 
-use crate::error::{TemplateSnafu, WhateverSnafu};
+use crate::error::{ResponseBuilderSnafu, TemplateSnafu, WhateverSnafu};
 use crate::{
     Result,
     ctx::Ctx,
     error::ErrorInfo,
-    models::{Album, DeleteAlbumForm, Pref},
+    models::{Album, DeleteAlbumForm},
     run::AppState,
     services::{create_csrf_token, delete_album},
     web::{Action, Resource, enforce_policy},
@@ -63,7 +63,7 @@ pub async fn delete_album_handler(
                     .status(200)
                     .header("HX-Redirect", "/")
                     .body(Body::from(tpl.render().context(TemplateSnafu)?))
-                    .unwrap());
+                    .context(ResponseBuilderSnafu)?);
             }
             Err(err) => {
                 let error_info = ErrorInfo::from(&err);
@@ -83,5 +83,5 @@ pub async fn delete_album_handler(
     Ok(Response::builder()
         .status(status_code)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .unwrap())
+        .context(ResponseBuilderSnafu)?)
 }

@@ -43,7 +43,7 @@ pub async fn run(config: Config) -> Result<()> {
     axum::serve(listener, routes_all.into_make_service())
         .with_graceful_shutdown(shutdown_signal())
         .await
-        .unwrap();
+        .expect("Server must start");
 
     info!("HTTP Server stopped");
 
