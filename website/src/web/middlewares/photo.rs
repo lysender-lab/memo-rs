@@ -4,63 +4,40 @@ use axum::{
     middleware::Next,
     response::Response,
 };
+use snafu::OptionExt;
 
 use crate::{
+    Result,
     ctx::Ctx,
-    error::ErrorInfo,
-    models::{PhotoParams, Pref},
+    error::WhateverSnafu,
+    models::PhotoParams,
     run::AppState,
     services::get_photo,
-    web::{Action, Resource, enforce_policy, handle_error},
+    web::{Action, Resource, enforce_policy},
 };
 
 pub async fn photo_middleware(
     State(state): State<AppState>,
     Extension(ctx): Extension<Ctx>,
-    Extension(pref): Extension<Pref>,
     Path(params): Path<PhotoParams>,
     mut req: Request,
     next: Next,
-) -> Response {
+) -> Result<Response> {
     let actor = ctx.actor().expect("actor is required");
-    let full_page = req.headers().get("HX-Request").is_none();
-    if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Read) {
-        return handle_error(
-            &state,
-            Some(actor.clone()),
-            &pref,
-            ErrorInfo::from(&err),
-            full_page,
-        );
-    }
+    let _ = enforce_policy(actor, Resource::Photo, Action::Read)?;
 
     let album_id = params.album_id.expect("album_id is required");
     let photo_id = params.photo_id.expect("photo_id is required");
 
     let default_bucket_id = actor.default_bucket_id.clone();
-    let Some(bucket_id) = default_bucket_id else {
-        let error = ErrorInfo::new("No default bucket.".to_string());
-        return handle_error(&state, Some(actor.clone()), &pref, error, full_page);
-    };
+    let bucket_id = default_bucket_id.context(WhateverSnafu {
+        msg: "No default bucket.",
+    })?;
 
     let token = ctx.token().expect("token is required");
     let config = state.config.clone();
-    let result = get_photo(&config.api_url, token, &bucket_id, &album_id, &photo_id).await;
+    let photo = get_photo(&config.api_url, token, &bucket_id, &album_id, &photo_id).await?;
 
-    match result {
-        Ok(photo) => {
-            req.extensions_mut().insert(photo);
-        }
-        Err(err) => {
-            return handle_error(
-                &state,
-                Some(actor.clone()),
-                &pref,
-                ErrorInfo::from(&err),
-                full_page,
-            );
-        }
-    };
-
-    next.run(req).await
+    req.extensions_mut().insert(photo);
+    Ok(next.run(req).await)
 }

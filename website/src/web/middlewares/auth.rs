@@ -7,7 +7,7 @@ use axum::{
 use axum_extra::extract::CookieJar;
 
 use crate::{
-    Error,
+    Error, Result,
     ctx::{Ctx, CtxValue},
     error::ErrorInfo,
     models::Pref,
@@ -58,21 +58,18 @@ pub async fn auth_middleware(
 
 pub async fn require_auth_middleware(
     Extension(ctx): Extension<Ctx>,
-    Extension(pref): Extension<Pref>,
-    State(state): State<AppState>,
     req: Request,
     next: Next,
-) -> Response {
+) -> Result<Response> {
     let full_page = req.headers().get("HX-Request").is_none();
 
     if ctx.value.is_none() {
         if full_page {
-            return Redirect::to("/login").into_response();
+            return Ok(Redirect::to("/login").into_response());
         } else {
-            let error = ErrorInfo::from(&Error::LoginRequired);
-            return handle_error(&state, None, &pref, error, full_page);
+            return Err(Error::LoginRequired);
         }
     }
 
-    next.run(req).await
+    Ok(next.run(req).await)
 }

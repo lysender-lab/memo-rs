@@ -160,6 +160,9 @@ pub enum Error {
     #[snafu(display("Stale form data. Refresh the page and try again."))]
     CsrfToken,
 
+    #[snafu(display("Failed to initialize form data. Refresh the page and try again."))]
+    CsrfInit,
+
     #[snafu(display("{}", msg))]
     Whatever { msg: String },
 }
