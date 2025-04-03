@@ -5,10 +5,12 @@ use axum::{
     extract::{Query, State},
     response::Response,
 };
+use snafu::ResultExt;
 
 use crate::{
     Result,
     ctx::Ctx,
+    error::TemplateSnafu,
     models::{ListAlbumsParams, TemplateData},
 };
 use crate::{models::Pref, run::AppState};
@@ -49,6 +51,6 @@ pub async fn index_handler(
         )
         .header("Pragma", "no-cache")
         .header("Expires", 0)
-        .body(Body::from(tpl.render().unwrap()))
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
         .unwrap())
 }

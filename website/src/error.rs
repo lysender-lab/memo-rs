@@ -48,6 +48,12 @@ pub enum Error {
         backtrace: Backtrace,
     },
 
+    #[snafu(display("Failed to render template: {}", source))]
+    Template {
+        source: askama::Error,
+        backtrace: Backtrace,
+    },
+
     #[snafu(display("{}", msg))]
     Validation { msg: String },
 

@@ -2,14 +2,18 @@ use askama::Template;
 use axum::Form;
 use axum::http::{Method, StatusCode};
 use axum::{Extension, body::Body, extract::State, response::Response};
+use snafu::{OptionExt, ResultExt};
 
-use crate::error::ErrorInfo;
-use crate::models::{DeleteAlbumForm, Pref};
-use crate::run::AppState;
-use crate::services::{create_csrf_token, delete_album};
-use crate::{ctx::Ctx, models::Album};
-
-use crate::web::{Action, Resource, enforce_policy, handle_error};
+use crate::error::{TemplateSnafu, WhateverSnafu};
+use crate::{
+    Result,
+    ctx::Ctx,
+    error::ErrorInfo,
+    models::{Album, DeleteAlbumForm, Pref},
+    run::AppState,
+    services::{create_csrf_token, delete_album},
+    web::{Action, Resource, enforce_policy},
+};
 
 #[derive(Template)]
 #[template(path = "widgets/delete_album_form.html")]
@@ -22,35 +26,22 @@ struct DeleteAlbumTemplate {
 /// Deletes album then redirect or show error
 pub async fn delete_album_handler(
     Extension(ctx): Extension<Ctx>,
-    Extension(pref): Extension<Pref>,
     Extension(album): Extension<Album>,
     State(state): State<AppState>,
     method: Method,
     payload: Form<DeleteAlbumForm>,
-) -> Response<Body> {
+) -> Result<Response<Body>> {
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
     let default_bucket_id = actor.default_bucket_id.clone();
-    let Some(bucket_id) = default_bucket_id else {
-        let error = ErrorInfo::new("No default bucket.".to_string());
-        return handle_error(&state, Some(actor.clone()), &pref, error, false);
-    };
+    let bucket_id = default_bucket_id.context(WhateverSnafu {
+        msg: "No default bucket.",
+    })?;
 
-    if let Err(err) = enforce_policy(actor, Resource::Album, Action::Delete) {
-        return handle_error(
-            &state,
-            Some(actor.clone()),
-            &pref,
-            ErrorInfo::from(&err),
-            false,
-        );
-    }
+    let _ = enforce_policy(actor, Resource::Album, Action::Delete)?;
 
-    let Ok(token) = create_csrf_token(&album.id, &config.jwt_secret) else {
-        let error = ErrorInfo::new("Failed to initialize delete album form.".to_string());
-        return handle_error(&state, Some(actor.clone()), &pref, error, true);
-    };
+    let token = create_csrf_token(&album.id, &config.jwt_secret)?;
 
     let mut error_message: Option<String> = None;
     let mut status_code: StatusCode = StatusCode::OK;
@@ -68,11 +59,11 @@ pub async fn delete_album_handler(
                     },
                     error_message,
                 };
-                return Response::builder()
+                return Ok(Response::builder()
                     .status(200)
                     .header("HX-Redirect", "/")
-                    .body(Body::from(tpl.render().unwrap()))
-                    .unwrap();
+                    .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                    .unwrap());
             }
             Err(err) => {
                 let error_info = ErrorInfo::from(&err);
@@ -89,8 +80,8 @@ pub async fn delete_album_handler(
         error_message,
     };
 
-    Response::builder()
+    Ok(Response::builder()
         .status(status_code)
-        .body(Body::from(tpl.render().unwrap()))
-        .unwrap()
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .unwrap())
 }

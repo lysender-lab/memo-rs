@@ -7,11 +7,13 @@ use axum::{
     http::Response,
     response::{IntoResponse, Redirect},
 };
+use snafu::ResultExt;
 use tower_cookies::{Cookie, Cookies, cookie::time::Duration};
 use validator::Validate;
 
 use crate::{
-    Error,
+    Error, Result,
+    error::TemplateSnafu,
     models::{LoginFormPayload, TemplateData},
     services::{AuthPayload, authenticate, validate_catpcha},
 };
@@ -34,7 +36,7 @@ struct LoginTemplate {
 pub async fn login_handler(
     State(state): State<AppState>,
     Query(query): Query<HashMap<String, String>>,
-) -> impl IntoResponse {
+) -> Result<Response<Body>> {
     // Errors are handled via redirect with query params
     let pref = Pref::new();
     let actor: Option<Actor> = None;
@@ -56,7 +58,7 @@ pub async fn login_handler(
         error_message,
     };
 
-    Response::builder()
+    Ok(Response::builder()
         .status(200)
         .header("Surrogate-Control", "no-store")
         .header(
@@ -65,8 +67,8 @@ pub async fn login_handler(
         )
         .header("Pragma", "no-cache")
         .header("Expires", 0)
-        .body(tpl.render().unwrap())
-        .unwrap()
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .unwrap())
 }
 
 pub async fn post_login_handler(

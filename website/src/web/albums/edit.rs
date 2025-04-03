@@ -1,13 +1,17 @@
 use askama::Template;
 use axum::{Extension, Form, body::Body, extract::State, response::Response};
+use snafu::{OptionExt, ResultExt};
 
-use crate::error::ErrorInfo;
-use crate::models::{Pref, UpdateAlbumForm};
-use crate::run::AppState;
-use crate::services::{create_csrf_token, update_album};
-use crate::{Error, ctx::Ctx, models::Album};
+use crate::{
+    Error, Result,
+    ctx::Ctx,
+    error::{TemplateSnafu, WhateverSnafu},
+    models::{Album, UpdateAlbumForm},
+    run::AppState,
+    services::{create_csrf_token, update_album},
+};
 
-use crate::web::{Action, Resource, enforce_policy, handle_error};
+use crate::web::{Action, Resource, enforce_policy};
 
 #[derive(Template)]
 #[template(path = "widgets/edit_album_form.html")]
@@ -33,7 +37,7 @@ struct EditAlbumControlsTemplate {
 pub async fn edit_album_controls_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(album): Extension<Album>,
-) -> Response<Body> {
+) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
     let tpl = EditAlbumControlsTemplate {
         album,
@@ -44,35 +48,24 @@ pub async fn edit_album_controls_handler(
         can_delete_photos: enforce_policy(actor, Resource::Photo, Action::Delete).is_ok(),
     };
 
-    Response::builder()
+    Ok(Response::builder()
         .status(200)
-        .body(Body::from(tpl.render().unwrap()))
-        .unwrap()
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .unwrap())
 }
 
 /// Renders the edit album form
 pub async fn edit_album_handler(
     Extension(ctx): Extension<Ctx>,
-    Extension(pref): Extension<Pref>,
     Extension(album): Extension<Album>,
     State(state): State<AppState>,
-) -> Response<Body> {
+) -> Result<Response<Body>> {
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    if let Err(err) = enforce_policy(actor, Resource::Album, Action::Update) {
-        return handle_error(
-            &state,
-            Some(actor.clone()),
-            &pref,
-            ErrorInfo::from(&err),
-            false,
-        );
-    }
-    let Ok(token) = create_csrf_token(&album.id, &config.jwt_secret) else {
-        let error = ErrorInfo::new("Failed to initialize edit album form.".to_string());
-        return handle_error(&state, Some(actor.clone()), &pref, error, true);
-    };
+    let _ = enforce_policy(actor, Resource::Album, Action::Update)?;
+
+    let token = create_csrf_token(&album.id, &config.jwt_secret)?;
 
     let label = album.label.clone();
     let tpl = EditAlbumFormTemplate {
@@ -82,37 +75,30 @@ pub async fn edit_album_handler(
         updated: false,
     };
 
-    Response::builder()
+    Ok(Response::builder()
         .status(200)
-        .body(Body::from(tpl.render().unwrap()))
-        .unwrap()
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .unwrap())
 }
 
 /// Handles the edit album submission
 pub async fn post_edit_album_handler(
     Extension(ctx): Extension<Ctx>,
-    Extension(pref): Extension<Pref>,
     Extension(album): Extension<Album>,
     State(state): State<AppState>,
     payload: Form<UpdateAlbumForm>,
-) -> Response<Body> {
+) -> Result<Response<Body>> {
     let config = state.config.clone();
     let album_id = album.id.clone();
     let actor = ctx.actor().expect("actor is required");
     let default_bucket_id = actor.default_bucket_id.clone();
-    let Some(bucket_id) = default_bucket_id else {
-        let error = ErrorInfo::new("No default bucket.".to_string());
-        return handle_error(&state, Some(actor.clone()), &pref, error, false);
-    };
+    let bucket_id = default_bucket_id.context(WhateverSnafu {
+        msg: "No default bucket.",
+    })?;
 
-    if let Err(err) = enforce_policy(actor, Resource::Album, Action::Update) {
-        let error = ErrorInfo::from(&err);
-        return handle_error(&state, Some(actor.clone()), &pref, error, false);
-    }
-    let Ok(token) = create_csrf_token(&album.id, &config.jwt_secret) else {
-        let error = ErrorInfo::new("Failed to initialize edit album form.".to_string());
-        return handle_error(&state, Some(actor.clone()), &pref, error, true);
-    };
+    let _ = enforce_policy(actor, Resource::Album, Action::Update)?;
+
+    let token = create_csrf_token(&album.id, &config.jwt_secret)?;
 
     let mut tpl = EditAlbumFormTemplate {
         album,
@@ -160,14 +146,14 @@ pub async fn post_edit_album_handler(
             can_add_photos: enforce_policy(actor, Resource::Photo, Action::Create).is_ok(),
             can_delete_photos: enforce_policy(actor, Resource::Photo, Action::Delete).is_ok(),
         };
-        Response::builder()
+        Ok(Response::builder()
             .status(status)
-            .body(Body::from(tpl.render().unwrap()))
-            .unwrap()
+            .body(Body::from(tpl.render().context(TemplateSnafu)?))
+            .unwrap())
     } else {
-        Response::builder()
+        Ok(Response::builder()
             .status(status)
-            .body(Body::from(tpl.render().unwrap()))
-            .unwrap()
+            .body(Body::from(tpl.render().context(TemplateSnafu)?))
+            .unwrap())
     }
 }
