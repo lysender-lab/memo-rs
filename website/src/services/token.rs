@@ -51,12 +51,12 @@ mod tests {
     #[test]
     fn test_jwt_token() {
         // Generate token
-        let token = create_csrf_token("example", "secret").unwrap();
+        let token = create_csrf_token("example", "secret").expect("Token should be generated");
         assert!(token.len() > 0);
         println!("Token: {}", token);
 
         // Validate it back
-        let value = verify_csrf_token(&token, "secret").unwrap();
+        let value = verify_csrf_token(&token, "secret").expect("Token should be verified");
         assert_eq!(value, "example".to_string());
     }
 

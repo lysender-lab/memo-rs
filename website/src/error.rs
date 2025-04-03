@@ -228,7 +228,10 @@ impl From<&Error> for StatusCode {
 impl IntoResponse for Error {
     fn into_response(self) -> Response<Body> {
         let status_code = StatusCode::from(&self);
-        let title = status_code.canonical_reason().unwrap().to_string();
+        let title = status_code
+            .canonical_reason()
+            .expect("status_code must be valid")
+            .to_string();
         let message = format!("{}", self);
         let mut backtrace: Option<String> = None;
         if let Some(bt) = ErrorCompat::backtrace(&self) {
@@ -239,7 +242,7 @@ impl IntoResponse for Error {
         let mut res = Response::builder()
             .status(StatusCode::INTERNAL_SERVER_ERROR)
             .body(Body::empty())
-            .unwrap();
+            .expect("Response builder must succeed");
 
         res.extensions_mut().insert(ErrorInfo {
             status_code,
@@ -267,25 +270,16 @@ pub struct ErrorInfo {
     pub backtrace: Option<String>,
 }
 
-impl ErrorInfo {
-    /// Creates a generic internal server error
-    pub fn new(message: String) -> Self {
-        Self {
-            status_code: StatusCode::INTERNAL_SERVER_ERROR,
-            title: "Internal Server Error".to_string(),
-            message,
-            backtrace: None,
-        }
-    }
-}
-
 impl From<&Error> for ErrorInfo {
     fn from(e: &Error) -> Self {
         let status_code = e.into();
         let msg = e.to_string();
         Self {
             status_code,
-            title: status_code.canonical_reason().unwrap().to_string(),
+            title: status_code
+                .canonical_reason()
+                .expect("status_code must be valid")
+                .to_string(),
             message: msg,
             backtrace: None,
         }

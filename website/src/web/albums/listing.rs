@@ -5,17 +5,18 @@ use axum::{
     extract::{Query, State},
     response::Response,
 };
+use snafu::{OptionExt, ResultExt};
 use urlencoding::encode;
 
 use crate::{
-    Error,
+    Error, Result,
     ctx::Ctx,
-    error::ErrorInfo,
-    models::{Album, ListAlbumsParams},
+    error::{ErrorInfo, TemplateSnafu, WhateverSnafu},
+    models::{Album, ListAlbumsParams, PaginationLinks},
+    run::AppState,
     services::list_albums,
     web::{Action, Resource, enforce_policy},
 };
-use crate::{models::PaginationLinks, run::AppState};
 
 #[derive(Template)]
 #[template(path = "widgets/albums.html")]
@@ -30,7 +31,7 @@ pub async fn album_listing_handler(
     Extension(ctx): Extension<Ctx>,
     State(state): State<AppState>,
     Query(query): Query<ListAlbumsParams>,
-) -> Response<Body> {
+) -> Result<Response<Body>> {
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
     let default_bucket_id = actor.default_bucket_id.clone();
@@ -42,17 +43,12 @@ pub async fn album_listing_handler(
         can_create: enforce_policy(actor, Resource::Album, Action::Create).is_ok(),
     };
 
-    let Some(bucket_id) = default_bucket_id else {
-        return build_error_response(
-            tpl,
-            Error::Whatever {
-                msg: "No default bucket".to_string(),
-            },
-        );
-    };
+    let bucket_id = default_bucket_id.context(WhateverSnafu {
+        msg: "No default bucket",
+    })?;
 
     let token = ctx.token().expect("token is required");
-    return match list_albums(&config.api_url, token, &bucket_id, &query).await {
+    match list_albums(&config.api_url, token, &bucket_id, &query).await {
         Ok(albums) => {
             let mut keyword_param: String = "".to_string();
             if let Some(keyword) = &query.keyword {
@@ -63,22 +59,22 @@ pub async fn album_listing_handler(
             build_response(tpl)
         }
         Err(err) => build_error_response(tpl, err),
-    };
+    }
 }
 
-fn build_response(tpl: AlbumsTemplate) -> Response<Body> {
-    Response::builder()
+fn build_response(tpl: AlbumsTemplate) -> Result<Response<Body>> {
+    Ok(Response::builder()
         .status(200)
-        .body(Body::from(tpl.render().unwrap()))
-        .unwrap()
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .unwrap())
 }
 
-fn build_error_response(mut tpl: AlbumsTemplate, error: Error) -> Response<Body> {
+fn build_error_response(mut tpl: AlbumsTemplate, error: Error) -> Result<Response<Body>> {
     let error_info = ErrorInfo::from(&error);
     tpl.error_message = Some(error_info.message);
 
-    Response::builder()
+    Ok(Response::builder()
         .status(error_info.status_code)
-        .body(Body::from(tpl.render().unwrap()))
-        .unwrap()
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .unwrap())
 }

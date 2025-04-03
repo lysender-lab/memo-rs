@@ -64,7 +64,9 @@ pub fn handle_error(
 
         Response::builder()
             .status(status_code)
-            .body(Body::from(tpl.render().unwrap()))
+            .body(Body::from(
+                tpl.render().expect("Error template must render"),
+            ))
             .unwrap()
     } else {
         let status_code = error.status_code;
@@ -72,7 +74,9 @@ pub fn handle_error(
 
         Response::builder()
             .status(status_code)
-            .body(Body::from(tpl.render().unwrap()))
+            .body(Body::from(
+                tpl.render().expect("Error template must render"),
+            ))
             .unwrap()
     }
 }
@@ -86,6 +90,8 @@ pub fn handle_error_message(error: &Error) -> Response<Body> {
 
     Response::builder()
         .status(error_info.status_code)
-        .body(Body::from(tpl.render().unwrap()))
+        .body(Body::from(
+            tpl.render().expect("Error template must render"),
+        ))
         .unwrap()
 }

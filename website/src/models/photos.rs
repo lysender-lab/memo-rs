@@ -117,7 +117,11 @@ impl TryFrom<FileObject> for Photo {
             .filter_map(|v| match v.url {
                 None => None,
                 Some(url) => Some(PhotoVersionDto {
-                    version: v.version.as_str().try_into().unwrap(),
+                    version: v
+                        .version
+                        .as_str()
+                        .try_into()
+                        .expect("Photo version must be valid"),
                     dimension: v.dimension,
                     url,
                 }),
@@ -143,9 +147,9 @@ impl TryFrom<FileObject> for Photo {
             filename: file.filename,
             content_type: file.content_type,
             size: file.size,
-            orig: orig.unwrap().clone(),
-            preview: preview.unwrap().clone(),
-            thumb: thumb.unwrap().clone(),
+            orig: orig.expect("orig version must be present").clone(),
+            preview: preview.expect("preview version must be present").clone(),
+            thumb: thumb.expect("thumb version must be present").clone(),
             created_at: file.created_at,
             updated_at: file.updated_at,
         })

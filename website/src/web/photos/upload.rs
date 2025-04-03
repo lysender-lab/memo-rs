@@ -5,18 +5,15 @@ use axum::http::HeaderMap;
 use axum::{Extension, body::Body, extract::State, response::Response};
 use snafu::{OptionExt, ResultExt};
 
-use crate::error::{TemplateSnafu, WhateverSnafu};
 use crate::{
     Result,
     ctx::Ctx,
-    error::ErrorInfo,
+    error::{TemplateSnafu, WhateverSnafu},
     models::{Album, Photo, Pref, TemplateData, UploadParams},
     run::AppState,
     services::{create_csrf_token, upload_photo},
-    web::{Resource, enforce_policy, handle_error, handle_error_message, policies::Action},
+    web::{Resource, enforce_policy, handle_error_message, policies::Action},
 };
-
-use crate::web::policies::{Action, Resource, enforce_policy};
 
 #[derive(Template)]
 #[template(path = "pages/upload_photos.html")]

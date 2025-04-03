@@ -87,7 +87,7 @@ pub async fn validate_catpcha(site_key: &str, api_key: &str, response: &str) -> 
     if response.status().is_success() {
         Ok(())
     } else {
-        let err_str = response.text().await.unwrap();
+        let err_str = response.text().await.context(HttpResponseParseSnafu);
         Err(format!("Unable to validate captcha: {}", err_str).into())
     }
 }

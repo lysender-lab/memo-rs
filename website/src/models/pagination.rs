@@ -280,7 +280,7 @@ mod tests {
         assert!(links.prev.is_none());
         assert!(links.next.is_some());
         assert_eq!(links.items.len(), 5);
-        assert!(links.items.get(3).unwrap().is_none());
+        assert!(links.items.get(3).expect("item must exist").is_none());
     }
 
     #[test]
@@ -295,7 +295,7 @@ mod tests {
         assert!(links.prev.is_none());
         assert!(links.next.is_some());
         assert_eq!(links.items.len(), 5);
-        assert!(links.items.get(3).unwrap().is_none());
+        assert!(links.items.get(3).expect("item must exist").is_none());
     }
 
     #[test]
@@ -310,7 +310,7 @@ mod tests {
         assert!(links.prev.is_none());
         assert!(links.next.is_some());
         assert_eq!(links.items.len(), 5);
-        assert!(links.items.get(3).unwrap().is_none());
+        assert!(links.items.get(3).expect("item must exist").is_none());
     }
 
     #[test]
@@ -325,7 +325,7 @@ mod tests {
         assert!(links.prev.is_none());
         assert!(links.next.is_some());
         assert_eq!(links.items.len(), 5);
-        assert!(links.items.get(3).unwrap().is_none());
+        assert!(links.items.get(3).expect("item must exist").is_none());
     }
 
     #[test]
@@ -354,7 +354,7 @@ mod tests {
         assert!(links.prev.is_some());
         assert!(links.next.is_none());
         assert_eq!(links.items.len(), 5);
-        assert!(links.items.get(1).unwrap().is_none());
+        assert!(links.items.get(1).expect("item must exist").is_none());
     }
 
     #[test]
@@ -369,7 +369,7 @@ mod tests {
         assert!(links.prev.is_some());
         assert!(links.next.is_none());
         assert_eq!(links.items.len(), 5);
-        assert!(links.items.get(1).unwrap().is_none());
+        assert!(links.items.get(1).expect("item must exist").is_none());
     }
 
     #[test]
@@ -384,7 +384,7 @@ mod tests {
         assert!(links.prev.is_some());
         assert!(links.next.is_none());
         assert_eq!(links.items.len(), 5);
-        assert!(links.items.get(1).unwrap().is_none());
+        assert!(links.items.get(1).expect("item must exist").is_none());
     }
 
     #[test]
@@ -399,7 +399,7 @@ mod tests {
         assert!(links.prev.is_some());
         assert!(links.next.is_some());
         assert_eq!(links.items.len(), 5);
-        assert!(links.items.get(3).unwrap().is_none());
+        assert!(links.items.get(3).expect("item must exist").is_none());
     }
 
     #[test]
