@@ -21,7 +21,7 @@ use crate::{
     file::get_file,
     web::{params::Params, server::AppState},
 };
-use memo::{role::Permission, utils::valid_id};
+use memo::{dto::client::ClientDto, role::Permission, utils::valid_id};
 
 use super::params::ClientParams;
 
@@ -108,6 +108,16 @@ pub async fn client_middleware(
         }
     );
 
+    // Ensure regular clients can only view their own clients
+    if !actor.is_system_admin() {
+        ensure!(
+            actor.client_id.as_str() == params.client_id.as_str(),
+            NotFoundSnafu {
+                msg: "Client not found"
+            }
+        )
+    }
+
     let client = get_client(&state.db_pool, &params.client_id).await?;
     let client = client.context(NotFoundSnafu {
         msg: "Client not found",
@@ -153,12 +163,14 @@ pub async fn bucket_middleware(
         msg: "Bucket not found",
     })?;
 
-    ensure!(
-        &bucket.client_id == &actor.client_id,
-        NotFoundSnafu {
-            msg: "Bucket not found"
-        }
-    );
+    if !actor.is_system_admin() {
+        ensure!(
+            &bucket.client_id == &actor.client_id,
+            NotFoundSnafu {
+                msg: "Bucket not found"
+            }
+        );
+    }
 
     // Forward to the next middleware/handler passing the bucket information
     request.extensions_mut().insert(bucket);

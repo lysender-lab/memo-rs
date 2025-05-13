@@ -40,7 +40,21 @@ pub async fn read_bucket(client: &Client, name: &str) -> Result<String> {
         Err(e) => match e {
             CloudError::Response(gerr) => {
                 if gerr.code >= 400 && gerr.code < 500 {
-                    ValidationSnafu { msg: gerr.message }.fail()
+                    match gerr.code {
+                        401 => ValidationSnafu {
+                            msg: "Cloud Storage: Unauthorized",
+                        }
+                        .fail(),
+                        403 => ValidationSnafu {
+                            msg: "Cloud Storage: Forbidden",
+                        }
+                        .fail(),
+                        404 => ValidationSnafu {
+                            msg: "Cloud Storage: Bucket not found",
+                        }
+                        .fail(),
+                        _ => ValidationSnafu { msg: gerr.message }.fail(),
+                    }
                 } else {
                     GoogleSnafu { msg: gerr.message }.fail()
                 }

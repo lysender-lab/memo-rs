@@ -14,7 +14,7 @@ use crate::{
         actor::{Actor, Credentials},
         authenticate,
     },
-    bucket::list_buckets,
+    bucket::{NewBucket, create_bucket, list_buckets},
     client::{
         ClientDefaultBucket, NewClient, UpdateClient, create_client, delete_client, get_client,
         list_clients, update_client,
@@ -252,13 +252,46 @@ pub async fn update_default_bucket_handler(
 pub async fn list_buckets_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
+    Extension(client): Extension<ClientDto>,
 ) -> Result<JsonResponse> {
-    let buckets = list_buckets(&state.db_pool, &actor.client_id).await?;
+    let permissions = vec![Permission::BucketsList];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+    let buckets = list_buckets(&state.db_pool, &client.id).await?;
     Ok(JsonResponse::new(serde_json::to_string(&buckets).unwrap()))
 }
 
 pub async fn get_bucket_handler(Extension(bucket): Extension<BucketDto>) -> Result<JsonResponse> {
     Ok(JsonResponse::new(serde_json::to_string(&bucket).unwrap()))
+}
+
+pub async fn create_bucket_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(client): Extension<ClientDto>,
+    payload: CoreResult<Json<NewBucket>, JsonRejection>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::BucketsCreate];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
+
+    let bucket = create_bucket(&state.db_pool, &state.storage_client, &client.id, &data).await?;
+    Ok(JsonResponse::with_status(
+        StatusCode::CREATED,
+        serde_json::to_string(&bucket).unwrap(),
+    ))
 }
 
 pub async fn list_dirs_handler(
