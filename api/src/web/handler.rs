@@ -19,15 +19,12 @@ use crate::{
         ClientDefaultBucket, NewClient, UpdateClient, create_client, delete_client, list_clients,
         update_client,
     },
-    dir::{
-        Dir, ListDirsParams, NewDir, UpdateDir, create_dir, delete_dir, get_dir, list_dirs,
-        update_dir,
-    },
+    dir::{Dir, ListDirsParams, NewDir, UpdateDir, delete_dir},
     error::{
         CreateFileSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, MissingUploadFileSnafu,
         Result, UploadDirSnafu, WhateverSnafu,
     },
-    file::{FileObject, FilePayload, ListFilesParams, create_file, delete_file, list_files},
+    file::{FileObject, FilePayload, ListFilesParams, create_file, delete_file},
     health::{check_liveness, check_readiness},
     web::{params::Params, response::JsonResponse, server::AppState},
 };
@@ -299,10 +296,7 @@ pub async fn list_dirs_handler(
     Path(bucket_id): Path<String>,
     query: Query<ListDirsParams>,
 ) -> Result<JsonResponse> {
-    //let Some(params) = query else {
-    //    return Err(Error::BadRequest("Invalid query parameters".to_string()));
-    //};
-    let dirs = list_dirs(&state.db_pool, &bucket_id, &query).await?;
+    let dirs = state.db.dirs.list(bucket_id.as_str(), &query).await?;
     Ok(JsonResponse::new(serde_json::to_string(&dirs).unwrap()))
 }
 
@@ -324,7 +318,7 @@ pub async fn create_dir_handler(
         msg: "Invalid request payload",
     })?;
 
-    let dir = create_dir(&state.db_pool, &bucket_id, &data).await?;
+    let dir = state.db.dirs.create(&bucket_id, &data).await?;
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,
         serde_json::to_string(&dir).unwrap(),
@@ -355,7 +349,7 @@ pub async fn update_dir_handler(
         msg: "Invalid request payload",
     })?;
 
-    let updated = update_dir(&state.db_pool, &dir_id, &data).await?;
+    let updated = state.db.dirs.update(&dir_id, &data).await?;
 
     // Either return the updated dir or the original one
     match updated {
@@ -365,7 +359,7 @@ pub async fn update_dir_handler(
 }
 
 async fn get_dir_as_response(state: &AppState, id: &str) -> Result<JsonResponse> {
-    let res = get_dir(&state.db_pool, id).await?;
+    let res = state.db.dirs.get(id).await?;
     let dir = res.context(WhateverSnafu {
         msg: "Error getting directory",
     })?;
@@ -387,7 +381,7 @@ pub async fn delete_dir_handler(
     );
 
     let dir_id = params.dir_id.clone().expect("dir_id is required");
-    let _ = delete_dir(&state.db_pool, &dir_id).await?;
+    let _ = delete_dir(state, &dir_id).await?;
     Ok(JsonResponse::with_status(
         StatusCode::NO_CONTENT,
         "".to_string(),
@@ -409,11 +403,7 @@ pub async fn list_files_handler(
         }
     );
 
-    //let Some(params) = query else {
-    //    return Err(Error::BadRequest("Invalid query parameters".to_string()));
-    //};
-
-    let files = list_files(&state.db_pool, &dir, &query).await?;
+    let files = state.db.files.list(&dir, &query).await?;
     let storage_client = state.storage_client.clone();
 
     // Generate download urls for each files
@@ -499,9 +489,8 @@ pub async fn create_file_handler(
         msg: "Missing upload file",
     })?;
 
-    let db_pool = state.db_pool.clone();
     let storage_client = state.storage_client.clone();
-    let file = create_file(&db_pool, storage_client.clone(), &bucket, &dir, &payload).await?;
+    let file = create_file(state, &bucket, &dir, &payload).await?;
     let file_dto: FileDto = file.into();
     let file_dto = storage_client
         .format_file(&bucket.name, &dir.name, file_dto)

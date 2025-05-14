@@ -6,7 +6,7 @@ use text_io::read;
 use crate::Result;
 use crate::auth::user::{delete_user, list_users, update_user_password, update_user_status};
 use crate::bucket::{NewBucket, create_bucket};
-use crate::client::{NewClient, find_admin_client};
+use crate::client::NewClient;
 use crate::config::{BucketCommand, Config, UserCommand};
 use crate::db::{create_db_mapper, create_db_pool};
 use crate::error::{PasswordPromptSnafu, ValidationSnafu};

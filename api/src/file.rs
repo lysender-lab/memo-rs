@@ -1,3 +1,5 @@
+use async_trait::async_trait;
+
 use chrono::{DateTime, NaiveDateTime};
 use deadpool_diesel::sqlite::Pool;
 use diesel::dsl::count_star;
@@ -22,6 +24,7 @@ use crate::error::{
 };
 use crate::schema::files::{self, dsl};
 use crate::storage::CloudStorable;
+use crate::web::server::AppState;
 use memo::dto::bucket::BucketDto;
 use memo::dto::file::{FileDto, ImgDimension, ImgVersion, ImgVersionDto};
 use memo::dto::pagination::Paginated;
@@ -161,154 +164,8 @@ impl From<FileObject> for FileDto {
 const MAX_PER_PAGE: i32 = 50;
 const MAX_FILES: i32 = 1000;
 
-pub async fn list_files(
-    db_pool: &Pool,
-    dir: &Dir,
-    params: &ListFilesParams,
-) -> Result<Paginated<FileObject>> {
-    let errors = params.validate();
-    ensure!(
-        errors.is_ok(),
-        ValidationSnafu {
-            msg: flatten_errors(&errors.unwrap_err()),
-        }
-    );
-
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
-
-    let did = dir.id.clone();
-
-    let total_records = list_files_count(db_pool, &dir.id, params).await?;
-    let mut page: i32 = 1;
-    let mut per_page: i32 = MAX_PER_PAGE;
-    let mut offset: i64 = 0;
-
-    if let Some(per_page_param) = params.per_page {
-        if per_page_param > 0 && per_page_param <= MAX_PER_PAGE {
-            per_page = per_page_param;
-        }
-    }
-
-    let total_pages: i64 = (total_records as f64 / per_page as f64).ceil() as i64;
-
-    if let Some(p) = params.page {
-        let p64 = p as i64;
-        if p64 > 0 && p64 <= total_pages {
-            page = p;
-            offset = (p64 - 1) * per_page as i64;
-        }
-    }
-
-    // Do not query if we already know there are no records
-    if total_pages == 0 {
-        return Ok(Paginated::new(Vec::new(), page, per_page, total_records));
-    }
-
-    let params_copy = params.clone();
-    let select_res = db
-        .interact(move |conn| {
-            let mut query = dsl::files.into_boxed();
-            query = query.filter(dsl::dir_id.eq(did.as_str()));
-
-            if let Some(keyword) = params_copy.keyword {
-                if keyword.len() > 0 {
-                    let pattern = format!("%{}%", keyword);
-                    query = query.filter(dsl::name.like(pattern));
-                }
-            }
-            query
-                .limit(per_page as i64)
-                .offset(offset)
-                .select(FileObject::as_select())
-                .order(dsl::created_at.desc())
-                .load::<FileObject>(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let items = select_res.context(DbQuerySnafu {
-        table: "files".to_string(),
-    })?;
-
-    Ok(Paginated::new(items, page, per_page, total_records))
-}
-
-async fn list_files_count(db_pool: &Pool, dir_id: &str, params: &ListFilesParams) -> Result<i64> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
-
-    let did = dir_id.to_string();
-    let params_copy = params.clone();
-
-    let count_res = db
-        .interact(move |conn| {
-            let mut query = dsl::files.into_boxed();
-            query = query.filter(dsl::dir_id.eq(did.as_str()));
-            if let Some(keyword) = params_copy.keyword {
-                if keyword.len() > 0 {
-                    let pattern = format!("%{}%", keyword);
-                    query = query.filter(dsl::name.like(pattern));
-                }
-            }
-            query.select(count_star()).get_result::<i64>(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let count = count_res.context(DbQuerySnafu {
-        table: "files".to_string(),
-    })?;
-
-    Ok(count)
-}
-
-pub async fn find_dir_file(pool: &Pool, dir_id: &str, name: &str) -> Result<Option<FileObject>> {
-    let db = pool.get().await.context(DbPoolSnafu)?;
-
-    let did = dir_id.to_string();
-    let name_copy = name.to_string();
-    let select_res = db
-        .interact(move |conn| {
-            dsl::files
-                .filter(dsl::dir_id.eq(did.as_str()))
-                .filter(dsl::name.eq(name_copy.as_str()))
-                .select(FileObject::as_select())
-                .first::<FileObject>(conn)
-                .optional()
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let item = select_res.context(DbQuerySnafu {
-        table: "files".to_string(),
-    })?;
-
-    Ok(item)
-}
-
-pub async fn count_dir_files(db_pool: &Pool, dir_id: &str) -> Result<i64> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
-
-    let did = dir_id.to_string();
-    let count_res = db
-        .interact(move |conn| {
-            dsl::files
-                .filter(dsl::dir_id.eq(did.as_str()))
-                .select(count_star())
-                .get_result::<i64>(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let count = count_res.context(DbQuerySnafu {
-        table: "files".to_string(),
-    })?;
-
-    Ok(count)
-}
-
 pub async fn create_file(
-    db_pool: &Pool,
-    storage_client: Arc<dyn CloudStorable>,
+    state: AppState,
     bucket: &BucketDto,
     dir: &Dir,
     data: &FilePayload,
@@ -331,7 +188,7 @@ pub async fn create_file(
     }
 
     // Limit the number of files per dir
-    let count = count_dir_files(db_pool, &dir.id).await?;
+    let count = state.db.files.count_by_dir(&dir.id).await?;
     if count >= MAX_FILES as i64 {
         cleanup(data, None);
 
@@ -342,7 +199,7 @@ pub async fn create_file(
     }
 
     // Name must be unique for the dir (not filename)
-    if let Some(_) = find_dir_file(db_pool, &dir.id, &data.name).await? {
+    if let Some(_) = state.db.files.find_by_name(&dir.id, &data.name).await? {
         cleanup(data, None);
 
         // Show error but ensure name is not too long
@@ -377,7 +234,8 @@ pub async fn create_file(
         file_dto.img_taken_at = exif_info.img_taken_at;
     }
 
-    if let Err(upload_err) = storage_client
+    if let Err(upload_err) = state
+        .storage_client
         .upload_object(bucket, dir, &data.upload_dir, &file_dto)
         .await
     {
@@ -386,39 +244,277 @@ pub async fn create_file(
     }
 
     // Save to database
-    let file_db_pool = db_pool.clone();
-    let Ok(db) = file_db_pool.get().await else {
-        cleanup(data, Some(&file_dto));
-        return Err("Error getting db connection".into());
-    };
+    let create_res = state.db.files.create(file_dto.clone()).await;
+    match create_res {
+        Ok(file) => {
+            cleanup(data, Some(&file_dto));
 
-    let file: FileObject = file_dto.clone().into();
-    let file_copy = file.clone();
+            // Also update dir
+            let today = chrono::Utc::now().timestamp();
+            let dir_result = state.db.dirs.update_timestamp(&dir.id, today).await;
+            if let Err(e) = dir_result {
+                // Can't afford to fail here, we will just log the error...
+                error!("{}", e);
+            }
 
-    let insert_res = db
+            Ok(file)
+        }
+        Err(e) => {
+            cleanup(data, Some(&file_dto));
+            Err(e)
+        }
+    }
+}
+
+#[async_trait]
+pub trait FileRepoable: Send + Sync {
+    async fn list(&self, dir: &Dir, params: &ListFilesParams) -> Result<Paginated<FileObject>>;
+
+    async fn create(&self, file_dto: FileDto) -> Result<FileObject>;
+
+    async fn get(&self, id: &str) -> Result<Option<FileObject>>;
+
+    async fn find_by_name(&self, dir_id: &str, name: &str) -> Result<Option<FileObject>>;
+
+    async fn count_by_dir(&self, dir_id: &str) -> Result<i64>;
+
+    async fn delete(&self, id: &str) -> Result<()>;
+}
+
+pub struct FileRepo {
+    db_pool: Pool,
+}
+
+impl FileRepo {
+    pub fn new(db_pool: Pool) -> Self {
+        Self { db_pool }
+    }
+
+    pub async fn listing_count(&self, dir_id: &str, params: &ListFilesParams) -> Result<i64> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let did = dir_id.to_string();
+        let params_copy = params.clone();
+
+        let count_res = db
+            .interact(move |conn| {
+                let mut query = dsl::files.into_boxed();
+                query = query.filter(dsl::dir_id.eq(did.as_str()));
+                if let Some(keyword) = params_copy.keyword {
+                    if keyword.len() > 0 {
+                        let pattern = format!("%{}%", keyword);
+                        query = query.filter(dsl::name.like(pattern));
+                    }
+                }
+                query.select(count_star()).get_result::<i64>(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let count = count_res.context(DbQuerySnafu {
+            table: "files".to_string(),
+        })?;
+
+        Ok(count)
+    }
+}
+
+#[async_trait]
+impl FileRepoable for FileRepo {
+    async fn list(&self, dir: &Dir, params: &ListFilesParams) -> Result<Paginated<FileObject>> {
+        let errors = params.validate();
+        ensure!(
+            errors.is_ok(),
+            ValidationSnafu {
+                msg: flatten_errors(&errors.unwrap_err()),
+            }
+        );
+
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let did = dir.id.clone();
+
+        let total_records = self.listing_count(&dir.id, params).await?;
+        let mut page: i32 = 1;
+        let mut per_page: i32 = MAX_PER_PAGE;
+        let mut offset: i64 = 0;
+
+        if let Some(per_page_param) = params.per_page {
+            if per_page_param > 0 && per_page_param <= MAX_PER_PAGE {
+                per_page = per_page_param;
+            }
+        }
+
+        let total_pages: i64 = (total_records as f64 / per_page as f64).ceil() as i64;
+
+        if let Some(p) = params.page {
+            let p64 = p as i64;
+            if p64 > 0 && p64 <= total_pages {
+                page = p;
+                offset = (p64 - 1) * per_page as i64;
+            }
+        }
+
+        // Do not query if we already know there are no records
+        if total_pages == 0 {
+            return Ok(Paginated::new(Vec::new(), page, per_page, total_records));
+        }
+
+        let params_copy = params.clone();
+        let select_res = db
+            .interact(move |conn| {
+                let mut query = dsl::files.into_boxed();
+                query = query.filter(dsl::dir_id.eq(did.as_str()));
+
+                if let Some(keyword) = params_copy.keyword {
+                    if keyword.len() > 0 {
+                        let pattern = format!("%{}%", keyword);
+                        query = query.filter(dsl::name.like(pattern));
+                    }
+                }
+                query
+                    .limit(per_page as i64)
+                    .offset(offset)
+                    .select(FileObject::as_select())
+                    .order(dsl::created_at.desc())
+                    .load::<FileObject>(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let items = select_res.context(DbQuerySnafu {
+            table: "files".to_string(),
+        })?;
+
+        Ok(Paginated::new(items, page, per_page, total_records))
+    }
+
+    async fn create(&self, file_dto: FileDto) -> Result<FileObject> {
+        let file_db_pool = self.db_pool.clone();
+        let db = file_db_pool.get().await.context(DbPoolSnafu)?;
+
+        let file: FileObject = file_dto.clone().into();
+        let file_copy = file.clone();
+
+        let insert_res = db
+            .interact(move |conn| {
+                diesel::insert_into(files::table)
+                    .values(&file_copy)
+                    .execute(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let _ = insert_res.context(DbQuerySnafu {
+            table: "files".to_string(),
+        })?;
+
+        Ok(file)
+    }
+
+    async fn get(&self, id: &str) -> Result<Option<FileObject>> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let fid = id.to_string();
+        let select_res = db
+            .interact(move |conn| {
+                dsl::files
+                    .find(fid)
+                    .select(FileObject::as_select())
+                    .first::<FileObject>(conn)
+                    .optional()
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let item = select_res.context(DbQuerySnafu {
+            table: "files".to_string(),
+        })?;
+
+        Ok(item)
+    }
+
+    async fn find_by_name(&self, dir_id: &str, name: &str) -> Result<Option<FileObject>> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let did = dir_id.to_string();
+        let name_copy = name.to_string();
+        let select_res = db
+            .interact(move |conn| {
+                dsl::files
+                    .filter(dsl::dir_id.eq(did.as_str()))
+                    .filter(dsl::name.eq(name_copy.as_str()))
+                    .select(FileObject::as_select())
+                    .first::<FileObject>(conn)
+                    .optional()
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let item = select_res.context(DbQuerySnafu {
+            table: "files".to_string(),
+        })?;
+
+        Ok(item)
+    }
+
+    async fn count_by_dir(&self, dir_id: &str) -> Result<i64> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let did = dir_id.to_string();
+        let count_res = db
+            .interact(move |conn| {
+                dsl::files
+                    .filter(dsl::dir_id.eq(did.as_str()))
+                    .select(count_star())
+                    .get_result::<i64>(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let count = count_res.context(DbQuerySnafu {
+            table: "files".to_string(),
+        })?;
+
+        Ok(count)
+    }
+
+    async fn delete(&self, id: &str) -> Result<()> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let fid = id.to_string();
+        let delete_res = db
+            .interact(move |conn| diesel::delete(dsl::files.filter(dsl::id.eq(fid))).execute(conn))
+            .await
+            .context(DbInteractSnafu)?;
+
+        let _ = delete_res.context(DbQuerySnafu {
+            table: "files".to_string(),
+        })?;
+
+        Ok(())
+    }
+}
+
+pub async fn count_dir_files(db_pool: &Pool, dir_id: &str) -> Result<i64> {
+    let db = db_pool.get().await.context(DbPoolSnafu)?;
+
+    let did = dir_id.to_string();
+    let count_res = db
         .interact(move |conn| {
-            diesel::insert_into(files::table)
-                .values(&file_copy)
-                .execute(conn)
+            dsl::files
+                .filter(dsl::dir_id.eq(did.as_str()))
+                .select(count_star())
+                .get_result::<i64>(conn)
         })
         .await
         .context(DbInteractSnafu)?;
 
-    let _ = insert_res.context(DbQuerySnafu {
+    let count = count_res.context(DbQuerySnafu {
         table: "files".to_string(),
     })?;
 
-    cleanup(data, Some(&file_dto));
-
-    // Also update dir
-    let today = chrono::Utc::now().timestamp();
-    let dir_result = update_dir_timestamp(db_pool, &dir.id, today).await;
-    if let Err(e) = dir_result {
-        // Can't afford to fail here, we will just log the error...
-        error!("{}", e);
-    }
-
-    Ok(file)
+    Ok(count)
 }
 
 pub async fn get_file(pool: &Pool, id: &str) -> Result<Option<FileObject>> {

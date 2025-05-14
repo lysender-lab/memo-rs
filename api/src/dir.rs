@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use deadpool_diesel::sqlite::Pool;
 use diesel::dsl::count_star;
 use diesel::prelude::*;
@@ -10,8 +11,8 @@ use crate::Result;
 use crate::error::{
     DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, MaxDirsReachedSnafu, ValidationSnafu,
 };
-use crate::file::count_dir_files;
 use crate::schema::dirs::{self, dsl};
+use crate::web::server::AppState;
 use memo::dto::pagination::Paginated;
 use memo::utils::generate_id;
 use memo::validators::flatten_errors;
@@ -61,261 +62,351 @@ pub struct ListDirsParams {
 const MAX_DIRS: i32 = 1000;
 const MAX_PER_PAGE: i32 = 50;
 
-pub async fn list_dirs(
-    db_pool: &Pool,
-    bucket_id: &str,
-    params: &ListDirsParams,
-) -> Result<Paginated<Dir>> {
-    let valid_res = params.validate();
+pub async fn delete_dir(state: AppState, id: &str) -> Result<()> {
+    // Do not delete if there are still files inside
+    let file_count = state.db.files.count_by_dir(id).await?;
     ensure!(
-        valid_res.is_ok(),
+        file_count == 0,
         ValidationSnafu {
-            msg: flatten_errors(&valid_res.unwrap_err()),
+            msg: "Cannot delete directory with files inside".to_string(),
         }
     );
 
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
+    state.db.dirs.delete(id).await
+}
 
-    let bid = bucket_id.to_string();
+#[async_trait]
+pub trait DirRepoable: Send + Sync {
+    async fn list(&self, bucket_id: &str, params: &ListDirsParams) -> Result<Paginated<Dir>>;
 
-    let total_records = list_dirs_count(db_pool, bucket_id, params).await?;
-    let mut page: i32 = 1;
-    let mut per_page: i32 = MAX_PER_PAGE;
-    let mut offset: i64 = 0;
+    async fn count(&self, bucket_id: &str) -> Result<i64>;
 
-    if let Some(per_page_param) = params.per_page {
-        if per_page_param > 0 && per_page_param <= MAX_PER_PAGE {
-            per_page = per_page_param;
-        }
+    async fn create(&self, bucket_id: &str, data: &NewDir) -> Result<Dir>;
+
+    async fn get(&self, id: &str) -> Result<Option<Dir>>;
+
+    async fn find_by_name(&self, bucket_id: &str, name: &str) -> Result<Option<Dir>>;
+
+    async fn update(&self, id: &str, data: &UpdateDir) -> Result<bool>;
+
+    async fn update_timestamp(&self, id: &str, timestamp: i64) -> Result<bool>;
+
+    async fn delete(&self, id: &str) -> Result<()>;
+}
+
+pub struct DirRepo {
+    db_pool: Pool,
+}
+
+impl DirRepo {
+    pub fn new(db_pool: Pool) -> Self {
+        Self { db_pool }
     }
 
-    let total_pages: i64 = (total_records as f64 / per_page as f64).ceil() as i64;
+    async fn listing_count(&self, bucket_id: &str, params: &ListDirsParams) -> Result<i64> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
-    if let Some(p) = params.page {
-        let p64 = p as i64;
-        if p64 > 0 && p64 <= total_pages {
-            page = p;
-            offset = (p64 - 1) * per_page as i64;
-        }
-    }
+        let bid = bucket_id.to_string();
+        let params_copy = params.clone();
 
-    // Do not query if we already know there are no records
-    if total_pages == 0 {
-        return Ok(Paginated::new(Vec::new(), page, per_page, total_records));
-    }
-
-    let params_copy = params.clone();
-    let select_res = db
-        .interact(move |conn| {
-            let mut query = dsl::dirs.into_boxed();
-            query = query.filter(dsl::bucket_id.eq(bid.as_str()));
-
-            if let Some(keyword) = params_copy.keyword {
-                if keyword.len() > 0 {
-                    let pattern = format!("%{}%", keyword);
-                    query =
-                        query.filter(dsl::name.like(pattern.clone()).or(dsl::label.like(pattern)));
+        let count_res = db
+            .interact(move |conn| {
+                let mut query = dsl::dirs.into_boxed();
+                query = query.filter(dsl::bucket_id.eq(bid.as_str()));
+                if let Some(keyword) = params_copy.keyword {
+                    if keyword.len() > 0 {
+                        let pattern = format!("%{}%", keyword);
+                        query = query
+                            .filter(dsl::name.like(pattern.clone()).or(dsl::label.like(pattern)));
+                    }
                 }
-            }
-            query
-                .limit(per_page as i64)
-                .offset(offset)
-                .select(Dir::as_select())
-                .order(dsl::updated_at.desc())
-                .load::<Dir>(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
+                query.select(count_star()).get_result::<i64>(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
 
-    let items = select_res.context(DbQuerySnafu {
-        table: "dirs".to_string(),
-    })?;
+        let count = count_res.context(DbQuerySnafu {
+            table: "dirs".to_string(),
+        })?;
 
-    Ok(Paginated::new(items, page, per_page, total_records))
+        Ok(count)
+    }
 }
 
-async fn list_dirs_count(db_pool: &Pool, bucket_id: &str, params: &ListDirsParams) -> Result<i64> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
+#[async_trait]
+impl DirRepoable for DirRepo {
+    async fn list(&self, bucket_id: &str, params: &ListDirsParams) -> Result<Paginated<Dir>> {
+        let valid_res = params.validate();
+        ensure!(
+            valid_res.is_ok(),
+            ValidationSnafu {
+                msg: flatten_errors(&valid_res.unwrap_err()),
+            }
+        );
 
-    let bid = bucket_id.to_string();
-    let params_copy = params.clone();
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
-    let count_res = db
-        .interact(move |conn| {
-            let mut query = dsl::dirs.into_boxed();
-            query = query.filter(dsl::bucket_id.eq(bid.as_str()));
-            if let Some(keyword) = params_copy.keyword {
-                if keyword.len() > 0 {
-                    let pattern = format!("%{}%", keyword);
-                    query =
-                        query.filter(dsl::name.like(pattern.clone()).or(dsl::label.like(pattern)));
+        let bid = bucket_id.to_string();
+
+        let total_records = self.listing_count(bucket_id, params).await?;
+        let mut page: i32 = 1;
+        let mut per_page: i32 = MAX_PER_PAGE;
+        let mut offset: i64 = 0;
+
+        if let Some(per_page_param) = params.per_page {
+            if per_page_param > 0 && per_page_param <= MAX_PER_PAGE {
+                per_page = per_page_param;
+            }
+        }
+
+        let total_pages: i64 = (total_records as f64 / per_page as f64).ceil() as i64;
+
+        if let Some(p) = params.page {
+            let p64 = p as i64;
+            if p64 > 0 && p64 <= total_pages {
+                page = p;
+                offset = (p64 - 1) * per_page as i64;
+            }
+        }
+
+        // Do not query if we already know there are no records
+        if total_pages == 0 {
+            return Ok(Paginated::new(Vec::new(), page, per_page, total_records));
+        }
+
+        let params_copy = params.clone();
+        let select_res = db
+            .interact(move |conn| {
+                let mut query = dsl::dirs.into_boxed();
+                query = query.filter(dsl::bucket_id.eq(bid.as_str()));
+
+                if let Some(keyword) = params_copy.keyword {
+                    if keyword.len() > 0 {
+                        let pattern = format!("%{}%", keyword);
+                        query = query
+                            .filter(dsl::name.like(pattern.clone()).or(dsl::label.like(pattern)));
+                    }
                 }
-            }
-            query.select(count_star()).get_result::<i64>(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
+                query
+                    .limit(per_page as i64)
+                    .offset(offset)
+                    .select(Dir::as_select())
+                    .order(dsl::updated_at.desc())
+                    .load::<Dir>(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
 
-    let count = count_res.context(DbQuerySnafu {
-        table: "dirs".to_string(),
-    })?;
+        let items = select_res.context(DbQuerySnafu {
+            table: "dirs".to_string(),
+        })?;
 
-    Ok(count)
-}
-
-pub async fn create_dir(db_pool: &Pool, bucket_id: &str, data: &NewDir) -> Result<Dir> {
-    let valid_res = data.validate();
-    ensure!(
-        valid_res.is_ok(),
-        ValidationSnafu {
-            msg: flatten_errors(&valid_res.unwrap_err()),
-        }
-    );
-
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
-
-    // Limit the number of directories per bucket
-    let count = count_bucket_dirs(db_pool, bucket_id).await?;
-    ensure!(count < MAX_DIRS as i64, MaxDirsReachedSnafu,);
-
-    // Directory name must be unique for the bucket
-    let existing = find_bucket_dir(db_pool, bucket_id, data.name.as_str()).await?;
-    ensure!(
-        existing.is_none(),
-        ValidationSnafu {
-            msg: "Directory name already exists".to_string(),
-        }
-    );
-
-    let data_copy = data.clone();
-    let today = chrono::Utc::now().timestamp();
-    let dir = Dir {
-        id: generate_id(),
-        bucket_id: bucket_id.to_string(),
-        name: data_copy.name,
-        label: data_copy.label,
-        file_count: 0,
-        created_at: today,
-        updated_at: today,
-    };
-
-    let dir_copy = dir.clone();
-    let insert_res = db
-        .interact(move |conn| {
-            diesel::insert_into(dirs::table)
-                .values(&dir_copy)
-                .execute(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let _ = insert_res.context(DbQuerySnafu {
-        table: "dirs".to_string(),
-    })?;
-
-    Ok(dir)
-}
-
-pub async fn get_dir(pool: &Pool, id: &str) -> Result<Option<Dir>> {
-    let db = pool.get().await.context(DbPoolSnafu)?;
-
-    let did = id.to_string();
-    let select_res = db
-        .interact(move |conn| {
-            dsl::dirs
-                .find(did)
-                .select(Dir::as_select())
-                .first::<Dir>(conn)
-                .optional()
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let item = select_res.context(DbQuerySnafu {
-        table: "dirs".to_string(),
-    })?;
-
-    Ok(item)
-}
-
-pub async fn find_bucket_dir(pool: &Pool, bucket_id: &str, name: &str) -> Result<Option<Dir>> {
-    let db = pool.get().await.context(DbPoolSnafu)?;
-
-    let bid = bucket_id.to_string();
-    let name_copy = name.to_string();
-    let select_res = db
-        .interact(move |conn| {
-            dsl::dirs
-                .filter(dsl::bucket_id.eq(bid.as_str()))
-                .filter(dsl::name.eq(name_copy.as_str()))
-                .select(Dir::as_select())
-                .first::<Dir>(conn)
-                .optional()
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let item = select_res.context(DbQuerySnafu {
-        table: "dirs".to_string(),
-    })?;
-
-    Ok(item)
-}
-
-pub async fn count_bucket_dirs(db_pool: &Pool, bucket_id: &str) -> Result<i64> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
-
-    let bid = bucket_id.to_string();
-    let count_res = db
-        .interact(move |conn| {
-            dsl::dirs
-                .filter(dsl::bucket_id.eq(bid.as_str()))
-                .select(count_star())
-                .get_result::<i64>(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let count = count_res.context(DbQuerySnafu {
-        table: "dirs".to_string(),
-    })?;
-
-    Ok(count)
-}
-
-pub async fn update_dir(db_pool: &Pool, id: &str, data: &UpdateDir) -> Result<bool> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
-
-    let errors = data.validate();
-    ensure!(
-        errors.is_ok(),
-        ValidationSnafu {
-            msg: flatten_errors(&errors.unwrap_err()),
-        }
-    );
-
-    // Do not update if there is no data to update
-    if data.label.is_none() {
-        return Ok(false);
+        Ok(Paginated::new(items, page, per_page, total_records))
     }
 
-    let data_copy = data.clone();
-    let dir_id = id.to_string();
-    let update_res = db
-        .interact(move |conn| {
-            diesel::update(dsl::dirs)
-                .filter(dsl::id.eq(dir_id.as_str()))
-                .set(data_copy)
-                .execute(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
+    async fn count(&self, bucket_id: &str) -> Result<i64> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
-    let item = update_res.context(DbQuerySnafu {
-        table: "dirs".to_string(),
-    })?;
+        let bid = bucket_id.to_string();
+        let count_res = db
+            .interact(move |conn| {
+                dsl::dirs
+                    .filter(dsl::bucket_id.eq(bid.as_str()))
+                    .select(count_star())
+                    .get_result::<i64>(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
 
-    Ok(item > 0)
+        let count = count_res.context(DbQuerySnafu {
+            table: "dirs".to_string(),
+        })?;
+
+        Ok(count)
+    }
+
+    async fn create(&self, bucket_id: &str, data: &NewDir) -> Result<Dir> {
+        let valid_res = data.validate();
+        ensure!(
+            valid_res.is_ok(),
+            ValidationSnafu {
+                msg: flatten_errors(&valid_res.unwrap_err()),
+            }
+        );
+
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        // Limit the number of directories per bucket
+        let count = self.count(bucket_id).await?;
+        ensure!(count < MAX_DIRS as i64, MaxDirsReachedSnafu,);
+
+        // Directory name must be unique for the bucket
+        let existing = self.find_by_name(bucket_id, data.name.as_str()).await?;
+        ensure!(
+            existing.is_none(),
+            ValidationSnafu {
+                msg: "Directory name already exists".to_string(),
+            }
+        );
+
+        let data_copy = data.clone();
+        let today = chrono::Utc::now().timestamp();
+        let dir = Dir {
+            id: generate_id(),
+            bucket_id: bucket_id.to_string(),
+            name: data_copy.name,
+            label: data_copy.label,
+            file_count: 0,
+            created_at: today,
+            updated_at: today,
+        };
+
+        let dir_copy = dir.clone();
+        let insert_res = db
+            .interact(move |conn| {
+                diesel::insert_into(dirs::table)
+                    .values(&dir_copy)
+                    .execute(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let _ = insert_res.context(DbQuerySnafu {
+            table: "dirs".to_string(),
+        })?;
+
+        Ok(dir)
+    }
+
+    async fn get(&self, id: &str) -> Result<Option<Dir>> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let did = id.to_string();
+        let select_res = db
+            .interact(move |conn| {
+                dsl::dirs
+                    .find(did)
+                    .select(Dir::as_select())
+                    .first::<Dir>(conn)
+                    .optional()
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let item = select_res.context(DbQuerySnafu {
+            table: "dirs".to_string(),
+        })?;
+
+        Ok(item)
+    }
+
+    async fn find_by_name(&self, bucket_id: &str, name: &str) -> Result<Option<Dir>> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let bid = bucket_id.to_string();
+        let name_copy = name.to_string();
+        let select_res = db
+            .interact(move |conn| {
+                dsl::dirs
+                    .filter(dsl::bucket_id.eq(bid.as_str()))
+                    .filter(dsl::name.eq(name_copy.as_str()))
+                    .select(Dir::as_select())
+                    .first::<Dir>(conn)
+                    .optional()
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let item = select_res.context(DbQuerySnafu {
+            table: "dirs".to_string(),
+        })?;
+
+        Ok(item)
+    }
+
+    async fn update(&self, id: &str, data: &UpdateDir) -> Result<bool> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let errors = data.validate();
+        ensure!(
+            errors.is_ok(),
+            ValidationSnafu {
+                msg: flatten_errors(&errors.unwrap_err()),
+            }
+        );
+
+        // Do not update if there is no data to update
+        if data.label.is_none() {
+            return Ok(false);
+        }
+
+        let data_copy = data.clone();
+        let dir_id = id.to_string();
+        let update_res = db
+            .interact(move |conn| {
+                diesel::update(dsl::dirs)
+                    .filter(dsl::id.eq(dir_id.as_str()))
+                    .set(data_copy)
+                    .execute(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let item = update_res.context(DbQuerySnafu {
+            table: "dirs".to_string(),
+        })?;
+
+        Ok(item > 0)
+    }
+
+    async fn update_timestamp(&self, id: &str, timestamp: i64) -> Result<bool> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let dir_id = id.to_string();
+        let update_res = db
+            .interact(move |conn| {
+                diesel::update(dsl::dirs)
+                    .filter(dsl::id.eq(dir_id.as_str()))
+                    .set(dsl::updated_at.eq(timestamp))
+                    .execute(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let item = update_res.context(DbQuerySnafu {
+            table: "dirs".to_string(),
+        })?;
+
+        Ok(item > 0)
+    }
+
+    async fn delete(&self, id: &str) -> Result<()> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        // TODO: Validate at service call level
+        // Do not delete if there are still files inside
+        // let file_count = count_dir_files(db_pool, id).await?;
+        // ensure!(
+        //     file_count == 0,
+        //     ValidationSnafu {
+        //         msg: "Cannot delete directory with files inside".to_string(),
+        //     }
+        // );
+
+        let dir_id = id.to_string();
+        let delete_res = db
+            .interact(move |conn| {
+                diesel::delete(dsl::dirs.filter(dsl::id.eq(dir_id.as_str()))).execute(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let _ = delete_res.context(DbQuerySnafu {
+            table: "dirs".to_string(),
+        })?;
+
+        Ok(())
+    }
 }
 
 pub async fn update_dir_timestamp(db_pool: &Pool, id: &str, timestamp: i64) -> Result<bool> {
@@ -337,33 +428,6 @@ pub async fn update_dir_timestamp(db_pool: &Pool, id: &str, timestamp: i64) -> R
     })?;
 
     Ok(item > 0)
-}
-
-pub async fn delete_dir(db_pool: &Pool, id: &str) -> Result<()> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
-
-    // Do not delete if there are still files inside
-    let file_count = count_dir_files(db_pool, id).await?;
-    ensure!(
-        file_count == 0,
-        ValidationSnafu {
-            msg: "Cannot delete directory with files inside".to_string(),
-        }
-    );
-
-    let dir_id = id.to_string();
-    let delete_res = db
-        .interact(move |conn| {
-            diesel::delete(dsl::dirs.filter(dsl::id.eq(dir_id.as_str()))).execute(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let _ = delete_res.context(DbQuerySnafu {
-        table: "dirs".to_string(),
-    })?;
-
-    Ok(())
 }
 
 #[cfg(test)]

@@ -9,7 +9,6 @@ use snafu::{ResultExt, ensure};
 use validator::Validate;
 
 use crate::Result;
-use crate::dir::count_bucket_dirs;
 use crate::error::{
     DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, MaxBucketsReachedSnafu, ValidationSnafu,
 };
@@ -112,7 +111,7 @@ pub async fn create_bucket(
 
 pub async fn delete_bucket(state: AppState, id: &str) -> Result<()> {
     // Do not delete if there are still directories inside
-    let dir_count = count_bucket_dirs(db_pool, id).await?;
+    let dir_count = state.db.dirs.count(id).await?;
     ensure!(
         dir_count == 0,
         ValidationSnafu {

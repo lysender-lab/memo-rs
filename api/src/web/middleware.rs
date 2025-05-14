@@ -11,8 +11,6 @@ use snafu::{OptionExt, ensure};
 use crate::{
     Result,
     auth::{actor::Actor, authenticate_token},
-    client::get_client,
-    dir::get_dir,
     error::{
         BadRequestSnafu, ForbiddenSnafu, InsufficientAuthScopeSnafu, InvalidAuthTokenSnafu,
         NotFoundSnafu,
@@ -117,7 +115,7 @@ pub async fn client_middleware(
         )
     }
 
-    let client = get_client(&state.db_pool, &params.client_id).await?;
+    let client = state.db.clients.get(&params.client_id).await?;
     let client = client.context(NotFoundSnafu {
         msg: "Client not found",
     })?;
@@ -200,7 +198,7 @@ pub async fn dir_middleware(
     );
 
     let did = params.dir_id.clone().expect("dir_id is required");
-    let dir_res = get_dir(&state.db_pool, &did).await?;
+    let dir_res = state.db.dirs.get(&did).await?;
 
     let dir = dir_res.context(NotFoundSnafu {
         msg: "Directory not found",

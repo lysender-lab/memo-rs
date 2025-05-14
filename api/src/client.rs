@@ -10,7 +10,6 @@ use validator::Validate;
 
 use crate::Result;
 use crate::auth::user::count_client_users;
-use crate::bucket::{count_client_buckets, find_client_bucket, get_bucket};
 use crate::error::{
     DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, MaxClientsReachedSnafu, ValidationSnafu,
 };
@@ -164,7 +163,7 @@ pub async fn delete_client(state: AppState, id: &str) -> Result<()> {
         }
     );
 
-    let bucket_count = count_client_buckets(db_pool, id).await?;
+    let bucket_count = state.db.buckets.count_by_client(id).await?;
     ensure!(
         bucket_count == 0,
         ValidationSnafu {
@@ -425,132 +424,4 @@ pub async fn list_clients(db_pool: &Pool) -> Result<Vec<Client>> {
     })?;
 
     Ok(items)
-}
-
-pub async fn find_admin_client(db_pool: &Pool) -> Result<Option<Client>> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
-
-    let select_res = db
-        .interact(move |conn| {
-            dsl::clients
-                .filter(dsl::admin.eq(Some(1)))
-                .select(Client::as_select())
-                .first::<Client>(conn)
-                .optional()
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let item = select_res.context(DbQuerySnafu {
-        table: "clients".to_string(),
-    })?;
-
-    Ok(item)
-}
-
-pub async fn get_client(db_pool: &Pool, id: &str) -> Result<Option<ClientDto>> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
-
-    let cid = id.to_string();
-    let select_res = db
-        .interact(move |conn| {
-            dsl::clients
-                .find(cid)
-                .select(Client::as_select())
-                .first::<Client>(conn)
-                .optional()
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let item = select_res.context(DbQuerySnafu {
-        table: "clients".to_string(),
-    })?;
-
-    Ok(item.map(|item| item.into()))
-}
-
-pub async fn find_client_by_name(pool: &Pool, name: &str) -> Result<Option<ClientDto>> {
-    let db = pool.get().await.context(DbPoolSnafu)?;
-
-    let name_copy = name.to_string();
-    let select_res = db
-        .interact(move |conn| {
-            dsl::clients
-                .filter(dsl::name.eq(name_copy.as_str()))
-                .select(Client::as_select())
-                .first::<Client>(conn)
-                .optional()
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let item = select_res.context(DbQuerySnafu {
-        table: "clients".to_string(),
-    })?;
-
-    Ok(item.map(|item| item.into()))
-}
-
-pub async fn count_clients(db_pool: &Pool) -> Result<i64> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
-
-    let count_res = db
-        .interact(move |conn| dsl::clients.select(count_star()).get_result::<i64>(conn))
-        .await
-        .context(DbInteractSnafu)?;
-
-    let count = count_res.context(DbQuerySnafu {
-        table: "clients".to_string(),
-    })?;
-
-    Ok(count)
-}
-
-pub async fn delete_client(db_pool: &Pool, id: &str) -> Result<()> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
-
-    let Some(client) = get_client(db_pool, id).await? else {
-        return ValidationSnafu {
-            msg: "Client not found".to_string(),
-        }
-        .fail();
-    };
-
-    ensure!(
-        client.admin,
-        ValidationSnafu {
-            msg: "Cannot delete admin client".to_string(),
-        }
-    );
-
-    let bucket_count = count_client_buckets(db_pool, id).await?;
-    ensure!(
-        bucket_count == 0,
-        ValidationSnafu {
-            msg: "Client still has buckets".to_string(),
-        }
-    );
-
-    let users_count = count_client_users(db_pool, id).await?;
-    ensure!(
-        users_count == 0,
-        ValidationSnafu {
-            msg: "Client still has users".to_string(),
-        }
-    );
-
-    let id = id.to_string();
-    let delete_res = db
-        .interact(move |conn| {
-            diesel::delete(dsl::clients.filter(dsl::id.eq(id.as_str()))).execute(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let _ = delete_res.context(DbQuerySnafu {
-        table: "clients".to_string(),
-    })?;
-
-    Ok(())
 }

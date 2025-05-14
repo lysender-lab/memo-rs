@@ -5,6 +5,8 @@ use deadpool_diesel::sqlite::{Manager, Pool, Runtime};
 use crate::{
     bucket::{BucketRepo, BucketRepoable},
     client::{ClientRepo, ClientRepoable},
+    dir::{DirRepo, DirRepoable},
+    file::{FileRepo, FileRepoable},
 };
 
 pub fn create_db_pool(database_url: &str) -> Pool {
@@ -15,8 +17,8 @@ pub fn create_db_pool(database_url: &str) -> Pool {
 pub struct DbMapper {
     pub buckets: Arc<dyn BucketRepoable>,
     pub clients: Arc<dyn ClientRepoable>,
-    pub dirs: Arc<dyn BucketRepoable>,
-    pub files: Arc<dyn BucketRepoable>,
+    pub dirs: Arc<dyn DirRepoable>,
+    pub files: Arc<dyn FileRepoable>,
     pub users: Arc<dyn BucketRepoable>,
 }
 
@@ -25,8 +27,8 @@ pub fn create_db_mapper(database_url: &str) -> DbMapper {
     DbMapper {
         buckets: Arc::new(BucketRepo::new(pool.clone())),
         clients: Arc::new(ClientRepo::new(pool.clone())),
-        dirs: Arc::new(BucketRepo::new(pool.clone())),
-        files: Arc::new(BucketRepo::new(pool.clone())),
+        dirs: Arc::new(DirRepo::new(pool.clone())),
+        files: Arc::new(FileRepo::new(pool.clone())),
         users: Arc::new(BucketRepo::new(pool.clone())),
     }
 }
