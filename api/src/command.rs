@@ -5,11 +5,10 @@ use text_io::read;
 
 use crate::Result;
 use crate::auth::user::{delete_user, list_users, update_user_password, update_user_status};
-use crate::bucket::{NewBucket, create_bucket, delete_bucket};
-use crate::bucket::{get_bucket, list_buckets};
+use crate::bucket::NewBucket;
 use crate::client::{NewClient, find_admin_client};
 use crate::config::{BucketCommand, Config, UserCommand};
-use crate::db::create_db_pool;
+use crate::db::{create_db_mapper, create_db_pool};
 use crate::error::{PasswordPromptSnafu, ValidationSnafu};
 use crate::storage::StorageClient;
 
@@ -204,8 +203,8 @@ pub async fn run_bucket_command(cmd: BucketCommand, config: &Config) -> Result<(
 }
 
 async fn run_list_buckets(config: &Config, client_id: String) -> Result<()> {
-    let db_pool = create_db_pool(config.db.url.as_str());
-    let buckets = list_buckets(&db_pool, &client_id).await?;
+    let db = create_db_mapper(config.db.url.as_str());
+    let buckets = db.buckets.list(client_id.as_str()).await?;
     for bucket in buckets.iter() {
         println!(
             "{{ id = {}, name = {}, images_only = {} }}",
@@ -221,7 +220,7 @@ async fn run_create_bucket(
     name: String,
     images_only: String,
 ) -> Result<()> {
-    let db_pool = create_db_pool(config.db.url.as_str());
+    let db = create_db_mapper(config.db.url.as_str());
     let storage_client = StorageClient::new(config.cloud.credentials.as_str()).await?;
 
     let res: Result<bool> = match images_only.as_str() {
@@ -243,7 +242,11 @@ async fn run_create_bucket(
         name,
         images_only: img_only,
     };
-    let bucket = create_bucket(&db_pool, Arc::new(storage_client), &client_id, &data).await?;
+    let bucket = db
+        .buckets
+        .create(Arc::new(storage_client), &client_id, &data)
+        .await?;
+
     println!(
         "{{ id = {}, name = {}, images_only = {} }}",
         bucket.id, bucket.name, bucket.images_only
@@ -253,10 +256,10 @@ async fn run_create_bucket(
 }
 
 async fn run_delete_bucket(config: &Config, id: String) -> Result<()> {
-    let db_pool = create_db_pool(config.db.url.as_str());
-    let bucket = get_bucket(&db_pool, &id).await?;
+    let db = create_db_mapper(config.db.url.as_str());
+    let bucket = db.buckets.get(&id).await?;
     if let Some(_) = bucket {
-        let _ = delete_bucket(&db_pool, &id).await?;
+        let _ = db.buckets.delete(&id).await?;
         println!("Bucket deleted.");
     } else {
         println!("Bucket not found.");

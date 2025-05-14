@@ -11,7 +11,6 @@ use snafu::{OptionExt, ensure};
 use crate::{
     Result,
     auth::{actor::Actor, authenticate_token},
-    bucket::get_bucket,
     client::get_client,
     dir::get_dir,
     error::{
@@ -158,7 +157,7 @@ pub async fn bucket_middleware(
         }
     );
 
-    let bucket = get_bucket(&state.db_pool, &params.bucket_id).await?;
+    let bucket = state.db.buckets.get(&params.bucket_id).await?;
     let bucket = bucket.context(NotFoundSnafu {
         msg: "Bucket not found",
     })?;

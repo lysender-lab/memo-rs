@@ -14,7 +14,7 @@ use crate::{
         actor::{Actor, Credentials},
         authenticate,
     },
-    bucket::{NewBucket, create_bucket, list_buckets},
+    bucket::NewBucket,
     client::{
         ClientDefaultBucket, NewClient, UpdateClient, create_client, delete_client, get_client,
         list_clients, update_client,
@@ -100,7 +100,7 @@ pub async fn health_live_handler() -> Result<JsonResponse> {
 }
 
 pub async fn health_ready_handler(State(state): State<AppState>) -> Result<JsonResponse> {
-    let health = check_readiness(&state.config, &state.db_pool).await?;
+    let health = check_readiness(&state.config, state.db).await?;
     let status = if health.is_healthy() {
         StatusCode::OK
     } else {
@@ -260,7 +260,7 @@ pub async fn list_buckets_handler(
             msg: "Insufficient permissions"
         }
     );
-    let buckets = list_buckets(&state.db_pool, &client.id).await?;
+    let buckets = state.db.buckets.list(&client.id).await?;
     Ok(JsonResponse::new(serde_json::to_string(&buckets).unwrap()))
 }
 
@@ -287,7 +287,12 @@ pub async fn create_bucket_handler(
     })?;
 
     let storage_client = state.storage_client.clone();
-    let bucket = create_bucket(&state.db_pool, storage_client, &client.id, &data).await?;
+    let bucket = state
+        .db
+        .buckets
+        .create(storage_client, &client.id, &data)
+        .await?;
+
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,
         serde_json::to_string(&bucket).unwrap(),

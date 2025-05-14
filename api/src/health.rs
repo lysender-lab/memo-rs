@@ -1,12 +1,13 @@
+use std::sync::Arc;
+
 use serde::Serialize;
 
-use deadpool_diesel::sqlite::Pool;
 use tracing::error;
 
 use crate::{
     Result,
-    bucket::test_read_bucket,
     config::Config,
+    db::DbMapper,
     storage::{create_storage_client, test_list_hmac_keys},
 };
 
@@ -54,8 +55,8 @@ pub async fn check_liveness() -> Result<LiveStatus> {
     })
 }
 
-pub async fn check_readiness(config: &Config, db_pool: &Pool) -> Result<HealthStatus> {
-    let checks = perform_checks(config, db_pool).await?;
+pub async fn check_readiness(config: &Config, db: Arc<DbMapper>) -> Result<HealthStatus> {
+    let checks = perform_checks(config, db).await?;
     let mut status = "DOWN".to_string();
     let mut message = "One or more health checks are failing".to_string();
 
@@ -71,11 +72,11 @@ pub async fn check_readiness(config: &Config, db_pool: &Pool) -> Result<HealthSt
     })
 }
 
-async fn perform_checks(config: &Config, db_pool: &Pool) -> Result<HealthChecks> {
+async fn perform_checks(config: &Config, db: Arc<DbMapper>) -> Result<HealthChecks> {
     let mut checks = HealthChecks::new();
 
     checks.cloud_storage = check_cloud_storage(config).await?;
-    checks.database = check_database(db_pool).await?;
+    checks.database = check_database(db).await?;
 
     Ok(checks)
 }
@@ -92,8 +93,8 @@ async fn check_cloud_storage(config: &Config) -> Result<String> {
     }
 }
 
-async fn check_database(db_pool: &Pool) -> Result<String> {
-    match test_read_bucket(db_pool).await {
+async fn check_database(db: Arc<DbMapper>) -> Result<String> {
+    match db.buckets.test_read().await {
         Ok(_) => Ok("UP".to_string()),
         Err(e) => {
             let msg = format!("{}", e);

@@ -1,9 +1,11 @@
+use std::sync::Arc;
+
 use crate::Result;
 use crate::command::{run_bucket_command, run_setup, run_user_command};
 use crate::config::CliArgs;
 use crate::config::Commands;
 use crate::config::Config;
-use crate::db::create_db_pool;
+use crate::db::create_db_mapper;
 use crate::health::check_readiness;
 use crate::web::server::run_web_server;
 
@@ -19,8 +21,8 @@ pub async fn run_command(args: CliArgs) -> Result<()> {
 }
 
 pub async fn check_health(config: &Config) -> Result<()> {
-    let pool = create_db_pool(config.db.url.as_str());
-    let health = check_readiness(config, &pool).await?;
+    let db = create_db_mapper(config.db.url.as_str());
+    let health = check_readiness(config, Arc::new(db)).await?;
 
     // Print the health status
     println!("Status: {}", health.status);
