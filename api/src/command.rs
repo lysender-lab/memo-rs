@@ -5,12 +5,13 @@ use text_io::read;
 
 use crate::Result;
 use crate::auth::user::{delete_user, list_users, update_user_password, update_user_status};
-use crate::bucket::NewBucket;
+use crate::bucket::{NewBucket, create_bucket};
 use crate::client::{NewClient, find_admin_client};
 use crate::config::{BucketCommand, Config, UserCommand};
 use crate::db::{create_db_mapper, create_db_pool};
 use crate::error::{PasswordPromptSnafu, ValidationSnafu};
 use crate::storage::StorageClient;
+use crate::web::server::AppState;
 
 use crate::auth::user::NewUser;
 use crate::auth::user::{create_user, get_user};
@@ -220,8 +221,16 @@ async fn run_create_bucket(
     name: String,
     images_only: String,
 ) -> Result<()> {
-    let db = create_db_mapper(config.db.url.as_str());
     let storage_client = StorageClient::new(config.cloud.credentials.as_str()).await?;
+    let pool = create_db_pool(config.db.url.as_str());
+    let db = create_db_mapper(config.db.url.as_str());
+
+    let state = AppState {
+        config: config.clone(),
+        storage_client: Arc::new(storage_client),
+        db: Arc::new(db),
+        db_pool: pool,
+    };
 
     let res: Result<bool> = match images_only.as_str() {
         "true" => Ok(true),
@@ -242,10 +251,7 @@ async fn run_create_bucket(
         name,
         images_only: img_only,
     };
-    let bucket = db
-        .buckets
-        .create(Arc::new(storage_client), &client_id, &data)
-        .await?;
+    let bucket = create_bucket(state, &client_id, &data).await?;
 
     println!(
         "{{ id = {}, name = {}, images_only = {} }}",

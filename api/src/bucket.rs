@@ -16,6 +16,7 @@ use crate::error::{
 };
 use crate::schema::buckets::{self, dsl};
 use crate::storage::CloudStorable;
+use crate::web::server::AppState;
 use memo::{dto::bucket::BucketDto, utils::generate_id, validators::flatten_errors};
 
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
@@ -76,16 +77,59 @@ impl From<Bucket> for BucketDto {
 
 const MAX_BUCKETS_PER_CLIENT: i32 = 50;
 
+pub async fn create_bucket(
+    state: AppState,
+    client_id: &str,
+    data: &NewBucket,
+) -> Result<BucketDto> {
+    let valid_res = data.validate();
+    ensure!(
+        valid_res.is_ok(),
+        ValidationSnafu {
+            msg: flatten_errors(&valid_res.unwrap_err()),
+        }
+    );
+
+    // Limit the number of buckets per client
+    let count = state.db.buckets.count_by_client(client_id).await?;
+    ensure!(
+        count < MAX_BUCKETS_PER_CLIENT as i64,
+        MaxBucketsReachedSnafu
+    );
+
+    // Bucket name must be unique for the client
+    let existing = state.db.buckets.find_by_name(client_id, &data.name).await?;
+    ensure!(
+        existing.is_none(),
+        ValidationSnafu {
+            msg: "Bucket name already exists".to_string(),
+        }
+    );
+
+    // Validate against the cloud storage
+    let _ = state.storage_client.read_bucket(&data.name).await?;
+
+    state.db.buckets.create(client_id, data).await
+}
+
+pub async fn delete_bucket(state: AppState, id: &str) -> Result<()> {
+    // Do not delete if there are still directories inside
+    let dir_count = count_bucket_dirs(db_pool, id).await?;
+    ensure!(
+        dir_count == 0,
+        ValidationSnafu {
+            msg: "Cannot delete bucket with directories inside".to_string(),
+        }
+    );
+
+    state.db.buckets.delete(id).await
+}
+
 #[async_trait]
 pub trait BucketRepoable: Send + Sync {
     async fn list(&self, client_id: &str) -> Result<Vec<BucketDto>>;
 
-    async fn create(
-        &self,
-        storage_client: Arc<dyn CloudStorable>,
-        client_id: &str,
-        data: &NewBucket,
-    ) -> Result<BucketDto>;
+    async fn create(&self, client_id: &str, data: &NewBucket) -> Result<BucketDto>;
 
     async fn get(&self, id: &str) -> Result<Option<BucketDto>>;
 
@@ -133,41 +177,8 @@ impl BucketRepoable for BucketRepo {
         Ok(dtos)
     }
 
-    async fn create(
-        &self,
-        storage_client: Arc<dyn CloudStorable>,
-        client_id: &str,
-        data: &NewBucket,
-    ) -> Result<BucketDto> {
-        let valid_res = data.validate();
-        ensure!(
-            valid_res.is_ok(),
-            ValidationSnafu {
-                msg: flatten_errors(&valid_res.unwrap_err()),
-            }
-        );
-
+    async fn create(&self, client_id: &str, data: &NewBucket) -> Result<BucketDto> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-
-        // Limit the number of buckets per client
-        let count = self.count_by_client(client_id).await?;
-        ensure!(
-            count < MAX_BUCKETS_PER_CLIENT as i64,
-            MaxBucketsReachedSnafu
-        );
-
-        // Bucket name must be unique for the client
-        let existing = self.find_by_name(client_id, &data.name).await?;
-        ensure!(
-            existing.is_none(),
-            ValidationSnafu {
-                msg: "Bucket name already exists".to_string(),
-            }
-        );
-
-        // Validate against the cloud storage
-        let _ = storage_client.read_bucket(&data.name).await?;
-
         let data_copy = data.clone();
         let today = chrono::Utc::now().timestamp();
         let bucket = Bucket {
@@ -264,16 +275,6 @@ impl BucketRepoable for BucketRepo {
 
     async fn delete(&self, id: &str) -> Result<()> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-
-        // Do not delete if there are still directories inside
-        // TODO: Implement outside of this repo
-        // let dir_count = count_bucket_dirs(db_pool, id).await?;
-        // ensure!(
-        //     dir_count == 0,
-        //     ValidationSnafu {
-        //         msg: "Cannot delete bucket with directories inside".to_string(),
-        //     }
-        // );
 
         let bucket_id = id.to_string();
         let delete_res = db

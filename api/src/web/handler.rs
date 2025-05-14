@@ -14,7 +14,7 @@ use crate::{
         actor::{Actor, Credentials},
         authenticate,
     },
-    bucket::NewBucket,
+    bucket::{NewBucket, create_bucket},
     client::{
         ClientDefaultBucket, NewClient, UpdateClient, create_client, delete_client, get_client,
         list_clients, update_client,
@@ -286,12 +286,7 @@ pub async fn create_bucket_handler(
         msg: "Invalid request payload",
     })?;
 
-    let storage_client = state.storage_client.clone();
-    let bucket = state
-        .db
-        .buckets
-        .create(storage_client, &client.id, &data)
-        .await?;
+    let bucket = create_bucket(state, &client.id, &data).await?;
 
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,
