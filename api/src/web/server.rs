@@ -10,7 +10,7 @@ use tracing::{Level, error, info};
 
 use crate::Result;
 use crate::config::Config;
-use crate::db::create_db_pool;
+use crate::db::{DbMapper, create_db_mapper, create_db_pool};
 use crate::error::{ErrorInfo, ErrorResponse};
 use crate::storage::{CloudStorable, StorageClient};
 use crate::web::routes::all_routes;
@@ -19,6 +19,7 @@ use crate::web::routes::all_routes;
 pub struct AppState {
     pub config: Config,
     pub storage_client: Arc<dyn CloudStorable>,
+    pub db: Arc<DbMapper>,
     pub db_pool: Pool,
 }
 
@@ -27,9 +28,11 @@ pub async fn run_web_server(config: &Config) -> Result<()> {
 
     let storage_client = StorageClient::new(config.cloud.credentials.as_str()).await?;
     let pool = create_db_pool(config.db.url.as_str());
+    let db = create_db_mapper(config.db.url.as_str());
     let state = AppState {
         config: config.clone(),
         storage_client: Arc::new(storage_client),
+        db: Arc::new(db),
         db_pool: pool,
     };
 

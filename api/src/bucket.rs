@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use std::sync::Arc;
 
 use deadpool_diesel::sqlite::Pool;
@@ -74,6 +75,241 @@ impl From<Bucket> for BucketDto {
 }
 
 const MAX_BUCKETS_PER_CLIENT: i32 = 50;
+
+#[async_trait]
+pub trait BucketRepoable: Send + Sync {
+    async fn list(&self, client_id: &str) -> Result<Vec<BucketDto>>;
+
+    async fn create(
+        &self,
+        storage_client: Arc<dyn CloudStorable>,
+        client_id: &str,
+        data: &NewBucket,
+    ) -> Result<BucketDto>;
+
+    async fn get(&self, id: &str) -> Result<Option<BucketDto>>;
+
+    async fn find_by_name(&self, client_id: &str, name: &str) -> Result<Option<BucketDto>>;
+
+    async fn count_by_client(&self, client_id: &str) -> Result<i64>;
+
+    async fn delete(&self, id: &str) -> Result<()>;
+
+    async fn test_read(&self) -> Result<()>;
+}
+
+pub struct BucketRepo {
+    db_pool: Pool,
+}
+
+impl BucketRepo {
+    pub fn new(db_pool: Pool) -> Self {
+        Self { db_pool }
+    }
+}
+
+#[async_trait]
+impl BucketRepoable for BucketRepo {
+    async fn list(&self, client_id: &str) -> Result<Vec<BucketDto>> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let client_id = client_id.to_string();
+        let select_res = db
+            .interact(move |conn| {
+                dsl::buckets
+                    .filter(dsl::client_id.eq(&client_id))
+                    .select(Bucket::as_select())
+                    .order(dsl::name.asc())
+                    .load::<Bucket>(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let items = select_res.context(DbQuerySnafu {
+            table: "buckets".to_string(),
+        })?;
+
+        let dtos: Vec<BucketDto> = items.into_iter().map(|item| item.into()).collect();
+        Ok(dtos)
+    }
+
+    async fn create(
+        &self,
+        storage_client: Arc<dyn CloudStorable>,
+        client_id: &str,
+        data: &NewBucket,
+    ) -> Result<BucketDto> {
+        let valid_res = data.validate();
+        ensure!(
+            valid_res.is_ok(),
+            ValidationSnafu {
+                msg: flatten_errors(&valid_res.unwrap_err()),
+            }
+        );
+
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        // Limit the number of buckets per client
+        let count = self.count_by_client(client_id).await?;
+        ensure!(
+            count < MAX_BUCKETS_PER_CLIENT as i64,
+            MaxBucketsReachedSnafu
+        );
+
+        // Bucket name must be unique for the client
+        let existing = self.find_by_name(client_id, &data.name).await?;
+        ensure!(
+            existing.is_none(),
+            ValidationSnafu {
+                msg: "Bucket name already exists".to_string(),
+            }
+        );
+
+        // Validate against the cloud storage
+        let _ = storage_client.read_bucket(&data.name).await?;
+
+        let data_copy = data.clone();
+        let today = chrono::Utc::now().timestamp();
+        let bucket = Bucket {
+            id: generate_id(),
+            client_id: client_id.to_string(),
+            name: data_copy.name,
+            images_only: if data_copy.images_only { 1 } else { 0 },
+            created_at: today,
+        };
+
+        let bucket_copy = bucket.clone();
+        let insert_res = db
+            .interact(move |conn| {
+                diesel::insert_into(buckets::table)
+                    .values(&bucket_copy)
+                    .execute(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let _ = insert_res.context(DbQuerySnafu {
+            table: "buckets".to_string(),
+        })?;
+
+        Ok(bucket.into())
+    }
+
+    async fn get(&self, id: &str) -> Result<Option<BucketDto>> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let bid = id.to_string();
+        let select_res = db
+            .interact(move |conn| {
+                dsl::buckets
+                    .find(bid)
+                    .select(Bucket::as_select())
+                    .first::<Bucket>(conn)
+                    .optional()
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let item = select_res.context(DbQuerySnafu {
+            table: "buckets".to_string(),
+        })?;
+
+        Ok(item.map(|item| item.into()))
+    }
+
+    async fn find_by_name(&self, client_id: &str, name: &str) -> Result<Option<BucketDto>> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let cid = client_id.to_string();
+        let name_copy = name.to_string();
+        let select_res = db
+            .interact(move |conn| {
+                dsl::buckets
+                    .filter(dsl::client_id.eq(cid.as_str()))
+                    .filter(dsl::name.eq(name_copy.as_str()))
+                    .select(Bucket::as_select())
+                    .first::<Bucket>(conn)
+                    .optional()
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let item = select_res.context(DbQuerySnafu {
+            table: "buckets".to_string(),
+        })?;
+
+        Ok(item.map(|item| item.into()))
+    }
+
+    async fn count_by_client(&self, client_id: &str) -> Result<i64> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let cid = client_id.to_string();
+        let count_res = db
+            .interact(move |conn| {
+                dsl::buckets
+                    .filter(dsl::client_id.eq(cid.as_str()))
+                    .select(count_star())
+                    .get_result::<i64>(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let count = count_res.context(DbQuerySnafu {
+            table: "buckets".to_string(),
+        })?;
+
+        Ok(count)
+    }
+
+    async fn delete(&self, id: &str) -> Result<()> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        // Do not delete if there are still directories inside
+        // TODO: Implement outside of this repo
+        // let dir_count = count_bucket_dirs(db_pool, id).await?;
+        // ensure!(
+        //     dir_count == 0,
+        //     ValidationSnafu {
+        //         msg: "Cannot delete bucket with directories inside".to_string(),
+        //     }
+        // );
+
+        let bucket_id = id.to_string();
+        let delete_res = db
+            .interact(move |conn| {
+                diesel::delete(dsl::buckets.filter(dsl::id.eq(bucket_id.as_str()))).execute(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let _ = delete_res.context(DbQuerySnafu {
+            table: "buckets".to_string(),
+        })?;
+
+        Ok(())
+    }
+
+    async fn test_read(&self) -> Result<()> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let selected_res = db
+            .interact(move |conn| {
+                dsl::buckets
+                    .select(Bucket::as_select())
+                    .first::<Bucket>(conn)
+                    .optional()
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let _ = selected_res.context(DbQuerySnafu {
+            table: "buckets".to_string(),
+        })?;
+
+        Ok(())
+    }
+}
 
 pub async fn list_buckets(db_pool: &Pool, client_id: &str) -> Result<Vec<BucketDto>> {
     let db = db_pool.get().await.context(DbPoolSnafu)?;
