@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use std::sync::Arc;
 
 use deadpool_diesel::sqlite::Pool;
 use diesel::dsl::count_star;
@@ -15,7 +14,6 @@ use crate::error::{
     DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, MaxBucketsReachedSnafu, ValidationSnafu,
 };
 use crate::schema::buckets::{self, dsl};
-use crate::storage::CloudStorable;
 use crate::web::server::AppState;
 use memo::{dto::bucket::BucketDto, utils::generate_id, validators::flatten_errors};
 
