@@ -16,8 +16,8 @@ use crate::{
     },
     bucket::{NewBucket, create_bucket},
     client::{
-        ClientDefaultBucket, NewClient, UpdateClient, create_client, delete_client, get_client,
-        list_clients, update_client,
+        ClientDefaultBucket, NewClient, UpdateClient, create_client, delete_client, list_clients,
+        update_client,
     },
     dir::{
         Dir, ListDirsParams, NewDir, UpdateDir, create_dir, delete_dir, get_dir, list_dirs,
@@ -134,7 +134,7 @@ pub async fn create_client_handler(
         msg: "Invalid request payload",
     })?;
 
-    let created = create_client(&state.db_pool, &data, false).await?;
+    let created = create_client(state, &data, false).await?;
     Ok(JsonResponse::new(serde_json::to_string(&created).unwrap()))
 }
 
@@ -165,13 +165,13 @@ pub async fn update_client_handler(
         return Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()));
     }
 
-    let updated = update_client(&state.db_pool, client.id.as_str(), &data).await?;
+    let updated = update_client(state.clone(), client.id.as_str(), &data).await?;
     if !updated {
         // No changes, just return the client
         return Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()));
     }
 
-    let updated_client = get_client(&state.db_pool, client.id.as_str()).await?;
+    let updated_client = state.db.clients.get(client.id.as_str()).await?;
     let updated_client = updated_client.context(WhateverSnafu {
         msg: "Unable to find updated client",
     })?;
@@ -200,7 +200,7 @@ pub async fn delete_client_handler(
         }
     );
 
-    let _ = delete_client(&state.db_pool, &client.id).await?;
+    let _ = delete_client(state, &client.id).await?;
 
     Ok(JsonResponse::with_status(
         StatusCode::NO_CONTENT,
@@ -232,13 +232,13 @@ pub async fn update_default_bucket_handler(
         default_bucket_id: Some(data.default_bucket_id.clone()),
     };
 
-    let updated = update_client(&state.db_pool, client.id.as_str(), &data).await?;
+    let updated = update_client(state.clone(), client.id.as_str(), &data).await?;
     if !updated {
         // No changes, just return the client
         return Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()));
     }
 
-    let updated_client = get_client(&state.db_pool, client.id.as_str()).await?;
+    let updated_client = state.db.clients.get(client.id.as_str()).await?;
     let updated_client = updated_client.context(WhateverSnafu {
         msg: "Unable to find updated client",
     })?;

@@ -34,10 +34,19 @@ pub async fn run_setup(config: &Config) -> Result<()> {
         roles: "SystemAdmin".to_string(),
     };
 
-    let db_pool = create_db_pool(config.db.url.as_str());
+    let storage_client = StorageClient::new(config.cloud.credentials.as_str()).await?;
+    let pool = create_db_pool(config.db.url.as_str());
+    let db = create_db_mapper(config.db.url.as_str());
+
+    let state = AppState {
+        config: config.clone(),
+        storage_client: Arc::new(storage_client),
+        db: Arc::new(db),
+        db_pool: pool,
+    };
 
     let client_id: String;
-    let admin_client = find_admin_client(&db_pool).await?;
+    let admin_client = state.db.clients.find_admin().await?;
     if let Some(client) = admin_client {
         client_id = client.id;
     } else {
@@ -46,7 +55,7 @@ pub async fn run_setup(config: &Config) -> Result<()> {
             status: "active".to_string(),
             default_bucket_id: None,
         };
-        let client = create_client(&db_pool, &new_client, true).await?;
+        let client = create_client(state, &new_client, true).await?;
         println!("{{ id = {}, name = {} }}", client.id, client.name);
         println!("Created system admin client.");
         client_id = client.id;

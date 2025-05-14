@@ -470,62 +470,6 @@ pub async fn get_client(db_pool: &Pool, id: &str) -> Result<Option<ClientDto>> {
     Ok(item.map(|item| item.into()))
 }
 
-pub async fn update_client(db_pool: &Pool, id: &str, data: &UpdateClient) -> Result<bool> {
-    let valid_res = data.validate();
-    ensure!(
-        valid_res.is_ok(),
-        ValidationSnafu {
-            msg: flatten_errors(&valid_res.unwrap_err()),
-        }
-    );
-
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
-
-    // Client name must be unique
-    if let Some(name) = data.name.clone() {
-        if let Some(existing) = find_client_by_name(db_pool, &name).await? {
-            ensure!(
-                existing.id != id,
-                ValidationSnafu {
-                    msg: "Client name already exists".to_string(),
-                }
-            );
-        }
-    }
-
-    // We can't tell whether we are setting default bucket to null or skipping it
-    // Will just use a separate function for that
-    if let Some(bucket_id) = data.default_bucket_id.clone() {
-        if let Some(bid) = bucket_id {
-            let bucket = get_bucket(db_pool, &bid).await?;
-            ensure!(
-                bucket.is_some(),
-                ValidationSnafu {
-                    msg: "Default bucket not found".to_string(),
-                }
-            );
-        }
-    }
-
-    let id = id.to_string();
-    let data_copy = data.clone();
-    let update_res = db
-        .interact(move |conn| {
-            diesel::update(dsl::clients)
-                .filter(dsl::id.eq(id.as_str()))
-                .set(data_copy)
-                .execute(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let item = update_res.context(DbQuerySnafu {
-        table: "clients".to_string(),
-    })?;
-
-    Ok(item > 0)
-}
-
 pub async fn find_client_by_name(pool: &Pool, name: &str) -> Result<Option<ClientDto>> {
     let db = pool.get().await.context(DbPoolSnafu)?;
 
