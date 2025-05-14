@@ -10,7 +10,6 @@ use crate::error::{
 };
 use crate::{Result, web::server::AppState};
 use memo::validators::flatten_errors;
-use user::{find_user_by_username, get_user};
 
 pub mod actor;
 pub mod password;
@@ -26,10 +25,12 @@ pub async fn authenticate(state: &AppState, credentials: &Credentials) -> Result
         }
     );
 
-    let db_pool = state.db_pool.clone();
-
     // Validate user
-    let user = find_user_by_username(&db_pool, &credentials.username).await?;
+    let user = state
+        .db
+        .users
+        .find_by_username(&credentials.username)
+        .await?;
     let user = user.context(InvalidPasswordSnafu)?;
 
     ensure!(&user.status == "active", InactiveUserSnafu);
@@ -60,12 +61,11 @@ pub async fn authenticate_token(state: &AppState, token: &str) -> Result<Actor> 
     let actor = verify_auth_token(token, &state.config.jwt_secret)?;
 
     // Validate client
-    let db_pool = state.db_pool.clone();
     let client = state.db.clients.get(&actor.client_id).await?;
     let client = client.context(InvalidClientSnafu)?;
     ensure!(&client.status == "active", InvalidClientSnafu);
 
-    let user = get_user(&db_pool, &actor.id).await?;
+    let user = state.db.users.get(&actor.id).await?;
     let user = user.context(UserNotFoundSnafu)?;
     ensure!(&user.client_id == &client.id, UserNotFoundSnafu);
 

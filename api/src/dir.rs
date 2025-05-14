@@ -409,27 +409,6 @@ impl DirRepoable for DirRepo {
     }
 }
 
-pub async fn update_dir_timestamp(db_pool: &Pool, id: &str, timestamp: i64) -> Result<bool> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
-
-    let dir_id = id.to_string();
-    let update_res = db
-        .interact(move |conn| {
-            diesel::update(dsl::dirs)
-                .filter(dsl::id.eq(dir_id.as_str()))
-                .set(dsl::updated_at.eq(timestamp))
-                .execute(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let item = update_res.context(DbQuerySnafu {
-        table: "dirs".to_string(),
-    })?;
-
-    Ok(item > 0)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

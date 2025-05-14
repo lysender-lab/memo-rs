@@ -13,17 +13,16 @@ use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use std::fs::File;
 use std::path::PathBuf;
-use std::sync::Arc;
 use tracing::error;
 use validator::Validate;
 
 use crate::Result;
-use crate::dir::{Dir, update_dir_timestamp};
+use crate::dir::Dir;
 use crate::error::{
     DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, ExifInfoSnafu, UploadFileSnafu, ValidationSnafu,
 };
+
 use crate::schema::files::{self, dsl};
-use crate::storage::CloudStorable;
 use crate::web::server::AppState;
 use memo::dto::bucket::BucketDto;
 use memo::dto::file::{FileDto, ImgDimension, ImgVersion, ImgVersionDto};
@@ -494,65 +493,6 @@ impl FileRepoable for FileRepo {
 
         Ok(())
     }
-}
-
-pub async fn count_dir_files(db_pool: &Pool, dir_id: &str) -> Result<i64> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
-
-    let did = dir_id.to_string();
-    let count_res = db
-        .interact(move |conn| {
-            dsl::files
-                .filter(dsl::dir_id.eq(did.as_str()))
-                .select(count_star())
-                .get_result::<i64>(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let count = count_res.context(DbQuerySnafu {
-        table: "files".to_string(),
-    })?;
-
-    Ok(count)
-}
-
-pub async fn get_file(pool: &Pool, id: &str) -> Result<Option<FileObject>> {
-    let db = pool.get().await.context(DbPoolSnafu)?;
-
-    let fid = id.to_string();
-    let select_res = db
-        .interact(move |conn| {
-            dsl::files
-                .find(fid)
-                .select(FileObject::as_select())
-                .first::<FileObject>(conn)
-                .optional()
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let item = select_res.context(DbQuerySnafu {
-        table: "files".to_string(),
-    })?;
-
-    Ok(item)
-}
-
-pub async fn delete_file(pool: &Pool, id: &str) -> Result<()> {
-    let db = pool.get().await.context(DbPoolSnafu)?;
-
-    let fid = id.to_string();
-    let delete_res = db
-        .interact(move |conn| diesel::delete(dsl::files.filter(dsl::id.eq(fid))).execute(conn))
-        .await
-        .context(DbInteractSnafu)?;
-
-    let _ = delete_res.context(DbQuerySnafu {
-        table: "files".to_string(),
-    })?;
-
-    Ok(())
 }
 
 fn cleanup_temp_uploads(data: &FilePayload, file: Option<&FileDto>) -> Result<()> {

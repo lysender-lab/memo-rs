@@ -3,6 +3,7 @@ use std::sync::Arc;
 use deadpool_diesel::sqlite::{Manager, Pool, Runtime};
 
 use crate::{
+    auth::user::{UserRepo, UserRepoable},
     bucket::{BucketRepo, BucketRepoable},
     client::{ClientRepo, ClientRepoable},
     dir::{DirRepo, DirRepoable},
@@ -19,7 +20,7 @@ pub struct DbMapper {
     pub clients: Arc<dyn ClientRepoable>,
     pub dirs: Arc<dyn DirRepoable>,
     pub files: Arc<dyn FileRepoable>,
-    pub users: Arc<dyn BucketRepoable>,
+    pub users: Arc<dyn UserRepoable>,
 }
 
 pub fn create_db_mapper(database_url: &str) -> DbMapper {
@@ -29,6 +30,6 @@ pub fn create_db_mapper(database_url: &str) -> DbMapper {
         clients: Arc::new(ClientRepo::new(pool.clone())),
         dirs: Arc::new(DirRepo::new(pool.clone())),
         files: Arc::new(FileRepo::new(pool.clone())),
-        users: Arc::new(BucketRepo::new(pool.clone())),
+        users: Arc::new(UserRepo::new(pool.clone())),
     }
 }

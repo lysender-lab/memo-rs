@@ -1,3 +1,5 @@
+use async_trait::async_trait;
+
 use deadpool_diesel::sqlite::Pool;
 use diesel::dsl::count_star;
 use diesel::prelude::*;
@@ -64,212 +66,244 @@ pub struct NewUser {
 
 const MAX_USERS_PER_CLIENT: i32 = 50;
 
-pub async fn list_users(db_pool: &Pool, client_id: &str) -> Result<Vec<User>> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
+#[async_trait]
+pub trait UserRepoable: Send + Sync {
+    async fn list(&self, client_id: &str) -> Result<Vec<User>>;
 
-    let client_id = client_id.to_string();
-    let select_res = db
-        .interact(move |conn| {
-            dsl::users
-                .filter(dsl::client_id.eq(&client_id))
-                .select(User::as_select())
-                .order(dsl::username.asc())
-                .load::<User>(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
+    async fn create(&self, client_id: &str, data: &NewUser) -> Result<User>;
 
-    let items = select_res.context(DbQuerySnafu {
-        table: "users".to_string(),
-    })?;
+    async fn get(&self, id: &str) -> Result<Option<User>>;
 
-    Ok(items)
+    async fn find_by_username(&self, username: &str) -> Result<Option<User>>;
+
+    async fn count_by_client(&self, client_id: &str) -> Result<i64>;
+
+    async fn update_status(&self, id: &str, status: &str) -> Result<bool>;
+
+    async fn update_password(&self, id: &str, password: &str) -> Result<bool>;
+
+    async fn delete(&self, id: &str) -> Result<()>;
 }
 
-pub async fn create_user(db_pool: &Pool, client_id: &str, data: &NewUser) -> Result<User> {
-    let errors = data.validate();
-    ensure!(
-        errors.is_ok(),
-        ValidationSnafu {
-            msg: flatten_errors(&errors.unwrap_err()),
-        }
-    );
-
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
-    let count = count_client_users(db_pool, client_id).await?;
-    ensure!(count < MAX_USERS_PER_CLIENT as i64, MaxUsersReachedSnafu);
-
-    // Username must be unique
-    let existing = find_user_by_username(db_pool, &data.username).await?;
-    ensure!(
-        existing.is_none(),
-        ValidationSnafu {
-            msg: "Username already exists".to_string(),
-        }
-    );
-
-    // Roles must be all valid
-    let roles: Vec<String> = data.roles.split(",").map(|item| item.to_string()).collect();
-    // Validate roles
-    let _ = to_roles(roles).context(InvalidRolesSnafu)?;
-
-    let data_copy = data.clone();
-    let today = chrono::Utc::now().timestamp();
-    let hashed = hash_password(&data.password)?;
-
-    let dir = User {
-        id: generate_id(),
-        client_id: client_id.to_string(),
-        username: data_copy.username,
-        password: hashed,
-        status: "active".to_string(),
-        roles: data_copy.roles,
-        created_at: today,
-        updated_at: today,
-    };
-
-    let user_copy = dir.clone();
-    let inser_res = db
-        .interact(move |conn| {
-            diesel::insert_into(users::table)
-                .values(&user_copy)
-                .execute(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let _ = inser_res.context(DbQuerySnafu {
-        table: "users".to_string(),
-    })?;
-
-    Ok(dir)
+pub struct UserRepo {
+    db_pool: Pool,
 }
 
-pub async fn get_user(pool: &Pool, id: &str) -> Result<Option<User>> {
-    let db = pool.get().await.context(DbPoolSnafu)?;
-
-    let id = id.to_string();
-    let select_res = db
-        .interact(move |conn| {
-            dsl::users
-                .find(&id)
-                .select(User::as_select())
-                .first::<User>(conn)
-                .optional()
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let user = select_res.context(DbQuerySnafu {
-        table: "users".to_string(),
-    })?;
-
-    Ok(user)
+impl UserRepo {
+    pub fn new(db_pool: Pool) -> Self {
+        Self { db_pool }
+    }
 }
 
-pub async fn find_user_by_username(pool: &Pool, username: &str) -> Result<Option<User>> {
-    let db = pool.get().await.context(DbPoolSnafu)?;
+#[async_trait]
+impl UserRepoable for UserRepo {
+    async fn list(&self, client_id: &str) -> Result<Vec<User>> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
-    let username = username.to_string();
-    let select_res = db
-        .interact(move |conn| {
-            dsl::users
-                .filter(dsl::username.eq(&username))
-                .select(User::as_select())
-                .first::<User>(conn)
-                .optional()
-        })
-        .await
-        .context(DbInteractSnafu)?;
+        let client_id = client_id.to_string();
+        let select_res = db
+            .interact(move |conn| {
+                dsl::users
+                    .filter(dsl::client_id.eq(&client_id))
+                    .select(User::as_select())
+                    .order(dsl::username.asc())
+                    .load::<User>(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
 
-    let user = select_res.context(DbQuerySnafu {
-        table: "users".to_string(),
-    })?;
+        let items = select_res.context(DbQuerySnafu {
+            table: "users".to_string(),
+        })?;
 
-    Ok(user)
-}
+        Ok(items)
+    }
 
-pub async fn count_client_users(db_pool: &Pool, client_id: &str) -> Result<i64> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
+    async fn create(&self, client_id: &str, data: &NewUser) -> Result<User> {
+        let errors = data.validate();
+        ensure!(
+            errors.is_ok(),
+            ValidationSnafu {
+                msg: flatten_errors(&errors.unwrap_err()),
+            }
+        );
 
-    let client_id = client_id.to_string();
-    let count_res = db
-        .interact(move |conn| {
-            dsl::users
-                .filter(dsl::client_id.eq(&client_id))
-                .select(count_star())
-                .get_result::<i64>(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+        let count = self.count_by_client(client_id).await?;
+        ensure!(count < MAX_USERS_PER_CLIENT as i64, MaxUsersReachedSnafu);
 
-    let count = count_res.context(DbQuerySnafu {
-        table: "users".to_string(),
-    })?;
+        // Username must be unique
+        let existing = self.find_by_username(&data.username).await?;
+        ensure!(
+            existing.is_none(),
+            ValidationSnafu {
+                msg: "Username already exists".to_string(),
+            }
+        );
 
-    Ok(count)
-}
+        // Roles must be all valid
+        let roles: Vec<String> = data.roles.split(",").map(|item| item.to_string()).collect();
+        // Validate roles
+        let _ = to_roles(roles).context(InvalidRolesSnafu)?;
 
-pub async fn update_user_status(db_pool: &Pool, id: &str, status: &str) -> Result<bool> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
+        let data_copy = data.clone();
+        let today = chrono::Utc::now().timestamp();
+        let hashed = hash_password(&data.password)?;
 
-    let id = id.to_string();
-    let status = status.to_string();
-    let today = chrono::Utc::now().timestamp();
-    let update_res = db
-        .interact(move |conn| {
-            diesel::update(dsl::users)
-                .filter(dsl::id.eq(&id))
-                .set((dsl::status.eq(&status), dsl::updated_at.eq(today)))
-                .execute(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
+        let dir = User {
+            id: generate_id(),
+            client_id: client_id.to_string(),
+            username: data_copy.username,
+            password: hashed,
+            status: "active".to_string(),
+            roles: data_copy.roles,
+            created_at: today,
+            updated_at: today,
+        };
 
-    let affected = update_res.context(DbQuerySnafu {
-        table: "users".to_string(),
-    })?;
+        let user_copy = dir.clone();
+        let inser_res = db
+            .interact(move |conn| {
+                diesel::insert_into(users::table)
+                    .values(&user_copy)
+                    .execute(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
 
-    Ok(affected > 0)
-}
+        let _ = inser_res.context(DbQuerySnafu {
+            table: "users".to_string(),
+        })?;
 
-pub async fn update_user_password(db_pool: &Pool, id: &str, password: &str) -> Result<bool> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
+        Ok(dir)
+    }
 
-    let id = id.to_string();
-    let today = chrono::Utc::now().timestamp();
-    let hashed = hash_password(&password)?;
-    let update_res = db
-        .interact(move |conn| {
-            diesel::update(dsl::users)
-                .filter(dsl::id.eq(&id))
-                .set((dsl::password.eq(&hashed), dsl::updated_at.eq(today)))
-                .execute(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
+    async fn get(&self, id: &str) -> Result<Option<User>> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
-    let affected = update_res.context(DbQuerySnafu {
-        table: "users".to_string(),
-    })?;
+        let id = id.to_string();
+        let select_res = db
+            .interact(move |conn| {
+                dsl::users
+                    .find(&id)
+                    .select(User::as_select())
+                    .first::<User>(conn)
+                    .optional()
+            })
+            .await
+            .context(DbInteractSnafu)?;
 
-    Ok(affected > 0)
-}
+        let user = select_res.context(DbQuerySnafu {
+            table: "users".to_string(),
+        })?;
 
-pub async fn delete_user(db_pool: &Pool, id: &str) -> Result<()> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
+        Ok(user)
+    }
 
-    // It is okay to delete user even if there are potential references
-    // to created buckets, dirs or files
-    let id = id.to_string();
-    let delete_res = db
-        .interact(move |conn| diesel::delete(dsl::users.filter(dsl::id.eq(&id))).execute(conn))
-        .await
-        .context(DbInteractSnafu)?;
+    async fn find_by_username(&self, username: &str) -> Result<Option<User>> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
-    let _ = delete_res.context(DbQuerySnafu {
-        table: "users".to_string(),
-    })?;
+        let username = username.to_string();
+        let select_res = db
+            .interact(move |conn| {
+                dsl::users
+                    .filter(dsl::username.eq(&username))
+                    .select(User::as_select())
+                    .first::<User>(conn)
+                    .optional()
+            })
+            .await
+            .context(DbInteractSnafu)?;
 
-    Ok(())
+        let user = select_res.context(DbQuerySnafu {
+            table: "users".to_string(),
+        })?;
+
+        Ok(user)
+    }
+
+    async fn count_by_client(&self, client_id: &str) -> Result<i64> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let client_id = client_id.to_string();
+        let count_res = db
+            .interact(move |conn| {
+                dsl::users
+                    .filter(dsl::client_id.eq(&client_id))
+                    .select(count_star())
+                    .get_result::<i64>(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let count = count_res.context(DbQuerySnafu {
+            table: "users".to_string(),
+        })?;
+
+        Ok(count)
+    }
+
+    async fn update_status(&self, id: &str, status: &str) -> Result<bool> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let id = id.to_string();
+        let status = status.to_string();
+        let today = chrono::Utc::now().timestamp();
+        let update_res = db
+            .interact(move |conn| {
+                diesel::update(dsl::users)
+                    .filter(dsl::id.eq(&id))
+                    .set((dsl::status.eq(&status), dsl::updated_at.eq(today)))
+                    .execute(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let affected = update_res.context(DbQuerySnafu {
+            table: "users".to_string(),
+        })?;
+
+        Ok(affected > 0)
+    }
+
+    async fn update_password(&self, id: &str, password: &str) -> Result<bool> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let id = id.to_string();
+        let today = chrono::Utc::now().timestamp();
+        let hashed = hash_password(&password)?;
+        let update_res = db
+            .interact(move |conn| {
+                diesel::update(dsl::users)
+                    .filter(dsl::id.eq(&id))
+                    .set((dsl::password.eq(&hashed), dsl::updated_at.eq(today)))
+                    .execute(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let affected = update_res.context(DbQuerySnafu {
+            table: "users".to_string(),
+        })?;
+
+        Ok(affected > 0)
+    }
+
+    async fn delete(&self, id: &str) -> Result<()> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        // It is okay to delete user even if there are potential references
+        // to created buckets, dirs or files
+        let id = id.to_string();
+        let delete_res = db
+            .interact(move |conn| diesel::delete(dsl::users.filter(dsl::id.eq(&id))).execute(conn))
+            .await
+            .context(DbInteractSnafu)?;
+
+        let _ = delete_res.context(DbQuerySnafu {
+            table: "users".to_string(),
+        })?;
+
+        Ok(())
+    }
 }

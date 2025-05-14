@@ -15,7 +15,6 @@ use crate::{
         BadRequestSnafu, ForbiddenSnafu, InsufficientAuthScopeSnafu, InvalidAuthTokenSnafu,
         NotFoundSnafu,
     },
-    file::get_file,
     web::{params::Params, server::AppState},
 };
 use memo::{role::Permission, utils::valid_id};
@@ -234,7 +233,7 @@ pub async fn file_middleware(
 
     let did = params.dir_id.clone().expect("dir_id is required");
     let fid = params.file_id.clone().expect("file_id is required");
-    let file_res = get_file(&state.db_pool, &fid).await?;
+    let file_res = state.db.files.get(&fid).await?;
     let file = file_res.context(NotFoundSnafu {
         msg: "File not found",
     })?;

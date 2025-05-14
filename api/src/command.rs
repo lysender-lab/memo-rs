@@ -4,7 +4,6 @@ use snafu::{ResultExt, ensure};
 use text_io::read;
 
 use crate::Result;
-use crate::auth::user::{delete_user, list_users, update_user_password, update_user_status};
 use crate::bucket::{NewBucket, create_bucket};
 use crate::client::NewClient;
 use crate::config::{BucketCommand, Config, UserCommand};
@@ -14,7 +13,6 @@ use crate::storage::StorageClient;
 use crate::web::server::AppState;
 
 use crate::auth::user::NewUser;
-use crate::auth::user::{create_user, get_user};
 use crate::client::create_client;
 
 pub async fn run_setup(config: &Config) -> Result<()> {
@@ -55,19 +53,19 @@ pub async fn run_setup(config: &Config) -> Result<()> {
             status: "active".to_string(),
             default_bucket_id: None,
         };
-        let client = create_client(state, &new_client, true).await?;
+        let client = create_client(state.clone(), &new_client, true).await?;
         println!("{{ id = {}, name = {} }}", client.id, client.name);
         println!("Created system admin client.");
         client_id = client.id;
     }
 
-    let users = list_users(&db_pool, &client_id).await?;
+    let users = state.db.users.list(&client_id).await?;
     if users.len() > 0 {
         println!("Admin user already exists.");
         return Ok(());
     }
 
-    let user = create_user(&db_pool, &client_id, &new_user).await?;
+    let user = state.db.users.create(&client_id, &new_user).await?;
     println!(
         "{{ id = {}, username = {} status = {} }}",
         user.id, user.username, user.status
@@ -92,8 +90,8 @@ pub async fn run_user_command(cmd: UserCommand, config: &Config) -> Result<()> {
 }
 
 async fn run_list_users(config: &Config, client_id: String) -> Result<()> {
-    let db_pool = create_db_pool(config.db.url.as_str());
-    let users = list_users(&db_pool, &client_id).await?;
+    let db = create_db_mapper(config.db.url.as_str());
+    let users = db.users.list(&client_id).await?;
     for user in users.iter() {
         println!(
             "{{ id = {}, username = {}, roles = {}, status = {} }}",
@@ -122,8 +120,8 @@ async fn run_create_user(
         roles,
     };
 
-    let db_pool = create_db_pool(config.db.url.as_str());
-    let user = create_user(&db_pool, &client_id, &new_user).await?;
+    let db = create_db_mapper(config.db.url.as_str());
+    let user = db.users.create(&client_id, &new_user).await?;
     println!(
         "{{ id = {}, username = {} status = {} }}",
         user.id, user.username, user.status
@@ -133,8 +131,8 @@ async fn run_create_user(
 }
 
 async fn run_set_user_password(config: &Config, id: String) -> Result<()> {
-    let db_pool = create_db_pool(config.db.url.as_str());
-    let user = get_user(&db_pool, &id).await?;
+    let db = create_db_mapper(config.db.url.as_str());
+    let user = db.users.get(&id).await?;
     if let Some(node) = user {
         let prompt = format!("Enter new password for {}: ", node.username);
         let Ok(password) = rpassword::prompt_password(prompt) else {
@@ -148,7 +146,7 @@ async fn run_set_user_password(config: &Config, id: String) -> Result<()> {
                 msg: "Password must be between 8 to 60 characters".to_string()
             }
         );
-        let _ = update_user_password(&db_pool, &id, &password).await?;
+        let _ = db.users.update_password(&id, &password).await?;
         println!("Password updated.");
     } else {
         println!("User not found.");
@@ -157,14 +155,14 @@ async fn run_set_user_password(config: &Config, id: String) -> Result<()> {
 }
 
 async fn run_disable_user(config: &Config, id: String) -> Result<()> {
-    let db_pool = create_db_pool(config.db.url.as_str());
-    let user = get_user(&db_pool, &id).await?;
+    let db = create_db_mapper(config.db.url.as_str());
+    let user = db.users.get(&id).await?;
     if let Some(node) = user {
         if &node.status == "inactive" {
             println!("User already disabled.");
             return Ok(());
         }
-        let _ = update_user_status(&db_pool, &id, "inactive").await?;
+        let _ = db.users.update_status(&id, "inactive").await?;
         println!("User disabled.");
     } else {
         println!("User not found.");
@@ -173,14 +171,14 @@ async fn run_disable_user(config: &Config, id: String) -> Result<()> {
 }
 
 async fn run_enable_user(config: &Config, id: String) -> Result<()> {
-    let db_pool = create_db_pool(config.db.url.as_str());
-    let user = get_user(&db_pool, &id).await?;
+    let db = create_db_mapper(config.db.url.as_str());
+    let user = db.users.get(&id).await?;
     if let Some(node) = user {
         if &node.status == "inactive" {
             println!("User already disabled.");
             return Ok(());
         }
-        let _ = update_user_status(&db_pool, &id, "inactive").await?;
+        let _ = db.users.update_status(&id, "inactive").await?;
         println!("User disabled.");
     } else {
         println!("User not found.");
@@ -189,10 +187,10 @@ async fn run_enable_user(config: &Config, id: String) -> Result<()> {
 }
 
 async fn run_delete_user(config: &Config, id: String) -> Result<()> {
-    let db_pool = create_db_pool(config.db.url.as_str());
-    let user = get_user(&db_pool, &id).await?;
+    let db = create_db_mapper(config.db.url.as_str());
+    let user = db.users.get(&id).await?;
     if let Some(_) = user {
-        let _ = delete_user(&db_pool, &id).await?;
+        let _ = db.users.delete(&id).await?;
         println!("User deleted.");
     } else {
         println!("User not found.");

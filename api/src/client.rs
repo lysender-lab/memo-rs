@@ -9,7 +9,6 @@ use snafu::{ResultExt, ensure};
 use validator::Validate;
 
 use crate::Result;
-use crate::auth::user::count_client_users;
 use crate::error::{
     DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, MaxClientsReachedSnafu, ValidationSnafu,
 };
@@ -171,7 +170,7 @@ pub async fn delete_client(state: AppState, id: &str) -> Result<()> {
         }
     );
 
-    let users_count = count_client_users(db_pool, id).await?;
+    let users_count = state.db.users.count_by_client(id).await?;
     ensure!(
         users_count == 0,
         ValidationSnafu {

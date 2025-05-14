@@ -24,7 +24,7 @@ use crate::{
         CreateFileSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, MissingUploadFileSnafu,
         Result, UploadDirSnafu, WhateverSnafu,
     },
-    file::{FileObject, FilePayload, ListFilesParams, create_file, delete_file},
+    file::{FileObject, FilePayload, ListFilesParams, create_file},
     health::{check_liveness, check_readiness},
     web::{params::Params, response::JsonResponse, server::AppState},
 };
@@ -533,8 +533,7 @@ pub async fn delete_file_handler(
     );
 
     // Delete record
-    let db_pool = state.db_pool.clone();
-    let _ = delete_file(&db_pool, &file.id).await?;
+    let _ = state.db.files.delete(&file.id).await?;
 
     // Delete file(s) from storage
     let storage_client = state.storage_client.clone();
