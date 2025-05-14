@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use snafu::{ResultExt, ensure};
 use text_io::read;
 
@@ -9,7 +11,7 @@ use crate::client::{NewClient, find_admin_client};
 use crate::config::{BucketCommand, Config, UserCommand};
 use crate::db::create_db_pool;
 use crate::error::{PasswordPromptSnafu, ValidationSnafu};
-use crate::storage::create_storage_client;
+use crate::storage::StorageClient;
 
 use crate::auth::user::NewUser;
 use crate::auth::user::{create_user, get_user};
@@ -220,7 +222,7 @@ async fn run_create_bucket(
     images_only: String,
 ) -> Result<()> {
     let db_pool = create_db_pool(config.db.url.as_str());
-    let storage_client = create_storage_client(config.cloud.credentials.as_str()).await?;
+    let storage_client = StorageClient::new(config.cloud.credentials.as_str()).await?;
 
     let res: Result<bool> = match images_only.as_str() {
         "true" => Ok(true),
@@ -241,7 +243,7 @@ async fn run_create_bucket(
         name,
         images_only: img_only,
     };
-    let bucket = create_bucket(&db_pool, &storage_client, &client_id, &data).await?;
+    let bucket = create_bucket(&db_pool, Arc::new(storage_client), &client_id, &data).await?;
     println!(
         "{{ id = {}, name = {}, images_only = {} }}",
         bucket.id, bucket.name, bucket.images_only

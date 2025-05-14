@@ -21,7 +21,7 @@ use crate::{
     file::get_file,
     web::{params::Params, server::AppState},
 };
-use memo::{dto::client::ClientDto, role::Permission, utils::valid_id};
+use memo::{role::Permission, utils::valid_id};
 
 use super::params::ClientParams;
 

@@ -1,8 +1,9 @@
+use std::sync::Arc;
+
 use deadpool_diesel::sqlite::Pool;
 use diesel::dsl::count_star;
 use diesel::prelude::*;
 use diesel::{QueryDsl, SelectableHelper};
-use google_cloud_storage::client::Client;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use validator::Validate;
@@ -13,7 +14,7 @@ use crate::error::{
     DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, MaxBucketsReachedSnafu, ValidationSnafu,
 };
 use crate::schema::buckets::{self, dsl};
-use crate::storage::read_bucket;
+use crate::storage::CloudStorable;
 use memo::{dto::bucket::BucketDto, utils::generate_id, validators::flatten_errors};
 
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
@@ -99,7 +100,7 @@ pub async fn list_buckets(db_pool: &Pool, client_id: &str) -> Result<Vec<BucketD
 
 pub async fn create_bucket(
     db_pool: &Pool,
-    storage_client: &Client,
+    storage_client: Arc<dyn CloudStorable>,
     client_id: &str,
     data: &NewBucket,
 ) -> Result<BucketDto> {
@@ -130,7 +131,7 @@ pub async fn create_bucket(
     );
 
     // Validate against the cloud storage
-    let _ = read_bucket(storage_client, &data.name).await?;
+    let _ = storage_client.read_bucket(&data.name).await?;
 
     let data_copy = data.clone();
     let today = chrono::Utc::now().timestamp();

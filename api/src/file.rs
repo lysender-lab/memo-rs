@@ -4,7 +4,6 @@ use diesel::dsl::count_star;
 use diesel::prelude::*;
 use diesel::{QueryDsl, SelectableHelper};
 use exif::{In, Tag};
-use google_cloud_storage::client::Client;
 use image::DynamicImage;
 use image::ImageReader;
 use image::imageops;
@@ -12,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use std::fs::File;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tracing::error;
 use validator::Validate;
 
@@ -21,7 +21,7 @@ use crate::error::{
     DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, ExifInfoSnafu, UploadFileSnafu, ValidationSnafu,
 };
 use crate::schema::files::{self, dsl};
-use crate::storage::upload_object;
+use crate::storage::CloudStorable;
 use memo::dto::bucket::BucketDto;
 use memo::dto::file::{FileDto, ImgDimension, ImgVersion, ImgVersionDto};
 use memo::dto::pagination::Paginated;
@@ -308,7 +308,7 @@ pub async fn count_dir_files(db_pool: &Pool, dir_id: &str) -> Result<i64> {
 
 pub async fn create_file(
     db_pool: &Pool,
-    storage_client: &Client,
+    storage_client: Arc<dyn CloudStorable>,
     bucket: &BucketDto,
     dir: &Dir,
     data: &FilePayload,
@@ -377,8 +377,9 @@ pub async fn create_file(
         file_dto.img_taken_at = exif_info.img_taken_at;
     }
 
-    if let Err(upload_err) =
-        upload_object(storage_client, bucket, dir, &data.upload_dir, &file_dto).await
+    if let Err(upload_err) = storage_client
+        .upload_object(bucket, dir, &data.upload_dir, &file_dto)
+        .await
     {
         cleanup(data, Some(&file_dto));
         return Err(upload_err);

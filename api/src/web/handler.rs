@@ -29,7 +29,6 @@ use crate::{
     },
     file::{FileObject, FilePayload, ListFilesParams, create_file, delete_file, list_files},
     health::{check_liveness, check_readiness},
-    storage::{delete_file_object, format_file, format_files},
     web::{params::Params, response::JsonResponse, server::AppState},
 };
 use memo::{
@@ -287,7 +286,8 @@ pub async fn create_bucket_handler(
         msg: "Invalid request payload",
     })?;
 
-    let bucket = create_bucket(&state.db_pool, &state.storage_client, &client.id, &data).await?;
+    let storage_client = state.storage_client.clone();
+    let bucket = create_bucket(&state.db_pool, storage_client, &client.id, &data).await?;
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,
         serde_json::to_string(&bucket).unwrap(),
@@ -414,11 +414,14 @@ pub async fn list_files_handler(
     //};
 
     let files = list_files(&state.db_pool, &dir, &query).await?;
-    let storage_client = state.storage_client;
+    let storage_client = state.storage_client.clone();
 
     // Generate download urls for each files
     let items: Vec<FileDto> = files.data.into_iter().map(|f| f.into()).collect();
-    let items = format_files(&storage_client, &bucket.name, &dir.name, items).await?;
+
+    let items = storage_client
+        .format_files(&bucket.name, &dir.name, items)
+        .await?;
     let listing = Paginated::new(
         items,
         files.meta.page,
@@ -497,10 +500,12 @@ pub async fn create_file_handler(
     })?;
 
     let db_pool = state.db_pool.clone();
-    let storage_client = state.storage_client;
-    let file = create_file(&db_pool, &storage_client, &bucket, &dir, &payload).await?;
+    let storage_client = state.storage_client.clone();
+    let file = create_file(&db_pool, storage_client.clone(), &bucket, &dir, &payload).await?;
     let file_dto: FileDto = file.into();
-    let file_dto = format_file(&storage_client, &bucket.name, &dir.name, file_dto).await?;
+    let file_dto = storage_client
+        .format_file(&bucket.name, &dir.name, file_dto)
+        .await?;
 
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,
@@ -514,10 +519,12 @@ pub async fn get_file_handler(
     Extension(dir): Extension<Dir>,
     Extension(file): Extension<FileObject>,
 ) -> Result<JsonResponse> {
-    let storage_client = state.storage_client;
+    let storage_client = state.storage_client.clone();
     // Extract dir from the middleware extension
     let file_dto: FileDto = file.clone().into();
-    let file_dto = format_file(&storage_client, &bucket.name, &dir.name, file_dto).await?;
+    let file_dto = storage_client
+        .format_file(&bucket.name, &dir.name, file_dto)
+        .await?;
     Ok(JsonResponse::new(serde_json::to_string(&file_dto).unwrap()))
 }
 
@@ -541,9 +548,11 @@ pub async fn delete_file_handler(
     let _ = delete_file(&db_pool, &file.id).await?;
 
     // Delete file(s) from storage
-    let storage_client = state.storage_client;
+    let storage_client = state.storage_client.clone();
     let dto: FileDto = file.into();
-    let _ = delete_file_object(&storage_client, &bucket.name, &dir.name, &dto).await?;
+    let _ = storage_client
+        .delete_file_object(&bucket.name, &dir.name, &dto)
+        .await?;
 
     Ok(JsonResponse::with_status(
         StatusCode::NO_CONTENT,

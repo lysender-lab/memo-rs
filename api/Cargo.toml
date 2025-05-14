@@ -4,6 +4,7 @@ version = "0.2.0"
 edition = "2024"
 
 [dependencies]
+async-trait.workspace = true
 argon2.workspace = true
 axum.workspace = true
 chrono.workspace = true
