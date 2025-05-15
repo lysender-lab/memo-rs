@@ -24,9 +24,9 @@ use crate::error::{
 
 use crate::schema::files::{self, dsl};
 use crate::state::AppState;
-use memo::dto::bucket::BucketDto;
-use memo::dto::file::{FileDto, ImgDimension, ImgVersion, ImgVersionDto};
-use memo::dto::pagination::Paginated;
+use memo::bucket::BucketDto;
+use memo::file::{FileDto, ImgDimension, ImgVersion, ImgVersionDto};
+use memo::pagination::Paginated;
 use memo::utils::generate_id;
 use memo::utils::truncate_string;
 use memo::validators::flatten_errors;

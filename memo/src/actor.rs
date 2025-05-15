@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::dto::user::UserDto;
 use crate::role::{Permission, Role, roles_permissions, to_permissions};
+use crate::user::UserDto;
 
 #[derive(Clone)]
 pub struct ActorPayload {

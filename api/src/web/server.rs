@@ -163,7 +163,7 @@ mod tests {
     };
 
     use super::*;
-    use memo::dto::{
+    use memo::{
         bucket::BucketDto, client::ClientDto, file::FileDto, pagination::Paginated, user::UserDto,
     };
     use serde_json::json;

@@ -15,8 +15,8 @@ use crate::Result;
 use crate::dir::Dir;
 use crate::error::{GoogleSnafu, ValidationSnafu};
 use crate::file::ORIGINAL_PATH;
-use memo::dto::bucket::BucketDto;
-use memo::dto::file::{FileDto, ImgVersionDto};
+use memo::bucket::BucketDto;
+use memo::file::{FileDto, ImgVersionDto};
 
 #[async_trait]
 pub trait CloudStorable: Send + Sync {

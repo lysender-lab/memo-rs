@@ -14,7 +14,7 @@ use crate::error::{
 };
 use crate::schema::buckets::{self, dsl};
 use crate::state::AppState;
-use memo::{dto::bucket::BucketDto, utils::generate_id, validators::flatten_errors};
+use memo::{bucket::BucketDto, utils::generate_id, validators::flatten_errors};
 
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
 #[diesel(table_name = crate::schema::buckets)]

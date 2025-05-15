@@ -3,7 +3,7 @@ use deadpool_diesel::sqlite::Pool;
 use diesel::dsl::count_star;
 use diesel::prelude::*;
 use diesel::{QueryDsl, SelectableHelper};
-use memo::dto::client::ClientDto;
+use memo::client::ClientDto;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use validator::Validate;

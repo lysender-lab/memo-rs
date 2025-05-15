@@ -18,7 +18,7 @@ use crate::{
     state::AppState,
     web::params::Params,
 };
-use memo::{actor::Actor, dto::user::UserDto, role::Permission, utils::valid_id};
+use memo::{actor::Actor, role::Permission, user::UserDto, utils::valid_id};
 
 use super::params::{ClientParams, UserParams};
 

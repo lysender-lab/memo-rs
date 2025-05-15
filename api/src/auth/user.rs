@@ -17,8 +17,8 @@ use crate::error::{
 use crate::schema::users::{self, dsl};
 use crate::state::AppState;
 use crate::{Error, Result};
-use memo::dto::user::UserDto;
 use memo::role::{Role, to_roles};
+use memo::user::UserDto;
 use memo::utils::generate_id;
 use memo::validators::flatten_errors;
 

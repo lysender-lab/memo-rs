@@ -33,14 +33,12 @@ use crate::{
 };
 use memo::{
     actor::{Actor, Credentials},
-    dto::{
-        bucket::BucketDto,
-        client::ClientDto,
-        file::{FileDto, ImgVersion},
-        pagination::Paginated,
-        user::UserDto,
-    },
+    bucket::BucketDto,
+    client::ClientDto,
+    file::{FileDto, ImgVersion},
+    pagination::Paginated,
     role::Permission,
+    user::UserDto,
     utils::slugify_prefixed,
 };
 
