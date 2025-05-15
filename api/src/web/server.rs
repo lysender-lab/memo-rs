@@ -176,4 +176,12 @@ mod tests {
 
         response.assert_status_ok();
     }
+
+    #[tokio::test]
+    async fn test_list_clients_as_user() {
+        let server = create_test_app();
+        let response = server.get("/clients").await;
+
+        response.assert_status_ok();
+    }
 }
