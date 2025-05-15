@@ -109,8 +109,15 @@ pub async fn health_ready_handler(State(state): State<AppState>) -> Result<JsonR
     ))
 }
 
-pub async fn list_clients_handler(State(state): State<AppState>) -> Result<JsonResponse> {
-    let clients = state.db.clients.list().await?;
+pub async fn list_clients_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+) -> Result<JsonResponse> {
+    let mut client_id: Option<String> = None;
+    if !actor.is_system_admin() {
+        client_id = Some(actor.client_id.clone());
+    }
+    let clients = state.db.clients.list(client_id).await?;
     Ok(JsonResponse::new(serde_json::to_string(&clients).unwrap()))
 }
 

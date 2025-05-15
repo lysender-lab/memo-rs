@@ -114,6 +114,46 @@ fn create_test_app() -> TestServer {
 }
 
 #[cfg(test)]
+fn create_test_user_auth_token() -> Result<String> {
+    use crate::auth::actor::ActorPayload;
+    use crate::auth::token::create_auth_token;
+    use crate::auth::user::TEST_USER_ID;
+    use crate::client::TEST_CLIENT_ID;
+    use crate::state::create_test_app_state;
+
+    let state = create_test_app_state();
+
+    let actor = ActorPayload {
+        id: TEST_USER_ID.to_string(),
+        client_id: TEST_CLIENT_ID.to_string(),
+        default_bucket_id: None,
+        scope: "auth files".to_string(),
+    };
+
+    create_auth_token(&actor, &state.config.jwt_secret)
+}
+
+#[cfg(test)]
+fn create_test_admin_auth_token() -> Result<String> {
+    use crate::auth::actor::ActorPayload;
+    use crate::auth::token::create_auth_token;
+    use crate::auth::user::TEST_ADMIN_USER_ID;
+    use crate::client::TEST_ADMIN_CLIENT_ID;
+    use crate::state::create_test_app_state;
+
+    let state = create_test_app_state();
+
+    let actor = ActorPayload {
+        id: TEST_ADMIN_USER_ID.to_string(),
+        client_id: TEST_ADMIN_CLIENT_ID.to_string(),
+        default_bucket_id: None,
+        scope: "auth files".to_string(),
+    };
+
+    create_auth_token(&actor, &state.config.jwt_secret)
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
@@ -180,7 +220,23 @@ mod tests {
     #[tokio::test]
     async fn test_list_clients_as_user() {
         let server = create_test_app();
-        let response = server.get("/clients").await;
+        let token = create_test_user_auth_token().unwrap();
+        let response = server
+            .get("/clients")
+            .authorization_bearer(token.as_str())
+            .await;
+
+        response.assert_status_ok();
+    }
+
+    #[tokio::test]
+    async fn test_list_clients_as_admin() {
+        let server = create_test_app();
+        let token = create_test_admin_auth_token().unwrap();
+        let response = server
+            .get("/clients")
+            .authorization_bearer(token.as_str())
+            .await;
 
         response.assert_status_ok();
     }

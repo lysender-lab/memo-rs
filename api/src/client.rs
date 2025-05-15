@@ -183,7 +183,7 @@ pub async fn delete_client(state: &AppState, id: &str) -> Result<()> {
 
 #[async_trait]
 pub trait ClientRepoable: Send + Sync {
-    async fn list(&self) -> Result<Vec<Client>>;
+    async fn list(&self, client_id: Option<String>) -> Result<Vec<Client>>;
 
     async fn find_admin(&self) -> Result<Option<Client>>;
 
@@ -212,12 +212,18 @@ impl ClientRepo {
 
 #[async_trait]
 impl ClientRepoable for ClientRepo {
-    async fn list(&self) -> Result<Vec<Client>> {
+    async fn list(&self, client_id: Option<String>) -> Result<Vec<Client>> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
+        let client_id_copy = client_id.clone();
         let select_res = db
             .interact(move |conn| {
-                dsl::clients
+                let mut query = dsl::clients.into_boxed();
+                if let Some(cid) = client_id_copy {
+                    query = query.filter(dsl::id.eq(cid));
+                }
+
+                query
                     .select(Client::as_select())
                     .order(dsl::name.asc())
                     .load::<Client>(conn)
@@ -459,10 +465,20 @@ pub fn create_test_new_client() -> Client {
 #[cfg(test)]
 #[async_trait]
 impl ClientRepoable for ClientTestRepo {
-    async fn list(&self) -> Result<Vec<Client>> {
+    async fn list(&self, client_id: Option<String>) -> Result<Vec<Client>> {
         let client1 = create_test_client();
         let client2 = create_test_admin_client();
-        Ok(vec![client1, client2])
+        let clients = vec![client1, client2];
+        match client_id {
+            Some(cid) => {
+                let filtered: Vec<Client> = clients
+                    .into_iter()
+                    .filter(|x| x.id.as_str() == cid)
+                    .collect();
+                Ok(filtered)
+            }
+            None => Ok(clients),
+        }
     }
 
     async fn find_admin(&self) -> Result<Option<Client>> {
@@ -474,7 +490,7 @@ impl ClientRepoable for ClientTestRepo {
     }
 
     async fn get(&self, id: &str) -> Result<Option<ClientDto>> {
-        let clients = self.list().await?;
+        let clients = self.list(None).await?;
         let found = clients.into_iter().find(|x| x.id.as_str() == id);
         Ok(found.map(|x| x.into()))
     }
@@ -484,7 +500,7 @@ impl ClientRepoable for ClientTestRepo {
     }
 
     async fn find_by_name(&self, name: &str) -> Result<Option<ClientDto>> {
-        let clients = self.list().await?;
+        let clients = self.list(None).await?;
         let found = clients.into_iter().find(|x| x.name.as_str() == name);
         Ok(found.map(|x| x.into()))
     }
