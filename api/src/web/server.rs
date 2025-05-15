@@ -157,11 +157,12 @@ fn create_test_admin_auth_token() -> Result<String> {
 mod tests {
     use crate::{
         auth::user::{TEST_ADMIN_USER_ID, TEST_USER_ID},
+        bucket::{Bucket, TEST_BUCKET_ID},
         client::{Client, TEST_ADMIN_CLIENT_ID, TEST_CLIENT_ID},
     };
 
     use super::*;
-    use memo::dto::{client::ClientDto, user::UserDto};
+    use memo::dto::{bucket::BucketDto, client::ClientDto, user::UserDto};
     use serde_json::json;
 
     #[tokio::test]
@@ -334,5 +335,35 @@ mod tests {
             .json();
 
         assert_eq!(client.id.as_str(), TEST_ADMIN_CLIENT_ID);
+    }
+
+    #[tokio::test]
+    async fn test_list_user_buckets_as_user() {
+        let server = create_test_app();
+        let token = create_test_user_auth_token().unwrap();
+        let url = format!("/clients/{}/buckets", TEST_CLIENT_ID);
+        let buckets: Vec<BucketDto> = server
+            .get(url.as_str())
+            .authorization_bearer(token.as_str())
+            .await
+            .json();
+
+        assert_eq!(buckets.len(), 1);
+        let bucket = buckets.first().unwrap();
+        assert_eq!(bucket.id.as_str(), TEST_BUCKET_ID);
+    }
+
+    #[tokio::test]
+    async fn test_list_admin_buckets_as_user() {
+        let server = create_test_app();
+        let token = create_test_user_auth_token().unwrap();
+        let url = format!("/clients/{}/buckets", TEST_ADMIN_CLIENT_ID);
+        let response = server
+            .get(url.as_str())
+            .authorization_bearer(token.as_str())
+            .expect_failure()
+            .await;
+
+        response.assert_status_not_found();
     }
 }
