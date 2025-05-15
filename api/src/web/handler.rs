@@ -402,18 +402,28 @@ pub async fn update_user_status_handler(
         }
     );
 
+    // Do not allow updating your own user
+    ensure!(
+        &actor.user.id != &user.id,
+        ForbiddenSnafu {
+            msg: "Updating your own user account not allowed"
+        }
+    );
+
     let data = payload.context(JsonRejectionSnafu {
         msg: "Invalid request payload",
     })?;
 
+    // Ideally, should not update if status do not change
     let _ = state.db.users.update_status(&user.id, &data).await?;
 
     // Re-query and show
-    let updated_user = state.db.users.get(&user.id).await?;
+    let updated_user = state.db.users.get(&user.id).await?.context(WhateverSnafu {
+        msg: "Unable to re-query user information.",
+    })?;
+    let dto: UserDto = updated_user.into();
 
-    Ok(JsonResponse::new(
-        serde_json::to_string(&updated_user).unwrap(),
-    ))
+    Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
 }
 
 pub async fn update_user_roles_handler(
@@ -430,18 +440,28 @@ pub async fn update_user_roles_handler(
         }
     );
 
+    // Do not allow updating your own user
+    ensure!(
+        &actor.user.id != &user.id,
+        ForbiddenSnafu {
+            msg: "Updating your own user account not allowed"
+        }
+    );
+
     let data = payload.context(JsonRejectionSnafu {
         msg: "Invalid request payload",
     })?;
 
+    // Ideally, should not update if roles do not change
     let _ = state.db.users.update_roles(&user.id, &data).await?;
 
     // Re-query and show
-    let updated_user = state.db.users.get(&user.id).await?;
+    let updated_user = state.db.users.get(&user.id).await?.context(WhateverSnafu {
+        msg: "Unable to re-query user information.",
+    })?;
+    let dto: UserDto = updated_user.into();
 
-    Ok(JsonResponse::new(
-        serde_json::to_string(&updated_user).unwrap(),
-    ))
+    Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
 }
 
 pub async fn reset_user_password_handler(
@@ -458,6 +478,14 @@ pub async fn reset_user_password_handler(
         }
     );
 
+    // Do not allow updating your own user
+    ensure!(
+        &actor.user.id != &user.id,
+        ForbiddenSnafu {
+            msg: "Updating your own user account not allowed"
+        }
+    );
+
     let data = payload.context(JsonRejectionSnafu {
         msg: "Invalid request payload",
     })?;
@@ -465,11 +493,12 @@ pub async fn reset_user_password_handler(
     let _ = state.db.users.update_password(&user.id, &data).await?;
 
     // Re-query and show
-    let updated_user = state.db.users.get(&user.id).await?;
+    let updated_user = state.db.users.get(&user.id).await?.context(WhateverSnafu {
+        msg: "Unable to re-query user information.",
+    })?;
+    let dto: UserDto = updated_user.into();
 
-    Ok(JsonResponse::new(
-        serde_json::to_string(&updated_user).unwrap(),
-    ))
+    Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
 }
 
 pub async fn delete_user_handler(

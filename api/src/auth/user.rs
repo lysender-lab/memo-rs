@@ -56,7 +56,7 @@ pub struct NewUser {
     #[validate(custom(function = "memo::validators::alphanumeric"))]
     pub username: String,
 
-    #[validate(length(min = 8, max = 100))]
+    #[validate(length(min = 8, max = 60))]
     pub password: String,
 
     #[validate(length(min = 1, max = 100))]
@@ -79,7 +79,7 @@ pub struct UpdateUserRoles {
 
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct UpdateUserPassword {
-    #[validate(length(min = 8, max = 100))]
+    #[validate(length(min = 8, max = 60))]
     pub password: String,
 }
 
@@ -341,7 +341,7 @@ impl UserRepoable for UserRepo {
             .interact(move |conn| {
                 diesel::update(dsl::users)
                     .filter(dsl::id.eq(&id))
-                    .set((dsl::status.eq(&roles), dsl::updated_at.eq(today)))
+                    .set((dsl::roles.eq(&roles), dsl::updated_at.eq(today)))
                     .execute(conn)
             })
             .await
