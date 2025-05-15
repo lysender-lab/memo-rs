@@ -21,7 +21,7 @@ use super::{
         dir_middleware, file_middleware, require_auth_middleware,
     },
 };
-use crate::web::server::AppState;
+use crate::state::AppState;
 
 pub fn all_routes(state: AppState) -> Router {
     Router::new()

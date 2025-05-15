@@ -13,7 +13,7 @@ use crate::error::{
     DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, MaxClientsReachedSnafu, ValidationSnafu,
 };
 use crate::schema::clients::{self, dsl};
-use crate::web::server::AppState;
+use crate::state::AppState;
 use memo::{utils::generate_id, validators::flatten_errors};
 
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
@@ -105,7 +105,7 @@ impl From<Client> for ClientDto {
 // Can't have too many clients
 const MAX_CLIENTS: i32 = 10;
 
-pub async fn create_client(state: AppState, data: &NewClient, admin: bool) -> Result<Client> {
+pub async fn create_client(state: &AppState, data: &NewClient, admin: bool) -> Result<Client> {
     let valid_res = data.validate();
     ensure!(
         valid_res.is_ok(),
@@ -121,7 +121,7 @@ pub async fn create_client(state: AppState, data: &NewClient, admin: bool) -> Re
     state.db.clients.create(data, admin).await
 }
 
-pub async fn update_client(state: AppState, id: &str, data: &UpdateClient) -> Result<bool> {
+pub async fn update_client(state: &AppState, id: &str, data: &UpdateClient) -> Result<bool> {
     let valid_res = data.validate();
     ensure!(
         valid_res.is_ok(),
@@ -147,7 +147,7 @@ pub async fn update_client(state: AppState, id: &str, data: &UpdateClient) -> Re
     state.db.clients.update(id, data).await
 }
 
-pub async fn delete_client(state: AppState, id: &str) -> Result<()> {
+pub async fn delete_client(state: &AppState, id: &str) -> Result<()> {
     let Some(client) = state.db.clients.get(id).await? else {
         return ValidationSnafu {
             msg: "Client not found".to_string(),
@@ -403,24 +403,4 @@ impl ClientRepoable for ClientRepo {
 
         Ok(())
     }
-}
-
-pub async fn list_clients(db_pool: &Pool) -> Result<Vec<Client>> {
-    let db = db_pool.get().await.context(DbPoolSnafu)?;
-
-    let select_res = db
-        .interact(move |conn| {
-            dsl::clients
-                .select(Client::as_select())
-                .order(dsl::name.asc())
-                .load::<Client>(conn)
-        })
-        .await
-        .context(DbInteractSnafu)?;
-
-    let items = select_res.context(DbQuerySnafu {
-        table: "clients".to_string(),
-    })?;
-
-    Ok(items)
 }

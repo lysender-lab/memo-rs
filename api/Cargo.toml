@@ -7,6 +7,7 @@ edition = "2024"
 async-trait.workspace = true
 argon2.workspace = true
 axum.workspace = true
+axum-test.workspace = true
 chrono.workspace = true
 clap.workspace = true
 deadpool-diesel.workspace = true

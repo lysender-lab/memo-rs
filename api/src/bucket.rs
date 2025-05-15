@@ -13,7 +13,7 @@ use crate::error::{
     DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, MaxBucketsReachedSnafu, ValidationSnafu,
 };
 use crate::schema::buckets::{self, dsl};
-use crate::web::server::AppState;
+use crate::state::AppState;
 use memo::{dto::bucket::BucketDto, utils::generate_id, validators::flatten_errors};
 
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
@@ -109,7 +109,7 @@ pub async fn create_bucket(
     state.db.buckets.create(client_id, data).await
 }
 
-pub async fn delete_bucket(state: AppState, id: &str) -> Result<()> {
+pub async fn delete_bucket(state: &AppState, id: &str) -> Result<()> {
     // Do not delete if there are still directories inside
     let dir_count = state.db.dirs.count(id).await?;
     ensure!(

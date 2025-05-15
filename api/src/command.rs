@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use snafu::{ResultExt, ensure};
 use text_io::read;
 
@@ -7,10 +5,8 @@ use crate::Result;
 use crate::bucket::{NewBucket, create_bucket};
 use crate::client::NewClient;
 use crate::config::{BucketCommand, Config, UserCommand};
-use crate::db::{create_db_mapper, create_db_pool};
 use crate::error::{PasswordPromptSnafu, ValidationSnafu};
-use crate::storage::StorageClient;
-use crate::web::server::AppState;
+use crate::state::create_app_state;
 
 use crate::auth::user::NewUser;
 use crate::client::create_client;
@@ -32,16 +28,7 @@ pub async fn run_setup(config: &Config) -> Result<()> {
         roles: "SystemAdmin".to_string(),
     };
 
-    let storage_client = StorageClient::new(config.cloud.credentials.as_str()).await?;
-    let pool = create_db_pool(config.db.url.as_str());
-    let db = create_db_mapper(config.db.url.as_str());
-
-    let state = AppState {
-        config: config.clone(),
-        storage_client: Arc::new(storage_client),
-        db: Arc::new(db),
-        db_pool: pool,
-    };
+    let state = create_app_state(config).await?;
 
     let client_id: String;
     let admin_client = state.db.clients.find_admin().await?;
@@ -53,7 +40,7 @@ pub async fn run_setup(config: &Config) -> Result<()> {
             status: "active".to_string(),
             default_bucket_id: None,
         };
-        let client = create_client(state.clone(), &new_client, true).await?;
+        let client = create_client(&state, &new_client, true).await?;
         println!("{{ id = {}, name = {} }}", client.id, client.name);
         println!("Created system admin client.");
         client_id = client.id;
@@ -90,8 +77,8 @@ pub async fn run_user_command(cmd: UserCommand, config: &Config) -> Result<()> {
 }
 
 async fn run_list_users(config: &Config, client_id: String) -> Result<()> {
-    let db = create_db_mapper(config.db.url.as_str());
-    let users = db.users.list(&client_id).await?;
+    let state = create_app_state(config).await?;
+    let users = state.db.users.list(&client_id).await?;
     for user in users.iter() {
         println!(
             "{{ id = {}, username = {}, roles = {}, status = {} }}",
@@ -120,8 +107,8 @@ async fn run_create_user(
         roles,
     };
 
-    let db = create_db_mapper(config.db.url.as_str());
-    let user = db.users.create(&client_id, &new_user).await?;
+    let state = create_app_state(config).await?;
+    let user = state.db.users.create(&client_id, &new_user).await?;
     println!(
         "{{ id = {}, username = {} status = {} }}",
         user.id, user.username, user.status
@@ -131,8 +118,8 @@ async fn run_create_user(
 }
 
 async fn run_set_user_password(config: &Config, id: String) -> Result<()> {
-    let db = create_db_mapper(config.db.url.as_str());
-    let user = db.users.get(&id).await?;
+    let state = create_app_state(config).await?;
+    let user = state.db.users.get(&id).await?;
     if let Some(node) = user {
         let prompt = format!("Enter new password for {}: ", node.username);
         let Ok(password) = rpassword::prompt_password(prompt) else {
@@ -146,7 +133,7 @@ async fn run_set_user_password(config: &Config, id: String) -> Result<()> {
                 msg: "Password must be between 8 to 60 characters".to_string()
             }
         );
-        let _ = db.users.update_password(&id, &password).await?;
+        let _ = state.db.users.update_password(&id, &password).await?;
         println!("Password updated.");
     } else {
         println!("User not found.");
@@ -155,14 +142,14 @@ async fn run_set_user_password(config: &Config, id: String) -> Result<()> {
 }
 
 async fn run_disable_user(config: &Config, id: String) -> Result<()> {
-    let db = create_db_mapper(config.db.url.as_str());
-    let user = db.users.get(&id).await?;
+    let state = create_app_state(config).await?;
+    let user = state.db.users.get(&id).await?;
     if let Some(node) = user {
         if &node.status == "inactive" {
             println!("User already disabled.");
             return Ok(());
         }
-        let _ = db.users.update_status(&id, "inactive").await?;
+        let _ = state.db.users.update_status(&id, "inactive").await?;
         println!("User disabled.");
     } else {
         println!("User not found.");
@@ -171,14 +158,14 @@ async fn run_disable_user(config: &Config, id: String) -> Result<()> {
 }
 
 async fn run_enable_user(config: &Config, id: String) -> Result<()> {
-    let db = create_db_mapper(config.db.url.as_str());
-    let user = db.users.get(&id).await?;
+    let state = create_app_state(config).await?;
+    let user = state.db.users.get(&id).await?;
     if let Some(node) = user {
         if &node.status == "inactive" {
             println!("User already disabled.");
             return Ok(());
         }
-        let _ = db.users.update_status(&id, "inactive").await?;
+        let _ = state.db.users.update_status(&id, "inactive").await?;
         println!("User disabled.");
     } else {
         println!("User not found.");
@@ -187,10 +174,10 @@ async fn run_enable_user(config: &Config, id: String) -> Result<()> {
 }
 
 async fn run_delete_user(config: &Config, id: String) -> Result<()> {
-    let db = create_db_mapper(config.db.url.as_str());
-    let user = db.users.get(&id).await?;
+    let state = create_app_state(config).await?;
+    let user = state.db.users.get(&id).await?;
     if let Some(_) = user {
-        let _ = db.users.delete(&id).await?;
+        let _ = state.db.users.delete(&id).await?;
         println!("User deleted.");
     } else {
         println!("User not found.");
@@ -211,8 +198,8 @@ pub async fn run_bucket_command(cmd: BucketCommand, config: &Config) -> Result<(
 }
 
 async fn run_list_buckets(config: &Config, client_id: String) -> Result<()> {
-    let db = create_db_mapper(config.db.url.as_str());
-    let buckets = db.buckets.list(client_id.as_str()).await?;
+    let state = create_app_state(config).await?;
+    let buckets = state.db.buckets.list(client_id.as_str()).await?;
     for bucket in buckets.iter() {
         println!(
             "{{ id = {}, name = {}, images_only = {} }}",
@@ -228,16 +215,7 @@ async fn run_create_bucket(
     name: String,
     images_only: String,
 ) -> Result<()> {
-    let storage_client = StorageClient::new(config.cloud.credentials.as_str()).await?;
-    let pool = create_db_pool(config.db.url.as_str());
-    let db = create_db_mapper(config.db.url.as_str());
-
-    let state = AppState {
-        config: config.clone(),
-        storage_client: Arc::new(storage_client),
-        db: Arc::new(db),
-        db_pool: pool,
-    };
+    let state = create_app_state(config).await?;
 
     let res: Result<bool> = match images_only.as_str() {
         "true" => Ok(true),
@@ -269,10 +247,10 @@ async fn run_create_bucket(
 }
 
 async fn run_delete_bucket(config: &Config, id: String) -> Result<()> {
-    let db = create_db_mapper(config.db.url.as_str());
-    let bucket = db.buckets.get(&id).await?;
+    let state = create_app_state(config).await?;
+    let bucket = state.db.buckets.get(&id).await?;
     if let Some(_) = bucket {
-        let _ = db.buckets.delete(&id).await?;
+        let _ = state.db.buckets.delete(&id).await?;
         println!("Bucket deleted.");
     } else {
         println!("Bucket not found.");

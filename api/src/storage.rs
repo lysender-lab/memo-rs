@@ -402,3 +402,58 @@ pub async fn test_list_hmac_keys(client: &Client, project_id: &str) -> Result<()
         },
     }
 }
+
+#[cfg(test)]
+pub struct StorageTestClient {}
+
+#[cfg(test)]
+impl StorageTestClient {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[cfg(test)]
+#[async_trait]
+impl CloudStorable for StorageTestClient {
+    async fn read_bucket(&self, name: &str) -> Result<String> {
+        Ok(name.to_string())
+    }
+
+    async fn upload_object(
+        &self,
+        _bucket: &BucketDto,
+        _dir: &Dir,
+        _source_dir: &PathBuf,
+        _file: &FileDto,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    async fn delete_file_object(
+        &self,
+        _bucket_name: &str,
+        _dir_name: &str,
+        _file: &FileDto,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    async fn format_files(
+        &self,
+        _bucket_name: &str,
+        _dir_name: &str,
+        files: Vec<FileDto>,
+    ) -> Result<Vec<FileDto>> {
+        Ok(files)
+    }
+
+    async fn format_file(
+        &self,
+        _bucket_name: &str,
+        _dir_name: &str,
+        file: FileDto,
+    ) -> Result<FileDto> {
+        Ok(file)
+    }
+}

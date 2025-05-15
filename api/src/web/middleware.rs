@@ -15,7 +15,8 @@ use crate::{
         BadRequestSnafu, ForbiddenSnafu, InsufficientAuthScopeSnafu, InvalidAuthTokenSnafu,
         NotFoundSnafu,
     },
-    web::{params::Params, server::AppState},
+    state::AppState,
+    web::params::Params,
 };
 use memo::{role::Permission, utils::valid_id};
 

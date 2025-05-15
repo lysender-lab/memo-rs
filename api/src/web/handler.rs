@@ -16,8 +16,7 @@ use crate::{
     },
     bucket::{NewBucket, create_bucket},
     client::{
-        ClientDefaultBucket, NewClient, UpdateClient, create_client, delete_client, list_clients,
-        update_client,
+        ClientDefaultBucket, NewClient, UpdateClient, create_client, delete_client, update_client,
     },
     dir::{Dir, ListDirsParams, NewDir, UpdateDir, delete_dir},
     error::{
@@ -26,7 +25,8 @@ use crate::{
     },
     file::{FileObject, FilePayload, ListFilesParams, create_file},
     health::{check_liveness, check_readiness},
-    web::{params::Params, response::JsonResponse, server::AppState},
+    state::AppState,
+    web::{params::Params, response::JsonResponse},
 };
 use memo::{
     dto::{
@@ -110,7 +110,7 @@ pub async fn health_ready_handler(State(state): State<AppState>) -> Result<JsonR
 }
 
 pub async fn list_clients_handler(State(state): State<AppState>) -> Result<JsonResponse> {
-    let clients = list_clients(&state.db_pool).await?;
+    let clients = state.db.clients.list().await?;
     Ok(JsonResponse::new(serde_json::to_string(&clients).unwrap()))
 }
 
@@ -131,7 +131,7 @@ pub async fn create_client_handler(
         msg: "Invalid request payload",
     })?;
 
-    let created = create_client(state, &data, false).await?;
+    let created = create_client(&state, &data, false).await?;
     Ok(JsonResponse::new(serde_json::to_string(&created).unwrap()))
 }
 
@@ -162,7 +162,7 @@ pub async fn update_client_handler(
         return Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()));
     }
 
-    let updated = update_client(state.clone(), client.id.as_str(), &data).await?;
+    let updated = update_client(&state, client.id.as_str(), &data).await?;
     if !updated {
         // No changes, just return the client
         return Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()));
@@ -197,7 +197,7 @@ pub async fn delete_client_handler(
         }
     );
 
-    let _ = delete_client(state, &client.id).await?;
+    let _ = delete_client(&state, &client.id).await?;
 
     Ok(JsonResponse::with_status(
         StatusCode::NO_CONTENT,
@@ -229,7 +229,7 @@ pub async fn update_default_bucket_handler(
         default_bucket_id: Some(data.default_bucket_id.clone()),
     };
 
-    let updated = update_client(state.clone(), client.id.as_str(), &data).await?;
+    let updated = update_client(&state, client.id.as_str(), &data).await?;
     if !updated {
         // No changes, just return the client
         return Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()));
@@ -381,7 +381,7 @@ pub async fn delete_dir_handler(
     );
 
     let dir_id = params.dir_id.clone().expect("dir_id is required");
-    let _ = delete_dir(state, &dir_id).await?;
+    let _ = delete_dir(&state, &dir_id).await?;
     Ok(JsonResponse::with_status(
         StatusCode::NO_CONTENT,
         "".to_string(),

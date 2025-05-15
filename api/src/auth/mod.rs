@@ -8,7 +8,7 @@ use token::{create_auth_token, verify_auth_token};
 use crate::error::{
     InactiveUserSnafu, InvalidClientSnafu, InvalidPasswordSnafu, UserNotFoundSnafu, ValidationSnafu,
 };
-use crate::{Result, web::server::AppState};
+use crate::{Result, state::AppState};
 use memo::validators::flatten_errors;
 
 pub mod actor;

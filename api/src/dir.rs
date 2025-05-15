@@ -12,7 +12,7 @@ use crate::error::{
     DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, MaxDirsReachedSnafu, ValidationSnafu,
 };
 use crate::schema::dirs::{self, dsl};
-use crate::web::server::AppState;
+use crate::state::AppState;
 use memo::dto::pagination::Paginated;
 use memo::utils::generate_id;
 use memo::validators::flatten_errors;
@@ -62,7 +62,7 @@ pub struct ListDirsParams {
 const MAX_DIRS: i32 = 1000;
 const MAX_PER_PAGE: i32 = 50;
 
-pub async fn delete_dir(state: AppState, id: &str) -> Result<()> {
+pub async fn delete_dir(state: &AppState, id: &str) -> Result<()> {
     // Do not delete if there are still files inside
     let file_count = state.db.files.count_by_dir(id).await?;
     ensure!(

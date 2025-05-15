@@ -1,8 +1,4 @@
-use std::sync::Arc;
-
-use axum::extract::FromRef;
 use axum::{Router, body::Body, middleware, response::Response};
-use deadpool_diesel::sqlite::Pool;
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
@@ -10,31 +6,13 @@ use tracing::{Level, error, info};
 
 use crate::Result;
 use crate::config::Config;
-use crate::db::{DbMapper, create_db_mapper, create_db_pool};
 use crate::error::{ErrorInfo, ErrorResponse};
-use crate::storage::{CloudStorable, StorageClient};
+use crate::state::create_app_state;
 use crate::web::routes::all_routes;
-
-#[derive(Clone, FromRef)]
-pub struct AppState {
-    pub config: Config,
-    pub storage_client: Arc<dyn CloudStorable>,
-    pub db: Arc<DbMapper>,
-    pub db_pool: Pool,
-}
 
 pub async fn run_web_server(config: &Config) -> Result<()> {
     let port = config.server.port;
-
-    let storage_client = StorageClient::new(config.cloud.credentials.as_str()).await?;
-    let pool = create_db_pool(config.db.url.as_str());
-    let db = create_db_mapper(config.db.url.as_str());
-    let state = AppState {
-        config: config.clone(),
-        storage_client: Arc::new(storage_client),
-        db: Arc::new(db),
-        db_pool: pool,
-    };
+    let state = create_app_state(config).await?;
 
     let routes_all = Router::new()
         .merge(all_routes(state))
