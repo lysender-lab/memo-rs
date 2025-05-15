@@ -532,9 +532,18 @@ pub async fn delete_user_handler(
 
 pub async fn list_dirs_handler(
     State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
     Extension(bucket): Extension<BucketDto>,
     query: Query<ListDirsParams>,
 ) -> Result<JsonResponse> {
+    let permissions = vec![Permission::DirsList];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
     let dirs = state.db.dirs.list(bucket.id.as_str(), &query).await?;
     Ok(JsonResponse::new(serde_json::to_string(&dirs).unwrap()))
 }
@@ -572,7 +581,6 @@ pub async fn update_dir_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
     Extension(dir): Extension<Dir>,
-    Path(params): Path<Params>,
     payload: CoreResult<Json<UpdateDir>, JsonRejection>,
 ) -> Result<JsonResponse> {
     let permissions = vec![Permission::DirsEdit];
@@ -583,16 +591,15 @@ pub async fn update_dir_handler(
         }
     );
 
-    let dir_id = params.dir_id.clone().expect("dir_id is required");
     let data = payload.context(JsonRejectionSnafu {
         msg: "Invalid request payload",
     })?;
 
-    let updated = state.db.dirs.update(&dir_id, &data).await?;
+    let updated = state.db.dirs.update(&dir.id, &data).await?;
 
     // Either return the updated dir or the original one
     match updated {
-        true => get_dir_as_response(&state, &dir_id).await,
+        true => get_dir_as_response(&state, &dir.id).await,
         false => Ok(JsonResponse::new(serde_json::to_string(&dir).unwrap())),
     }
 }
