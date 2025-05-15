@@ -18,9 +18,9 @@ use crate::{
     state::AppState,
     web::params::Params,
 };
-use memo::{role::Permission, utils::valid_id};
+use memo::{dto::user::UserDto, role::Permission, utils::valid_id};
 
-use super::params::ClientParams;
+use super::params::{ClientParams, UserParams};
 
 pub async fn auth_middleware(
     State(state): State<AppState>,
@@ -150,6 +150,50 @@ pub async fn bucket_middleware(
 
     // Forward to the next middleware/handler passing the bucket information
     request.extensions_mut().insert(bucket);
+    let response = next.run(request).await;
+    Ok(response)
+}
+
+pub async fn user_middleware(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(params): Path<UserParams>,
+    mut request: Request,
+    next: Next,
+) -> Result<Response<Body>> {
+    let permissions = vec![Permission::UsersList, Permission::UsersView];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    ensure!(
+        valid_id(&params.user_id),
+        BadRequestSnafu {
+            msg: "Invalid user id"
+        }
+    );
+
+    let user = state.db.users.get(&params.user_id).await?;
+    let user = user.context(NotFoundSnafu {
+        msg: "User not found",
+    })?;
+
+    if !actor.is_system_admin() {
+        ensure!(
+            &user.client_id == &actor.client_id,
+            NotFoundSnafu {
+                msg: "User not found"
+            }
+        );
+    }
+
+    let user: UserDto = user.into();
+
+    // Forward to the next middleware/handler passing the bucket information
+    request.extensions_mut().insert(user);
     let response = next.run(request).await;
     Ok(response)
 }

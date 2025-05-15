@@ -16,7 +16,7 @@ use crate::error::{
 };
 use crate::schema::users::{self, dsl};
 use memo::dto::user::UserDto;
-use memo::role::to_roles;
+use memo::role::{Role, to_roles};
 use memo::utils::generate_id;
 use memo::validators::flatten_errors;
 
@@ -144,7 +144,15 @@ impl UserRepoable for UserRepo {
         // Roles must be all valid
         let roles: Vec<String> = data.roles.split(",").map(|item| item.to_string()).collect();
         // Validate roles
-        let _ = to_roles(roles).context(InvalidRolesSnafu)?;
+        let roles = to_roles(roles).context(InvalidRolesSnafu)?;
+
+        // Should not allow creating a system admin
+        ensure!(
+            !roles.contains(&Role::SystemAdmin),
+            ValidationSnafu {
+                msg: "Creating a system admin not allowed".to_string(),
+            }
+        );
 
         let data_copy = data.clone();
         let today = chrono::Utc::now().timestamp();

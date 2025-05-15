@@ -11,3 +11,11 @@ pub struct Params {
 pub struct ClientParams {
     pub client_id: String,
 }
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct UserParams {
+    #[allow(dead_code)]
+    pub client_id: String,
+
+    pub user_id: String,
+}

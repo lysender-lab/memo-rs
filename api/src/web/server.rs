@@ -460,6 +460,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_list_user_users_as_user() {
+        let server = create_test_app();
+        let token = create_test_user_auth_token().unwrap();
+        let url = format!("/clients/{}/users", TEST_CLIENT_ID);
+        let users: Vec<UserDto> = server
+            .get(url.as_str())
+            .authorization_bearer(token.as_str())
+            .await
+            .json();
+
+        assert_eq!(users.len(), 1);
+        let user = users.first().unwrap();
+        assert_eq!(user.id.as_str(), TEST_USER_ID);
+    }
+
+    #[tokio::test]
+    async fn test_list_user_users_as_admin() {
+        let server = create_test_app();
+        let token = create_test_admin_auth_token().unwrap();
+        let url = format!("/clients/{}/users", TEST_CLIENT_ID);
+        let users: Vec<UserDto> = server
+            .get(url.as_str())
+            .authorization_bearer(token.as_str())
+            .await
+            .json();
+
+        assert_eq!(users.len(), 1);
+        let user = users.first().unwrap();
+        assert_eq!(user.id.as_str(), TEST_USER_ID);
+    }
+
+    #[tokio::test]
     async fn test_list_user_dirs_as_user() {
         let server = create_test_app();
         let token = create_test_user_auth_token().unwrap();

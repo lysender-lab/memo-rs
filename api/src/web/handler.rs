@@ -13,6 +13,7 @@ use crate::{
     auth::{
         actor::{Actor, Credentials},
         authenticate,
+        user::NewUser,
     },
     bucket::{NewBucket, create_bucket, delete_bucket},
     client::{
@@ -34,6 +35,7 @@ use memo::{
         client::ClientDto,
         file::{FileDto, ImgVersion},
         pagination::Paginated,
+        user::UserDto,
     },
     role::Permission,
     utils::slugify_prefixed,
@@ -325,6 +327,65 @@ pub async fn create_bucket_handler(
         StatusCode::CREATED,
         serde_json::to_string(&bucket).unwrap(),
     ))
+}
+
+pub async fn list_users_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(client): Extension<ClientDto>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::UsersList];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+    let users = state.db.users.list(&client.id).await?;
+    let dto: Vec<UserDto> = users.into_iter().map(|x| x.into()).collect();
+    Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
+}
+
+pub async fn create_user_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(client): Extension<ClientDto>,
+    payload: CoreResult<Json<NewUser>, JsonRejection>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::UsersCreate];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
+
+    let user = state.db.users.create(&client.id, &data).await?;
+    let dto: UserDto = user.into();
+
+    Ok(JsonResponse::with_status(
+        StatusCode::CREATED,
+        serde_json::to_string(&dto).unwrap(),
+    ))
+}
+
+pub async fn get_user_handler(
+    Extension(actor): Extension<Actor>,
+    Extension(user): Extension<UserDto>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::UsersView];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    Ok(JsonResponse::new(serde_json::to_string(&user).unwrap()))
 }
 
 pub async fn list_dirs_handler(
