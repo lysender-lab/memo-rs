@@ -13,7 +13,7 @@ use crate::error::{
 };
 use crate::schema::dirs::{self, dsl};
 use crate::state::AppState;
-use memo::dto::pagination::{Paginated, PaginatedMeta};
+use memo::dto::pagination::Paginated;
 use memo::utils::generate_id;
 use memo::validators::flatten_errors;
 

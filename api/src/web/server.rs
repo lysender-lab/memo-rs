@@ -10,6 +10,9 @@ use crate::error::{ErrorInfo, ErrorResponse};
 use crate::state::create_app_state;
 use crate::web::routes::all_routes;
 
+#[cfg(test)]
+use axum_test::TestServer;
+
 pub async fn run_web_server(config: &Config) -> Result<()> {
     let port = config.server.port;
     let state = create_app_state(config).await?;
@@ -88,5 +91,87 @@ async fn shutdown_signal() {
     tokio::select! {
         _ = ctrl_c => {},
         _ = terminate => {},
+    }
+}
+
+#[cfg(test)]
+fn create_test_app() -> TestServer {
+    use crate::state::create_test_app_state;
+
+    let state = create_test_app_state();
+
+    let app = Router::new()
+        .merge(all_routes(state))
+        .layer(middleware::map_response(response_mapper));
+
+    TestServer::builder()
+        .save_cookies()
+        .expect_success_by_default()
+        .mock_transport()
+        .build(app)
+        .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn test_home_page() {
+        let server = create_test_app();
+        let response = server.get("/").await;
+
+        response.assert_status_ok();
+    }
+
+    #[tokio::test]
+    async fn test_health_live() {
+        let server = create_test_app();
+        let response = server.get("/health/liveness").await;
+
+        response.assert_status_ok();
+    }
+
+    #[tokio::test]
+    async fn test_login_invalid() {
+        let server = create_test_app();
+        let response = server
+            .post("/auth/token")
+            .json(&json!({
+                "username": "root",
+                "password": "not-a-strong-password",
+            }))
+            .await;
+
+        response.assert_status_unauthorized();
+    }
+
+    #[tokio::test]
+    async fn test_login_admin() {
+        let server = create_test_app();
+        let response = server
+            .post("/auth/token")
+            .json(&json!({
+                "username": "admin",
+                "password": "secret-password",
+            }))
+            .await;
+
+        response.assert_status_ok();
+    }
+
+    #[tokio::test]
+    async fn test_login_user() {
+        let server = create_test_app();
+        let response = server
+            .post("/auth/token")
+            .json(&json!({
+                "username": "user",
+                "password": "secret-password",
+            }))
+            .await;
+
+        response.assert_status_ok();
     }
 }
