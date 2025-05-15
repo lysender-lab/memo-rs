@@ -1,9 +1,9 @@
 use snafu::{Snafu, ensure};
 use std::collections::HashSet;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(PartialEq, Debug, Clone, Serialize)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Role {
     SystemAdmin,
     Admin,
@@ -235,6 +235,8 @@ pub fn role_permissions(role: &Role) -> Vec<Permission> {
             Permission::FilesView,
         ],
         Role::Admin => vec![
+            Permission::ClientsList,
+            Permission::ClientsView,
             Permission::BucketsList,
             Permission::BucketsView,
             Permission::DirsCreate,
@@ -251,6 +253,8 @@ pub fn role_permissions(role: &Role) -> Vec<Permission> {
             Permission::FilesManage,
         ],
         Role::Editor => vec![
+            Permission::ClientsList,
+            Permission::ClientsView,
             Permission::BucketsList,
             Permission::BucketsView,
             Permission::DirsList,
@@ -260,6 +264,8 @@ pub fn role_permissions(role: &Role) -> Vec<Permission> {
             Permission::FilesView,
         ],
         Role::Viewer => vec![
+            Permission::ClientsList,
+            Permission::ClientsView,
             Permission::BucketsList,
             Permission::BucketsView,
             Permission::DirsList,

@@ -1,7 +1,7 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, str::FromStr};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileDto {
     pub id: String,
     pub dir_id: String,
@@ -23,13 +23,13 @@ pub struct FileDto {
     pub updated_at: i64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImgDimension {
     pub width: u32,
     pub height: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ImgVersion {
     #[serde(rename = "orig")]
     Original,
@@ -41,7 +41,7 @@ pub enum ImgVersion {
     Thumbnail,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImgVersionDto {
     pub version: ImgVersion,
     pub dimension: ImgDimension,

@@ -1,7 +1,7 @@
 use crate::role::Role;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserDto {
     pub id: String,
     pub client_id: String,

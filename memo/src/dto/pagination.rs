@@ -1,6 +1,6 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PaginatedMeta {
     pub page: i32,
     pub per_page: i32,
@@ -8,7 +8,7 @@ pub struct PaginatedMeta {
     pub total_pages: i64,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Paginated<T> {
     pub meta: PaginatedMeta,
     pub data: Vec<T>,

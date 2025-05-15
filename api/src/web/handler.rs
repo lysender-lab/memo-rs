@@ -308,17 +308,17 @@ pub async fn create_bucket_handler(
 
 pub async fn list_dirs_handler(
     State(state): State<AppState>,
-    Path(bucket_id): Path<String>,
+    Extension(bucket): Extension<BucketDto>,
     query: Query<ListDirsParams>,
 ) -> Result<JsonResponse> {
-    let dirs = state.db.dirs.list(bucket_id.as_str(), &query).await?;
+    let dirs = state.db.dirs.list(bucket.id.as_str(), &query).await?;
     Ok(JsonResponse::new(serde_json::to_string(&dirs).unwrap()))
 }
 
 pub async fn create_dir_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
-    Path(bucket_id): Path<String>,
+    Extension(bucket): Extension<BucketDto>,
     payload: CoreResult<Json<NewDir>, JsonRejection>,
 ) -> Result<JsonResponse> {
     let permissions = vec![Permission::DirsCreate];
@@ -333,7 +333,7 @@ pub async fn create_dir_handler(
         msg: "Invalid request payload",
     })?;
 
-    let dir = state.db.dirs.create(&bucket_id, &data).await?;
+    let dir = state.db.dirs.create(bucket.id.as_str(), &data).await?;
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,
         serde_json::to_string(&dir).unwrap(),

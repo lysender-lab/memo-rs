@@ -17,7 +17,7 @@ use memo::dto::pagination::Paginated;
 use memo::utils::generate_id;
 use memo::validators::flatten_errors;
 
-#[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
+#[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize, Deserialize)]
 #[diesel(table_name = crate::schema::dirs)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct Dir {
