@@ -1,6 +1,6 @@
 use validator::Validate;
 
-use actor::{Actor, ActorPayload, AuthResponse, Credentials};
+use memo::actor::{Actor, ActorPayload, AuthResponse, Credentials};
 use password::verify_password;
 use snafu::{OptionExt, ensure};
 use token::{create_auth_token, verify_auth_token};
@@ -11,7 +11,6 @@ use crate::error::{
 use crate::{Result, state::AppState};
 use memo::validators::flatten_errors;
 
-pub mod actor;
 pub mod password;
 pub mod token;
 pub mod user;

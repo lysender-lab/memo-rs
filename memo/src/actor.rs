@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use memo::dto::user::UserDto;
-use memo::role::{Permission, Role, roles_permissions, to_permissions};
+use crate::dto::user::UserDto;
+use crate::role::{Permission, Role, roles_permissions, to_permissions};
 
 #[derive(Clone)]
 pub struct ActorPayload {
@@ -115,7 +115,7 @@ pub struct AuthResponse {
 
 #[cfg(test)]
 mod tests {
-    use memo::utils::generate_id;
+    use crate::utils::generate_id;
 
     use super::*;
 

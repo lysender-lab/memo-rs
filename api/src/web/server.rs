@@ -115,11 +115,11 @@ fn create_test_app() -> TestServer {
 
 #[cfg(test)]
 fn create_test_user_auth_token() -> Result<String> {
-    use crate::auth::actor::ActorPayload;
     use crate::auth::token::create_auth_token;
     use crate::auth::user::TEST_USER_ID;
     use crate::client::TEST_CLIENT_ID;
     use crate::state::create_test_app_state;
+    use memo::actor::ActorPayload;
 
     let state = create_test_app_state();
 
@@ -135,11 +135,11 @@ fn create_test_user_auth_token() -> Result<String> {
 
 #[cfg(test)]
 fn create_test_admin_auth_token() -> Result<String> {
-    use crate::auth::actor::ActorPayload;
     use crate::auth::token::create_auth_token;
     use crate::auth::user::TEST_ADMIN_USER_ID;
     use crate::client::TEST_ADMIN_CLIENT_ID;
     use crate::state::create_test_app_state;
+    use memo::actor::ActorPayload;
 
     let state = create_test_app_state();
 

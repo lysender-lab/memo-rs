@@ -17,7 +17,7 @@ pub struct InvalidRolesError {
     roles: String,
 }
 
-#[derive(PartialEq, Eq, Hash, Debug, Clone, Serialize)]
+#[derive(PartialEq, Eq, Hash, Debug, Clone, Serialize, Deserialize)]
 pub enum Permission {
     ClientsCreate,
     ClientsEdit,

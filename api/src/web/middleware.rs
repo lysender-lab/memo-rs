@@ -10,7 +10,7 @@ use snafu::{OptionExt, ensure};
 
 use crate::{
     Result,
-    auth::{actor::Actor, authenticate_token},
+    auth::authenticate_token,
     error::{
         BadRequestSnafu, ForbiddenSnafu, InsufficientAuthScopeSnafu, InvalidAuthTokenSnafu,
         NotFoundSnafu,
@@ -18,7 +18,7 @@ use crate::{
     state::AppState,
     web::params::Params,
 };
-use memo::{dto::user::UserDto, role::Permission, utils::valid_id};
+use memo::{actor::Actor, dto::user::UserDto, role::Permission, utils::valid_id};
 
 use super::params::{ClientParams, UserParams};
 

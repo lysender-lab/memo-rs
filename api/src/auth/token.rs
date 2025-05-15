@@ -3,11 +3,11 @@ use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode}
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
-use super::actor::ActorPayload;
 use crate::{
     Result,
     error::{InvalidAuthTokenSnafu, WhateverSnafu},
 };
+use memo::actor::ActorPayload;
 
 #[derive(Debug, Deserialize, Serialize)]
 struct Claims {

@@ -11,7 +11,6 @@ use tokio::{fs::File, fs::create_dir_all, io::AsyncWriteExt};
 
 use crate::{
     auth::{
-        actor::{Actor, Credentials},
         authenticate,
         user::{
             ChangeCurrentPassword, NewUser, UpdateUserPassword, UpdateUserRoles, UpdateUserStatus,
@@ -33,6 +32,7 @@ use crate::{
     web::{params::Params, response::JsonResponse},
 };
 use memo::{
+    actor::{Actor, Credentials},
     dto::{
         bucket::BucketDto,
         client::ClientDto,
