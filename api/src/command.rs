@@ -236,7 +236,7 @@ async fn run_create_bucket(
         name,
         images_only: img_only,
     };
-    let bucket = create_bucket(state, &client_id, &data).await?;
+    let bucket = create_bucket(&state, &client_id, &data).await?;
 
     println!(
         "{{ id = {}, name = {}, images_only = {} }}",

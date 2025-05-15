@@ -14,7 +14,7 @@ use crate::{
         actor::{Actor, Credentials},
         authenticate,
     },
-    bucket::{NewBucket, create_bucket},
+    bucket::{NewBucket, create_bucket, delete_bucket},
     client::{
         ClientDefaultBucket, NewClient, UpdateClient, create_client, delete_client, update_client,
     },
@@ -280,6 +280,27 @@ pub async fn get_bucket_handler(Extension(bucket): Extension<BucketDto>) -> Resu
     Ok(JsonResponse::new(serde_json::to_string(&bucket).unwrap()))
 }
 
+pub async fn delete_bucket_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(bucket): Extension<BucketDto>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::BucketsDelete];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    let _ = delete_bucket(&state, bucket.id.as_str()).await?;
+
+    Ok(JsonResponse::with_status(
+        StatusCode::NO_CONTENT,
+        "".to_string(),
+    ))
+}
+
 pub async fn create_bucket_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
@@ -298,7 +319,7 @@ pub async fn create_bucket_handler(
         msg: "Invalid request payload",
     })?;
 
-    let bucket = create_bucket(state, &client.id, &data).await?;
+    let bucket = create_bucket(&state, &client.id, &data).await?;
 
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,

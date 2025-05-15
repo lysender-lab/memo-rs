@@ -75,7 +75,7 @@ impl From<Bucket> for BucketDto {
 const MAX_BUCKETS_PER_CLIENT: i32 = 50;
 
 pub async fn create_bucket(
-    state: AppState,
+    state: &AppState,
     client_id: &str,
     data: &NewBucket,
 ) -> Result<BucketDto> {
