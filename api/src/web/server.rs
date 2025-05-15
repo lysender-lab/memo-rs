@@ -1,5 +1,4 @@
 use axum::{Router, body::Body, middleware, response::Response};
-use serde::Deserialize;
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
@@ -156,9 +155,13 @@ fn create_test_admin_auth_token() -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::client::{Client, TEST_CLIENT_ID};
+    use crate::{
+        auth::user::{TEST_ADMIN_USER_ID, TEST_USER_ID},
+        client::{Client, TEST_ADMIN_CLIENT_ID, TEST_CLIENT_ID},
+    };
 
     use super::*;
+    use memo::dto::{client::ClientDto, user::UserDto};
     use serde_json::json;
 
     #[tokio::test]
@@ -249,5 +252,87 @@ mod tests {
 
         // Should see all clients
         assert_eq!(clients.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_user_profile_as_user() {
+        let server = create_test_app();
+        let token = create_test_user_auth_token().unwrap();
+        let user: UserDto = server
+            .get("/user")
+            .authorization_bearer(token.as_str())
+            .await
+            .json();
+
+        assert_eq!(user.id.as_str(), TEST_USER_ID);
+    }
+
+    #[tokio::test]
+    async fn test_user_profile_as_admin() {
+        let server = create_test_app();
+        let token = create_test_admin_auth_token().unwrap();
+        let user: UserDto = server
+            .get("/user")
+            .authorization_bearer(token.as_str())
+            .await
+            .json();
+
+        assert_eq!(user.id.as_str(), TEST_ADMIN_USER_ID);
+    }
+
+    #[tokio::test]
+    async fn test_get_user_client_as_user() {
+        let server = create_test_app();
+        let token = create_test_user_auth_token().unwrap();
+        let url = format!("/clients/{}", TEST_CLIENT_ID);
+        let client: ClientDto = server
+            .get(url.as_str())
+            .authorization_bearer(token.as_str())
+            .await
+            .json();
+
+        assert_eq!(client.id.as_str(), TEST_CLIENT_ID);
+    }
+
+    #[tokio::test]
+    async fn test_get_admin_client_as_user() {
+        let server = create_test_app();
+        let token = create_test_user_auth_token().unwrap();
+        let url = format!("/clients/{}", TEST_ADMIN_CLIENT_ID);
+        let response = server
+            .get(url.as_str())
+            .authorization_bearer(token.as_str())
+            .expect_failure()
+            .await;
+
+        response.assert_status_not_found();
+    }
+
+    #[tokio::test]
+    async fn test_get_user_client_as_admin() {
+        let server = create_test_app();
+        let token = create_test_admin_auth_token().unwrap();
+        let url = format!("/clients/{}", TEST_CLIENT_ID);
+        let client: ClientDto = server
+            .get(url.as_str())
+            .authorization_bearer(token.as_str())
+            .await
+            .json();
+
+        assert_eq!(client.id.as_str(), TEST_CLIENT_ID);
+    }
+
+    #[tokio::test]
+    async fn test_get_admin_client_as_admin() {
+        let server = create_test_app();
+        let token = create_test_admin_auth_token().unwrap();
+        let url = format!("/clients/{}", TEST_ADMIN_CLIENT_ID);
+        let client: ClientDto = server
+            .get(url.as_str())
+            .authorization_bearer(token.as_str())
+            .await
+            .json();
+
+        assert_eq!(client.id.as_str(), TEST_ADMIN_CLIENT_ID);
     }
 }

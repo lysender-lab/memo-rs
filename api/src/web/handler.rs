@@ -113,6 +113,14 @@ pub async fn list_clients_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
 ) -> Result<JsonResponse> {
+    let permissions = vec![Permission::ClientsList];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
     let mut client_id: Option<String> = None;
     if !actor.is_system_admin() {
         client_id = Some(actor.client_id.clone());
