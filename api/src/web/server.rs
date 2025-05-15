@@ -106,6 +106,7 @@ fn create_test_app() -> TestServer {
 
     TestServer::builder()
         .save_cookies()
+        .default_content_type("application/json")
         .expect_success_by_default()
         .mock_transport()
         .build(app)
@@ -139,9 +140,10 @@ mod tests {
         let response = server
             .post("/auth/token")
             .json(&json!({
-                "username": "root",
+                "username": "pythagoras",
                 "password": "not-a-strong-password",
             }))
+            .expect_failure()
             .await;
 
         response.assert_status_unauthorized();
