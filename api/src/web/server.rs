@@ -1,4 +1,5 @@
 use axum::{Router, body::Body, middleware, response::Response};
+use serde::Deserialize;
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
@@ -155,6 +156,8 @@ fn create_test_admin_auth_token() -> Result<String> {
 
 #[cfg(test)]
 mod tests {
+    use crate::client::{Client, TEST_CLIENT_ID};
+
     use super::*;
     use serde_json::json;
 
@@ -221,23 +224,30 @@ mod tests {
     async fn test_list_clients_as_user() {
         let server = create_test_app();
         let token = create_test_user_auth_token().unwrap();
-        let response = server
+        let clients: Vec<Client> = server
             .get("/clients")
             .authorization_bearer(token.as_str())
-            .await;
+            .await
+            .json();
 
-        response.assert_status_ok();
+        // Should only see its own
+        assert_eq!(clients.len(), 1);
+
+        let client = clients.first().unwrap();
+        assert_eq!(client.id.as_str(), TEST_CLIENT_ID);
     }
 
     #[tokio::test]
     async fn test_list_clients_as_admin() {
         let server = create_test_app();
         let token = create_test_admin_auth_token().unwrap();
-        let response = server
+        let clients: Vec<Client> = server
             .get("/clients")
             .authorization_bearer(token.as_str())
-            .await;
+            .await
+            .json();
 
-        response.assert_status_ok();
+        // Should see all clients
+        assert_eq!(clients.len(), 2);
     }
 }

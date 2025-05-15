@@ -17,8 +17,8 @@ use super::{
         user_authz, user_permissions,
     },
     middleware::{
-        auth_middleware, bucket_middleware, client_middleware, clients_admin_middleware,
-        dir_middleware, file_middleware, require_auth_middleware,
+        auth_middleware, bucket_middleware, client_middleware, dir_middleware, file_middleware,
+        require_auth_middleware,
     },
 };
 use crate::state::AppState;
@@ -59,10 +59,6 @@ fn clients_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(list_clients_handler).post(create_client_handler))
         .nest("/{client_id}", inner_client_routes(state.clone()))
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            clients_admin_middleware,
-        ))
         .with_state(state)
 }
 

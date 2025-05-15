@@ -62,27 +62,6 @@ pub async fn require_auth_middleware(
     Ok(next.run(request).await)
 }
 
-pub async fn clients_admin_middleware(
-    actor: Extension<Actor>,
-    request: Request,
-    next: Next,
-) -> Result<Response<Body>> {
-    let permissions = vec![
-        Permission::ClientsList,
-        Permission::ClientsView,
-        Permission::ClientsManage,
-    ];
-
-    ensure!(
-        actor.has_permissions(&permissions),
-        ForbiddenSnafu {
-            msg: "Insufficient permissions"
-        }
-    );
-
-    Ok(next.run(request).await)
-}
-
 pub async fn client_middleware(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
