@@ -17,11 +17,8 @@ use crate::{
     models::{LoginFormPayload, TemplateData},
     services::{AuthPayload, authenticate, validate_catpcha},
 };
-use crate::{
-    error::ErrorInfo,
-    models::{Actor, Pref},
-    run::AppState,
-};
+use crate::{error::ErrorInfo, models::Pref, run::AppState};
+use memo::actor::Actor;
 
 use super::AUTH_TOKEN_COOKIE;
 

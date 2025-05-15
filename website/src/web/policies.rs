@@ -1,7 +1,8 @@
-use crate::models::{Actor, Permission};
 use std::result::Result as StdResult;
 
 use crate::{Error, Result};
+use memo::actor::Actor;
+use memo::role::Permission;
 
 pub enum Resource {
     Album,

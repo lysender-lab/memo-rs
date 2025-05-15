@@ -1,4 +1,4 @@
-use crate::models::Actor;
+use memo::actor::Actor;
 
 #[derive(Clone)]
 pub struct Ctx {

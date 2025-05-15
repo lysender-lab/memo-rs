@@ -4,9 +4,10 @@ use axum::{body::Body, extract::State, http::StatusCode, response::Response};
 use crate::{
     Error,
     error::ErrorInfo,
-    models::{Actor, Pref, TemplateData},
+    models::{Pref, TemplateData},
     run::AppState,
 };
+use memo::actor::Actor;
 
 #[derive(Clone, Template)]
 #[template(path = "pages/error.html")]

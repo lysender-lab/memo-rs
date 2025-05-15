@@ -6,8 +6,8 @@ use std::collections::HashMap;
 use crate::{
     Error, Result,
     error::{HttpClientSnafu, HttpResponseParseSnafu},
-    models::Actor,
 };
+use memo::actor::Actor;
 
 #[derive(Serialize)]
 pub struct AuthPayload {

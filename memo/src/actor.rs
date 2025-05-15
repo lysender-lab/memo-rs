@@ -12,7 +12,7 @@ pub struct ActorPayload {
     pub scope: String,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Actor {
     pub id: String,
     pub client_id: String,
