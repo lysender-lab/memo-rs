@@ -502,10 +502,11 @@ pub async fn reset_user_password_handler(
 }
 
 pub async fn delete_user_handler(
+    State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
     Extension(user): Extension<UserDto>,
 ) -> Result<JsonResponse> {
-    let permissions = vec![Permission::UsersView];
+    let permissions = vec![Permission::UsersDelete];
     ensure!(
         actor.has_permissions(&permissions),
         ForbiddenSnafu {
@@ -513,7 +514,20 @@ pub async fn delete_user_handler(
         }
     );
 
-    Ok(JsonResponse::new(serde_json::to_string(&user).unwrap()))
+    // Do not allow deleting your own user account
+    ensure!(
+        &actor.user.id != &user.id,
+        ForbiddenSnafu {
+            msg: "Deleting your own user account not allowed"
+        }
+    );
+
+    let _ = state.db.users.delete(&user.id).await?;
+
+    Ok(JsonResponse::with_status(
+        StatusCode::NO_CONTENT,
+        "".to_string(),
+    ))
 }
 
 pub async fn list_dirs_handler(
