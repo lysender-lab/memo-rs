@@ -13,7 +13,10 @@ use crate::{
     auth::{
         actor::{Actor, Credentials},
         authenticate,
-        user::{NewUser, UpdateUserPassword, UpdateUserRoles, UpdateUserStatus},
+        user::{
+            ChangeCurrentPassword, NewUser, UpdateUserPassword, UpdateUserRoles, UpdateUserStatus,
+            change_current_password,
+        },
     },
     bucket::{NewBucket, create_bucket, delete_bucket},
     client::{
@@ -65,14 +68,31 @@ pub async fn profile_handler(Extension(actor): Extension<Actor>) -> Result<JsonR
     ))
 }
 
-pub async fn user_permissions(Extension(actor): Extension<Actor>) -> Result<JsonResponse> {
+pub async fn user_permissions_handler(Extension(actor): Extension<Actor>) -> Result<JsonResponse> {
     let mut items: Vec<String> = actor.permissions.iter().map(|p| p.to_string()).collect();
     items.sort();
     Ok(JsonResponse::new(serde_json::to_string(&items).unwrap()))
 }
 
-pub async fn user_authz(Extension(actor): Extension<Actor>) -> Result<JsonResponse> {
+pub async fn user_authz_handler(Extension(actor): Extension<Actor>) -> Result<JsonResponse> {
     Ok(JsonResponse::new(serde_json::to_string(&actor).unwrap()))
+}
+
+pub async fn change_password_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    payload: CoreResult<Json<ChangeCurrentPassword>, JsonRejection>,
+) -> Result<JsonResponse> {
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
+
+    let _ = change_current_password(&state, &actor.user.id, &data).await?;
+
+    Ok(JsonResponse::with_status(
+        StatusCode::NO_CONTENT,
+        "".to_string(),
+    ))
 }
 
 pub async fn home_handler() -> impl IntoResponse {

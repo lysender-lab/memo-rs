@@ -8,15 +8,16 @@ use tower_http::limit::RequestBodyLimitLayer;
 
 use super::{
     handler::{
-        authenticate_handler, create_bucket_handler, create_client_handler, create_dir_handler,
-        create_file_handler, create_user_handler, delete_bucket_handler, delete_client_handler,
-        delete_dir_handler, delete_file_handler, delete_user_handler, get_bucket_handler,
-        get_client_handler, get_dir_handler, get_file_handler, get_user_handler,
-        health_live_handler, health_ready_handler, home_handler, list_buckets_handler,
-        list_clients_handler, list_dirs_handler, list_files_handler, list_users_handler,
-        not_found_handler, profile_handler, reset_user_password_handler, update_client_handler,
-        update_default_bucket_handler, update_dir_handler, update_user_roles_handler,
-        update_user_status_handler, user_authz, user_permissions,
+        authenticate_handler, change_password_handler, create_bucket_handler,
+        create_client_handler, create_dir_handler, create_file_handler, create_user_handler,
+        delete_bucket_handler, delete_client_handler, delete_dir_handler, delete_file_handler,
+        delete_user_handler, get_bucket_handler, get_client_handler, get_dir_handler,
+        get_file_handler, get_user_handler, health_live_handler, health_ready_handler,
+        home_handler, list_buckets_handler, list_clients_handler, list_dirs_handler,
+        list_files_handler, list_users_handler, not_found_handler, profile_handler,
+        reset_user_password_handler, update_client_handler, update_default_bucket_handler,
+        update_dir_handler, update_user_roles_handler, update_user_status_handler,
+        user_authz_handler, user_permissions_handler,
     },
     middleware::{
         auth_middleware, bucket_middleware, client_middleware, dir_middleware, file_middleware,
@@ -67,8 +68,9 @@ fn clients_routes(state: AppState) -> Router<AppState> {
 pub fn user_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(profile_handler))
-        .route("/permissions", get(user_permissions))
-        .route("/authz", get(user_authz))
+        .route("/permissions", get(user_permissions_handler))
+        .route("/authz", get(user_authz_handler))
+        .route("/change_password", post(change_password_handler))
         .with_state(state)
 }
 

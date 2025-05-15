@@ -5,16 +5,18 @@ use diesel::dsl::count_star;
 use diesel::prelude::*;
 use diesel::{QueryDsl, SelectableHelper};
 use serde::{Deserialize, Serialize};
-use snafu::{ResultExt, ensure};
+use snafu::{OptionExt, ResultExt, ensure};
 use validator::Validate;
 
 use super::password::hash_password;
-use crate::Result;
+use crate::auth::password::verify_password;
 use crate::error::{
     DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, InvalidRolesSnafu, MaxUsersReachedSnafu,
-    ValidationSnafu,
+    ValidationSnafu, WhateverSnafu,
 };
 use crate::schema::users::{self, dsl};
+use crate::state::AppState;
+use crate::{Error, Result};
 use memo::dto::user::UserDto;
 use memo::role::{Role, to_roles};
 use memo::utils::generate_id;
@@ -83,7 +85,50 @@ pub struct UpdateUserPassword {
     pub password: String,
 }
 
+#[derive(Debug, Clone, Deserialize, Validate)]
+pub struct ChangeCurrentPassword {
+    #[validate(length(min = 8, max = 60))]
+    pub current_password: String,
+
+    #[validate(length(min = 8, max = 60))]
+    pub new_password: String,
+}
+
 const MAX_USERS_PER_CLIENT: i32 = 50;
+
+pub async fn change_current_password(
+    state: &AppState,
+    user_id: &str,
+    data: &ChangeCurrentPassword,
+) -> Result<bool> {
+    let errors = data.validate();
+    ensure!(
+        errors.is_ok(),
+        ValidationSnafu {
+            msg: flatten_errors(&errors.unwrap_err()),
+        }
+    );
+
+    let user = state.db.users.get(user_id).await?.context(WhateverSnafu {
+        msg: "Unable to re-query user".to_string(),
+    })?;
+
+    // Validate current password
+    if let Err(verify_err) = verify_password(&data.current_password, &user.password) {
+        return match verify_err {
+            Error::InvalidPassword => Err(Error::Validation {
+                msg: "Current password is incorrect".to_string(),
+            }),
+            _ => Err(verify_err),
+        };
+    }
+
+    let new_data = UpdateUserPassword {
+        password: data.new_password.clone(),
+    };
+
+    state.db.users.update_password(user_id, &new_data).await
+}
 
 #[async_trait]
 pub trait UserRepoable: Send + Sync {
