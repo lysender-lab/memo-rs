@@ -64,6 +64,25 @@ pub struct NewUser {
     pub roles: String,
 }
 
+#[derive(Debug, Clone, Deserialize, Validate)]
+pub struct UpdateUserStatus {
+    #[validate(length(min = 1, max = 10))]
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Validate)]
+pub struct UpdateUserRoles {
+    #[validate(length(min = 1, max = 100))]
+    #[validate(custom(function = "memo::validators::csvname"))]
+    pub roles: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Validate)]
+pub struct UpdateUserPassword {
+    #[validate(length(min = 8, max = 100))]
+    pub password: String,
+}
+
 const MAX_USERS_PER_CLIENT: i32 = 50;
 
 #[async_trait]
@@ -78,9 +97,11 @@ pub trait UserRepoable: Send + Sync {
 
     async fn count_by_client(&self, client_id: &str) -> Result<i64>;
 
-    async fn update_status(&self, id: &str, status: &str) -> Result<bool>;
+    async fn update_status(&self, id: &str, data: &UpdateUserStatus) -> Result<bool>;
 
-    async fn update_password(&self, id: &str, password: &str) -> Result<bool>;
+    async fn update_roles(&self, id: &str, data: &UpdateUserRoles) -> Result<bool>;
+
+    async fn update_password(&self, id: &str, data: &UpdateUserPassword) -> Result<bool>;
 
     async fn delete(&self, id: &str) -> Result<()>;
 }
@@ -251,11 +272,26 @@ impl UserRepoable for UserRepo {
         Ok(count)
     }
 
-    async fn update_status(&self, id: &str, status: &str) -> Result<bool> {
+    async fn update_status(&self, id: &str, data: &UpdateUserStatus) -> Result<bool> {
+        let errors = data.validate();
+        ensure!(
+            errors.is_ok(),
+            ValidationSnafu {
+                msg: flatten_errors(&errors.unwrap_err()),
+            }
+        );
+
+        ensure!(
+            &data.status == "active" || &data.status == "inactive",
+            ValidationSnafu {
+                msg: "User status must be active or inactive",
+            }
+        );
+
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let id = id.to_string();
-        let status = status.to_string();
+        let status = data.status.clone();
         let today = chrono::Utc::now().timestamp();
         let update_res = db
             .interact(move |conn| {
@@ -274,12 +310,64 @@ impl UserRepoable for UserRepo {
         Ok(affected > 0)
     }
 
-    async fn update_password(&self, id: &str, password: &str) -> Result<bool> {
+    async fn update_roles(&self, id: &str, data: &UpdateUserRoles) -> Result<bool> {
+        let errors = data.validate();
+        ensure!(
+            errors.is_ok(),
+            ValidationSnafu {
+                msg: flatten_errors(&errors.unwrap_err()),
+            }
+        );
+
+        // Roles must be all valid
+        let roles_arr: Vec<String> = data.roles.split(",").map(|item| item.to_string()).collect();
+        // Validate roles
+        let roles_arr = to_roles(roles_arr).context(InvalidRolesSnafu)?;
+
+        // Should not allow creating a system admin
+        ensure!(
+            !roles_arr.contains(&Role::SystemAdmin),
+            ValidationSnafu {
+                msg: "Creating a system admin not allowed".to_string(),
+            }
+        );
+
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let id = id.to_string();
+        let roles = data.roles.clone();
+        let today = chrono::Utc::now().timestamp();
+        let update_res = db
+            .interact(move |conn| {
+                diesel::update(dsl::users)
+                    .filter(dsl::id.eq(&id))
+                    .set((dsl::status.eq(&roles), dsl::updated_at.eq(today)))
+                    .execute(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let affected = update_res.context(DbQuerySnafu {
+            table: "users".to_string(),
+        })?;
+
+        Ok(affected > 0)
+    }
+
+    async fn update_password(&self, id: &str, data: &UpdateUserPassword) -> Result<bool> {
+        let errors = data.validate();
+        ensure!(
+            errors.is_ok(),
+            ValidationSnafu {
+                msg: flatten_errors(&errors.unwrap_err()),
+            }
+        );
+
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let id = id.to_string();
         let today = chrono::Utc::now().timestamp();
-        let hashed = hash_password(&password)?;
+        let hashed = hash_password(&data.password)?;
         let update_res = db
             .interact(move |conn| {
                 diesel::update(dsl::users)
@@ -402,11 +490,15 @@ impl UserRepoable for UserTestRepo {
         Ok(users.len() as i64)
     }
 
-    async fn update_status(&self, _id: &str, _status: &str) -> Result<bool> {
+    async fn update_status(&self, _id: &str, _data: &UpdateUserStatus) -> Result<bool> {
         Ok(true)
     }
 
-    async fn update_password(&self, _id: &str, _password: &str) -> Result<bool> {
+    async fn update_roles(&self, _id: &str, _data: &UpdateUserRoles) -> Result<bool> {
+        Ok(true)
+    }
+
+    async fn update_password(&self, _id: &str, _data: &UpdateUserPassword) -> Result<bool> {
         Ok(true)
     }
 

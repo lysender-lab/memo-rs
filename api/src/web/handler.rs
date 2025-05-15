@@ -13,7 +13,7 @@ use crate::{
     auth::{
         actor::{Actor, Credentials},
         authenticate,
-        user::NewUser,
+        user::{NewUser, UpdateUserPassword, UpdateUserRoles, UpdateUserStatus},
     },
     bucket::{NewBucket, create_bucket, delete_bucket},
     client::{
@@ -374,6 +374,105 @@ pub async fn create_user_handler(
 }
 
 pub async fn get_user_handler(
+    Extension(actor): Extension<Actor>,
+    Extension(user): Extension<UserDto>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::UsersView];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    Ok(JsonResponse::new(serde_json::to_string(&user).unwrap()))
+}
+
+pub async fn update_user_status_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(user): Extension<UserDto>,
+    payload: CoreResult<Json<UpdateUserStatus>, JsonRejection>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::UsersEdit];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
+
+    let _ = state.db.users.update_status(&user.id, &data).await?;
+
+    // Re-query and show
+    let updated_user = state.db.users.get(&user.id).await?;
+
+    Ok(JsonResponse::new(
+        serde_json::to_string(&updated_user).unwrap(),
+    ))
+}
+
+pub async fn update_user_roles_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(user): Extension<UserDto>,
+    payload: CoreResult<Json<UpdateUserRoles>, JsonRejection>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::UsersEdit];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
+
+    let _ = state.db.users.update_roles(&user.id, &data).await?;
+
+    // Re-query and show
+    let updated_user = state.db.users.get(&user.id).await?;
+
+    Ok(JsonResponse::new(
+        serde_json::to_string(&updated_user).unwrap(),
+    ))
+}
+
+pub async fn reset_user_password_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(user): Extension<UserDto>,
+    payload: CoreResult<Json<UpdateUserPassword>, JsonRejection>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::UsersEdit];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
+
+    let _ = state.db.users.update_password(&user.id, &data).await?;
+
+    // Re-query and show
+    let updated_user = state.db.users.get(&user.id).await?;
+
+    Ok(JsonResponse::new(
+        serde_json::to_string(&updated_user).unwrap(),
+    ))
+}
+
+pub async fn delete_user_handler(
     Extension(actor): Extension<Actor>,
     Extension(user): Extension<UserDto>,
 ) -> Result<JsonResponse> {
