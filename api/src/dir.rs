@@ -13,7 +13,7 @@ use crate::error::{
 };
 use crate::schema::dirs::{self, dsl};
 use crate::state::AppState;
-use memo::dto::pagination::Paginated;
+use memo::dto::pagination::{Paginated, PaginatedMeta};
 use memo::utils::generate_id;
 use memo::validators::flatten_errors;
 
@@ -405,6 +405,102 @@ impl DirRepoable for DirRepo {
             table: "dirs".to_string(),
         })?;
 
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+pub const TEST_DIR_ID: &'static str = "0196d1c6bdc97ac895e4e141b9f46b3a";
+
+#[cfg(test)]
+pub fn create_test_dir() -> Dir {
+    use crate::bucket::TEST_BUCKET_ID;
+    let today = chrono::Utc::now().timestamp();
+
+    Dir {
+        id: TEST_DIR_ID.to_string(),
+        bucket_id: TEST_BUCKET_ID.to_string(),
+        name: "test-dir".to_string(),
+        label: "Test Dir".to_string(),
+        file_count: 0,
+        created_at: today.clone(),
+        updated_at: today,
+    }
+}
+
+#[cfg(test)]
+pub struct DirTestRepo {}
+
+#[cfg(test)]
+#[async_trait]
+impl DirRepoable for DirTestRepo {
+    async fn list(&self, bucket_id: &str, _params: &ListDirsParams) -> Result<Paginated<Dir>> {
+        let dir = create_test_dir();
+        let dirs = vec![dir];
+        let total_records = dirs.len() as i64;
+        let filtered = dirs
+            .into_iter()
+            .filter(|x| {
+                if x.bucket_id.as_str() == bucket_id {
+                    // Do not apply params for now
+                    return true;
+                }
+                false
+            })
+            .collect();
+
+        Ok(Paginated::new(filtered, 1, 10, total_records))
+    }
+
+    async fn count(&self, bucket_id: &str) -> Result<i64> {
+        let dirs = self
+            .list(
+                bucket_id,
+                &ListDirsParams {
+                    page: None,
+                    per_page: None,
+                    keyword: None,
+                },
+            )
+            .await?;
+        Ok(dirs.meta.total_records)
+    }
+
+    async fn create(&self, _bucket_id: &str, _data: &NewDir) -> Result<Dir> {
+        Err("Not supported".into())
+    }
+
+    async fn get(&self, id: &str) -> Result<Option<Dir>> {
+        let dir = create_test_dir();
+        let dirs = vec![dir];
+        let found = dirs.into_iter().find(|x| x.id.as_str() == id);
+        Ok(found)
+    }
+
+    async fn find_by_name(&self, bucket_id: &str, name: &str) -> Result<Option<Dir>> {
+        let dirs = self
+            .list(
+                bucket_id,
+                &ListDirsParams {
+                    page: None,
+                    per_page: None,
+                    keyword: None,
+                },
+            )
+            .await?;
+        let found = dirs.data.into_iter().find(|x| x.name.as_str() == name);
+        Ok(found)
+    }
+
+    async fn update(&self, _id: &str, _data: &UpdateDir) -> Result<bool> {
+        Ok(true)
+    }
+
+    async fn update_timestamp(&self, _id: &str, _timestamp: i64) -> Result<bool> {
+        Ok(true)
+    }
+
+    async fn delete(&self, _id: &str) -> Result<()> {
         Ok(())
     }
 }

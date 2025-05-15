@@ -404,3 +404,96 @@ impl ClientRepoable for ClientRepo {
         Ok(())
     }
 }
+
+#[cfg(test)]
+pub const TEST_CLIENT_ID: &'static str = "0196d19e01b1745980a8419edd88e3d1";
+
+#[cfg(test)]
+pub const TEST_ADMIN_CLIENT_ID: &'static str = "0196d1a2784a72959c97eef5dbc69dc7";
+
+#[cfg(test)]
+pub const TEST_NEW_CLIENT_ID: &'static str = "0196d1a2784a72959c97eef5dbc69dc7";
+
+#[cfg(test)]
+pub struct ClientTestRepo {}
+
+#[cfg(test)]
+pub fn create_test_client() -> Client {
+    let today = chrono::Utc::now().timestamp();
+    Client {
+        id: TEST_CLIENT_ID.to_string(),
+        name: "Test Client".to_string(),
+        default_bucket_id: None,
+        status: "active".to_string(),
+        admin: None,
+        created_at: today,
+    }
+}
+
+#[cfg(test)]
+pub fn create_test_admin_client() -> Client {
+    let today = chrono::Utc::now().timestamp();
+    Client {
+        id: TEST_ADMIN_CLIENT_ID.to_string(),
+        name: "Test Admin Client".to_string(),
+        default_bucket_id: None,
+        status: "active".to_string(),
+        admin: Some(1),
+        created_at: today,
+    }
+}
+
+#[cfg(test)]
+pub fn create_test_new_client() -> Client {
+    let today = chrono::Utc::now().timestamp();
+    Client {
+        id: TEST_NEW_CLIENT_ID.to_string(),
+        name: "Test New Client".to_string(),
+        default_bucket_id: None,
+        status: "active".to_string(),
+        admin: None,
+        created_at: today,
+    }
+}
+
+#[cfg(test)]
+#[async_trait]
+impl ClientRepoable for ClientTestRepo {
+    async fn list(&self) -> Result<Vec<Client>> {
+        let client1 = create_test_client();
+        let client2 = create_test_admin_client();
+        Ok(vec![client1, client2])
+    }
+
+    async fn find_admin(&self) -> Result<Option<Client>> {
+        Ok(Some(create_test_admin_client()))
+    }
+
+    async fn create(&self, _data: &NewClient, _admin: bool) -> Result<Client> {
+        Ok(create_test_new_client())
+    }
+
+    async fn get(&self, id: &str) -> Result<Option<ClientDto>> {
+        let clients = self.list().await?;
+        let found = clients.into_iter().find(|x| x.id.as_str() == id);
+        Ok(found.map(|x| x.into()))
+    }
+
+    async fn update(&self, _id: &str, _data: &UpdateClient) -> Result<bool> {
+        Ok(true)
+    }
+
+    async fn find_by_name(&self, name: &str) -> Result<Option<ClientDto>> {
+        let clients = self.list().await?;
+        let found = clients.into_iter().find(|x| x.name.as_str() == name);
+        Ok(found.map(|x| x.into()))
+    }
+
+    async fn count(&self) -> Result<i64> {
+        Ok(2)
+    }
+
+    async fn delete(&self, _id: &str) -> Result<()> {
+        Ok(())
+    }
+}

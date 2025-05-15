@@ -33,3 +33,20 @@ pub fn create_db_mapper(database_url: &str) -> DbMapper {
         users: Arc::new(UserRepo::new(pool.clone())),
     }
 }
+
+#[cfg(test)]
+pub fn create_test_db_mapper() -> DbMapper {
+    use crate::auth::user::UserTestRepo;
+    use crate::bucket::BucketTestRepo;
+    use crate::client::ClientTestRepo;
+    use crate::dir::DirTestRepo;
+    use crate::file::FileTestRepo;
+
+    DbMapper {
+        buckets: Arc::new(BucketTestRepo {}),
+        clients: Arc::new(ClientTestRepo {}),
+        dirs: Arc::new(DirTestRepo {}),
+        files: Arc::new(FileTestRepo {}),
+        users: Arc::new(UserTestRepo {}),
+    }
+}

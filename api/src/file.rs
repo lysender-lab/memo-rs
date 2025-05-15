@@ -775,3 +775,34 @@ fn parse_exif_info(path: &PathBuf) -> Result<PhotoExif> {
         img_taken_at: taken_at,
     })
 }
+
+#[cfg(test)]
+pub struct FileTestRepo {}
+
+#[cfg(test)]
+#[async_trait]
+impl FileRepoable for FileTestRepo {
+    async fn list(&self, dir: &Dir, params: &ListFilesParams) -> Result<Paginated<FileObject>> {
+        Ok(Paginated::new(vec![], 1, 10, 0))
+    }
+
+    async fn create(&self, file_dto: FileDto) -> Result<FileObject> {
+        Err("Not supported".into())
+    }
+
+    async fn get(&self, id: &str) -> Result<Option<FileObject>> {
+        Ok(None)
+    }
+
+    async fn find_by_name(&self, dir_id: &str, name: &str) -> Result<Option<FileObject>> {
+        Ok(None)
+    }
+
+    async fn count_by_dir(&self, dir_id: &str) -> Result<i64> {
+        Ok(0)
+    }
+
+    async fn delete(&self, id: &str) -> Result<()> {
+        Ok(())
+    }
+}

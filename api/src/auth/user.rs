@@ -307,3 +307,102 @@ impl UserRepoable for UserRepo {
         Ok(())
     }
 }
+
+#[cfg(test)]
+pub const TEST_ADMIN_USER_ID: &'static str = "0196d1ace11e715bbc32fd4e88226f56";
+
+#[cfg(test)]
+pub const TEST_USER_ID: &'static str = "0196d1adc6807c2c8aa49982466faf88";
+
+#[cfg(test)]
+pub fn create_test_admin_user() -> Result<User> {
+    use crate::client::TEST_ADMIN_CLIENT_ID;
+
+    let password = hash_password("password")?;
+    let today = chrono::Utc::now().timestamp();
+
+    Ok(User {
+        id: TEST_ADMIN_USER_ID.to_string(),
+        client_id: TEST_ADMIN_CLIENT_ID.to_string(),
+        username: "admin".to_string(),
+        password,
+        status: "active".to_string(),
+        roles: "SystemAdmin".to_string(),
+        created_at: today.clone(),
+        updated_at: today,
+    })
+}
+
+#[cfg(test)]
+pub fn create_test_user() -> Result<User> {
+    use crate::client::TEST_CLIENT_ID;
+
+    let password = hash_password("password")?;
+    let today = chrono::Utc::now().timestamp();
+
+    Ok(User {
+        id: TEST_USER_ID.to_string(),
+        client_id: TEST_CLIENT_ID.to_string(),
+        username: "user".to_string(),
+        password,
+        status: "active".to_string(),
+        roles: "Admin".to_string(),
+        created_at: today.clone(),
+        updated_at: today,
+    })
+}
+
+#[cfg(test)]
+pub struct UserTestRepo {}
+
+#[cfg(test)]
+#[async_trait]
+impl UserRepoable for UserTestRepo {
+    async fn list(&self, client_id: &str) -> Result<Vec<User>> {
+        let user1 = create_test_admin_user()?;
+        let user2 = create_test_user()?;
+        let users = vec![user1, user2];
+        let filtered: Vec<User> = users
+            .into_iter()
+            .filter(|x| x.client_id.as_str() == client_id)
+            .collect();
+        Ok(filtered)
+    }
+
+    async fn create(&self, _client_id: &str, _data: &NewUser) -> Result<User> {
+        Err("Not supported".into())
+    }
+
+    async fn get(&self, id: &str) -> Result<Option<User>> {
+        let user1 = create_test_admin_user()?;
+        let user2 = create_test_user()?;
+        let users = vec![user1, user2];
+        let found = users.into_iter().find(|x| x.id.as_str() == id);
+        Ok(found)
+    }
+
+    async fn find_by_username(&self, username: &str) -> Result<Option<User>> {
+        let user1 = create_test_admin_user()?;
+        let user2 = create_test_user()?;
+        let users = vec![user1, user2];
+        let found = users.into_iter().find(|x| x.username.as_str() == username);
+        Ok(found)
+    }
+
+    async fn count_by_client(&self, client_id: &str) -> Result<i64> {
+        let users = self.list(client_id).await?;
+        Ok(users.len() as i64)
+    }
+
+    async fn update_status(&self, _id: &str, _status: &str) -> Result<bool> {
+        Ok(true)
+    }
+
+    async fn update_password(&self, _id: &str, _password: &str) -> Result<bool> {
+        Ok(true)
+    }
+
+    async fn delete(&self, _id: &str) -> Result<()> {
+        Ok(())
+    }
+}

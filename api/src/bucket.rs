@@ -310,6 +310,70 @@ impl BucketRepoable for BucketRepo {
 }
 
 #[cfg(test)]
+pub const TEST_BUCKET_ID: &'static str = "0196d1bbc22f79c89cdbc8beced0d2f0";
+
+#[cfg(test)]
+pub fn create_test_bucket() -> BucketDto {
+    use crate::client::TEST_CLIENT_ID;
+    let today = chrono::Utc::now().timestamp();
+
+    BucketDto {
+        id: TEST_BUCKET_ID.to_string(),
+        name: "test-bucket".to_string(),
+        client_id: TEST_CLIENT_ID.to_string(),
+        images_only: true,
+        created_at: today,
+    }
+}
+
+#[cfg(test)]
+pub struct BucketTestRepo {}
+
+#[cfg(test)]
+#[async_trait]
+impl BucketRepoable for BucketTestRepo {
+    async fn list(&self, client_id: &str) -> Result<Vec<BucketDto>> {
+        let bucket = create_test_bucket();
+        let buckets = vec![bucket];
+        let filtered = buckets
+            .into_iter()
+            .filter(|x| x.client_id.as_str() == client_id)
+            .collect();
+        Ok(filtered)
+    }
+
+    async fn create(&self, _client_id: &str, _data: &NewBucket) -> Result<BucketDto> {
+        Err("No supported".into())
+    }
+
+    async fn get(&self, id: &str) -> Result<Option<BucketDto>> {
+        let bucket = create_test_bucket();
+        let buckets = vec![bucket];
+        let found = buckets.into_iter().find(|x| x.id.as_str() == id);
+        Ok(found)
+    }
+
+    async fn find_by_name(&self, client_id: &str, name: &str) -> Result<Option<BucketDto>> {
+        let buckets = self.list(client_id).await?;
+        let found = buckets.into_iter().find(|x| x.name.as_str() == name);
+        Ok(found)
+    }
+
+    async fn count_by_client(&self, client_id: &str) -> Result<i64> {
+        let buckets = self.list(client_id).await?;
+        Ok(buckets.len() as i64)
+    }
+
+    async fn delete(&self, _id: &str) -> Result<()> {
+        Ok(())
+    }
+
+    async fn test_read(&self) -> Result<()> {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
