@@ -44,7 +44,14 @@ pub async fn album_middleware(
 
     let album_id = params.album_id.expect("album_id is required");
     let token = ctx.token().expect("token is required");
-    let album = get_album(&state.config.api_url, token, &bucket_id, &album_id).await?;
+    let album = get_album(
+        &state.config.api_url,
+        token,
+        &actor.client_id,
+        &bucket_id,
+        &album_id,
+    )
+    .await?;
 
     req.extensions_mut().insert(album);
     Ok(next.run(req).await)

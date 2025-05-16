@@ -99,7 +99,7 @@ pub async fn post_new_album_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    let result = create_album(&config, token, &bucket_id, album).await;
+    let result = create_album(&config, token, &actor.client_id, &bucket_id, album).await;
 
     match result {
         Ok(album) => {

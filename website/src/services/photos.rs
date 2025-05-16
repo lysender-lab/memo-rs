@@ -16,10 +16,14 @@ use super::verify_csrf_token;
 pub async fn list_albums(
     api_url: &str,
     token: &str,
+    client_id: &str,
     bucket_id: &str,
     params: &ListAlbumsParams,
 ) -> Result<Paginated<Album>> {
-    let url = format!("{}/buckets/{}/dirs", api_url, bucket_id);
+    let url = format!(
+        "{}/clients/{}/buckets/{}/dirs",
+        api_url, client_id, bucket_id
+    );
     let mut page = "1".to_string();
     let mut per_page = "10".to_string();
 
@@ -60,13 +64,17 @@ pub async fn list_albums(
 pub async fn create_album(
     config: &Config,
     token: &str,
+    client_id: &str,
     bucket_id: &str,
     form: NewAlbumForm,
 ) -> Result<Album> {
     let csrf_result = verify_csrf_token(&form.token, &config.jwt_secret)?;
     ensure!(csrf_result == "new_album", CsrfTokenSnafu);
 
-    let url = format!("{}/buckets/{}/dirs", &config.api_url, bucket_id);
+    let url = format!(
+        "{}/clients/{}/buckets/{}/dirs",
+        &config.api_url, client_id, bucket_id
+    );
 
     let data = NewAlbum {
         name: form.name,
@@ -99,10 +107,14 @@ pub async fn create_album(
 pub async fn get_album(
     api_url: &str,
     token: &str,
+    client_id: &str,
     bucket_id: &str,
     album_id: &str,
 ) -> Result<Album> {
-    let url = format!("{}/buckets/{}/dirs/{}", api_url, bucket_id, album_id);
+    let url = format!(
+        "{}/clients/{}/buckets/{}/dirs/{}",
+        api_url, client_id, bucket_id, album_id
+    );
     let response = Client::new()
         .get(url)
         .bearer_auth(token)
@@ -129,6 +141,7 @@ pub async fn get_album(
 pub async fn update_album(
     config: &Config,
     token: &str,
+    client_id: &str,
     bucket_id: &str,
     album_id: &str,
     form: &UpdateAlbumForm,
@@ -137,8 +150,8 @@ pub async fn update_album(
     ensure!(csrf_result == album_id, CsrfTokenSnafu);
 
     let url = format!(
-        "{}/buckets/{}/dirs/{}",
-        &config.api_url, bucket_id, album_id
+        "{}/clients/{}/buckets/{}/dirs/{}",
+        &config.api_url, client_id, bucket_id, album_id
     );
     let data = UpdateAlbum {
         label: form.label.clone(),
@@ -170,6 +183,7 @@ pub async fn update_album(
 pub async fn delete_album(
     config: &Config,
     token: &str,
+    client_id: &str,
     bucket_id: &str,
     album_id: &str,
     csrf_token: &str,
@@ -177,8 +191,8 @@ pub async fn delete_album(
     let csrf_result = verify_csrf_token(&csrf_token, &config.jwt_secret)?;
     ensure!(csrf_result == album_id, CsrfTokenSnafu);
     let url = format!(
-        "{}/buckets/{}/dirs/{}",
-        &config.api_url, bucket_id, album_id
+        "{}/clients/{}/buckets/{}/dirs/{}",
+        &config.api_url, client_id, bucket_id, album_id
     );
     let response = Client::new()
         .delete(url)
@@ -199,11 +213,15 @@ pub async fn delete_album(
 pub async fn list_photos(
     api_url: &str,
     token: &str,
+    client_id: &str,
     bucket_id: &str,
     album_id: &str,
     params: &ListPhotosParams,
 ) -> Result<Paginated<Photo>> {
-    let url = format!("{}/buckets/{}/dirs/{}/files", api_url, bucket_id, album_id);
+    let url = format!(
+        "{}/clients/{}/buckets/{}/dirs/{}/files",
+        api_url, client_id, bucket_id, album_id
+    );
     let mut page = "1".to_string();
     let per_page = "50".to_string();
 
@@ -248,6 +266,7 @@ pub async fn list_photos(
 pub async fn upload_photo(
     config: &Config,
     token: &str,
+    client_id: &str,
     bucket_id: &str,
     album_id: &str,
     headers: &HeaderMap,
@@ -265,8 +284,8 @@ pub async fn upload_photo(
     let csrf_result = verify_csrf_token(&csrf_token, &config.jwt_secret)?;
     ensure!(csrf_result == album_id, CsrfTokenSnafu);
     let url = format!(
-        "{}/buckets/{}/dirs/{}/files",
-        &config.api_url, bucket_id, album_id
+        "{}/clients/{}/buckets/{}/dirs/{}/files",
+        &config.api_url, client_id, bucket_id, album_id
     );
 
     let response = Client::new()
@@ -298,13 +317,14 @@ pub async fn upload_photo(
 pub async fn get_photo(
     api_url: &str,
     token: &str,
+    client_id: &str,
     bucket_id: &str,
     album_id: &str,
     photo_id: &str,
 ) -> Result<Photo> {
     let url = format!(
-        "{}/buckets/{}/dirs/{}/files/{}",
-        api_url, bucket_id, album_id, photo_id
+        "{}/clients/{}/buckets/{}/dirs/{}/files/{}",
+        api_url, client_id, bucket_id, album_id, photo_id
     );
     let response = Client::new()
         .get(url)
@@ -328,6 +348,7 @@ pub async fn get_photo(
 pub async fn delete_photo(
     config: &Config,
     token: &str,
+    client_id: &str,
     bucket_id: &str,
     album_id: &str,
     photo_id: &str,
@@ -336,8 +357,8 @@ pub async fn delete_photo(
     let csrf_result = verify_csrf_token(&csrf_token, &config.jwt_secret)?;
     ensure!(csrf_result == photo_id, CsrfTokenSnafu);
     let url = format!(
-        "{}/buckets/{}/dirs/{}/files/{}",
-        &config.api_url, bucket_id, album_id, photo_id
+        "{}/clients/{}/buckets/{}/dirs/{}/files/{}",
+        &config.api_url, client_id, bucket_id, album_id, photo_id
     );
     let _ = Client::new()
         .delete(url)

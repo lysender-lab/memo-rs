@@ -95,7 +95,15 @@ pub async fn photo_listing_handler(
     })?;
 
     let auth_token = ctx.token().expect("token is required");
-    let result = list_photos(&config.api_url, auth_token, &bucket_id, &album_id, &query).await;
+    let result = list_photos(
+        &config.api_url,
+        auth_token,
+        &actor.client_id,
+        &bucket_id,
+        &album_id,
+        &query,
+    )
+    .await;
 
     match result {
         Ok(listing) => {

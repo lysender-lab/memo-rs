@@ -79,6 +79,7 @@ pub async fn upload_handler(
     let result = upload_photo(
         &config,
         auth_token,
+        &actor.client_id,
         &bucket_id,
         &album.id,
         &headers,

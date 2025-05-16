@@ -114,7 +114,15 @@ pub async fn post_edit_album_handler(
     tpl.payload.label = payload.label.clone();
 
     let token = ctx.token().expect("token is required");
-    let result = update_album(&config, token, &bucket_id, &album_id, &payload).await;
+    let result = update_album(
+        &config,
+        token,
+        &actor.client_id,
+        &bucket_id,
+        &album_id,
+        &payload,
+    )
+    .await;
     match result {
         Ok(updated_album) => {
             tpl.album = updated_album;

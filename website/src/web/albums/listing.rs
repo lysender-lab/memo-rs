@@ -48,7 +48,7 @@ pub async fn album_listing_handler(
     })?;
 
     let token = ctx.token().expect("token is required");
-    match list_albums(&config.api_url, token, &bucket_id, &query).await {
+    match list_albums(&config.api_url, token, &actor.client_id, &bucket_id, &query).await {
         Ok(albums) => {
             let mut keyword_param: String = "".to_string();
             if let Some(keyword) = &query.keyword {

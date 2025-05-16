@@ -36,7 +36,15 @@ pub async fn photo_middleware(
 
     let token = ctx.token().expect("token is required");
     let config = state.config.clone();
-    let photo = get_photo(&config.api_url, token, &bucket_id, &album_id, &photo_id).await?;
+    let photo = get_photo(
+        &config.api_url,
+        token,
+        &actor.client_id,
+        &bucket_id,
+        &album_id,
+        &photo_id,
+    )
+    .await?;
 
     req.extensions_mut().insert(photo);
     Ok(next.run(req).await)

@@ -38,7 +38,7 @@ pub async fn auth_middleware(
         // Validate token
         let result = authenticate_token(&config.api_url, &token).await;
 
-        match result {
+        let _ = match result {
             Ok(actor) => {
                 ctx = Ctx::new(Some(CtxValue::new(token, actor)));
             }
@@ -49,7 +49,7 @@ pub async fn auth_middleware(
                 }
                 _ => return handle_error(&state, None, &pref, ErrorInfo::from(&err), full_page),
             },
-        }
+        };
     }
 
     req.extensions_mut().insert(ctx);

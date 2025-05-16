@@ -114,6 +114,7 @@ pub async fn exec_delete_photo_handler(
     let result = delete_photo(
         &config,
         auth_token,
+        &actor.client_id,
         &bucket_id,
         &album.id,
         &photo.id,
