@@ -21,10 +21,11 @@ use crate::web::{
 
 use super::{
     album_listing_handler, album_listing_middleware, album_middleware, auth_middleware,
-    confirm_delete_photo_handler, dark_theme_handler, delete_album_handler,
-    edit_album_controls_handler, edit_album_handler, exec_delete_photo_handler, handle_error,
-    light_theme_handler, photo_middleware, post_edit_album_handler, pre_delete_photo_handler,
-    pref_middleware, require_auth_middleware, upload_handler, upload_page_handler,
+    confirm_delete_photo_handler, dark_theme_handler, edit_album_controls_handler,
+    edit_album_handler, exec_delete_photo_handler, get_delete_album_handler, handle_error,
+    light_theme_handler, photo_middleware, post_delete_album_handler, post_edit_album_handler,
+    pre_delete_photo_handler, pref_middleware, require_auth_middleware, upload_handler,
+    upload_page_handler,
 };
 
 pub fn all_routes(state: AppState, frontend_dir: &PathBuf) -> Router {
@@ -103,7 +104,7 @@ fn album_inner_routes(state: AppState) -> Router<AppState> {
         )
         .route(
             "/delete",
-            get(delete_album_handler).post(delete_album_handler),
+            get(get_delete_album_handler).post(post_delete_album_handler),
         )
         .route("/photo-grid", get(photo_listing_handler))
         .nest("/upload", upload_route(state.clone()))
