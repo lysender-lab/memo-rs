@@ -4,6 +4,11 @@ use urlencoding::encode;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
+pub struct ClientParams {
+    pub client_id: String,
+}
+
+#[derive(Deserialize)]
 pub struct AlbumParams {
     pub album_id: Option<String>,
 }

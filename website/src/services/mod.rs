@@ -1,9 +1,5 @@
-mod auth;
-mod captcha;
-mod photos;
-mod token;
-
-pub use auth::*;
-pub use captcha::*;
-pub use photos::*;
-pub use token::*;
+pub mod auth;
+pub mod captcha;
+pub mod clients;
+pub mod photos;
+pub mod token;

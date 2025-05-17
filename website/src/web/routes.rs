@@ -19,13 +19,16 @@ use crate::web::{
     photo_listing_handler, photos_page_handler, post_login_handler, post_new_album_handler,
 };
 
+use super::admin::clients::clients_handler;
+use super::middleware::{
+    album_listing_middleware, album_middleware, auth_middleware, client_middleware,
+    photo_middleware, pref_middleware, require_auth_middleware,
+};
 use super::{
-    album_listing_handler, album_listing_middleware, album_middleware, auth_middleware,
-    confirm_delete_photo_handler, dark_theme_handler, edit_album_controls_handler,
-    edit_album_handler, exec_delete_photo_handler, get_delete_album_handler, handle_error,
-    light_theme_handler, photo_middleware, post_delete_album_handler, post_edit_album_handler,
-    pre_delete_photo_handler, pref_middleware, require_auth_middleware, upload_handler,
-    upload_page_handler,
+    album_listing_handler, confirm_delete_photo_handler, dark_theme_handler,
+    edit_album_controls_handler, edit_album_handler, exec_delete_photo_handler,
+    get_delete_album_handler, handle_error, light_theme_handler, post_delete_album_handler,
+    post_edit_album_handler, pre_delete_photo_handler, upload_handler, upload_page_handler,
 };
 
 pub fn all_routes(state: AppState, frontend_dir: &PathBuf) -> Router {
@@ -66,6 +69,7 @@ pub fn private_routes(state: AppState) -> Router {
         .route("/prefs/theme/light", post(light_theme_handler))
         .route("/prefs/theme/dark", post(dark_theme_handler))
         .nest("/albums", album_routes(state.clone()))
+        .nest("/clients", client_routes(state.clone()))
         .layer(middleware::map_response_with_state(
             state.clone(),
             response_mapper,
@@ -134,6 +138,40 @@ fn photo_routes(state: AppState) -> Router<AppState> {
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             photo_middleware,
+        ))
+        .with_state(state)
+}
+
+fn client_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(clients_handler))
+        .route("/listing", get(album_listing_handler))
+        .route("/new", get(new_album_handler).post(post_new_album_handler))
+        .nest("/{client_id}", admin_client_inner_routes(state.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            album_listing_middleware,
+        ))
+        .with_state(state)
+}
+
+fn admin_client_inner_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(photos_page_handler))
+        .route("/edit-controls", get(edit_album_controls_handler))
+        .route(
+            "/edit",
+            get(edit_album_handler).post(post_edit_album_handler),
+        )
+        .route(
+            "/delete",
+            get(get_delete_album_handler).post(post_delete_album_handler),
+        )
+        .nest("/users", upload_route(state.clone()))
+        .nest("/buckets", upload_route(state.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            client_middleware,
         ))
         .with_state(state)
 }

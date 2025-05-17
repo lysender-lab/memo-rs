@@ -27,7 +27,7 @@ struct AlbumsTemplate {
     can_create: bool,
 }
 
-pub async fn album_listing_handler(
+pub async fn users_listing_handler(
     Extension(ctx): Extension<Ctx>,
     State(state): State<AppState>,
     Query(query): Query<ListAlbumsParams>,

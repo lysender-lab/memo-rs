@@ -10,7 +10,7 @@ use crate::{
     error::ErrorInfo,
     models::{Album, ListPhotosParams, PaginatedMeta, Photo, Pref, TemplateData},
     run::AppState,
-    services::list_photos,
+    services::photos::list_photos,
     web::policies::{Action, Resource, enforce_policy},
 };
 

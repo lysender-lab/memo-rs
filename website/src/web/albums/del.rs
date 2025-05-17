@@ -5,13 +5,14 @@ use axum::{Extension, body::Body, extract::State, response::Response};
 use snafu::{OptionExt, ResultExt};
 
 use crate::error::{ResponseBuilderSnafu, TemplateSnafu, WhateverSnafu};
+use crate::services::photos::delete_album;
+use crate::services::token::create_csrf_token;
 use crate::{
     Result,
     ctx::Ctx,
     error::ErrorInfo,
     models::{Album, DeleteAlbumForm},
     run::AppState,
-    services::{create_csrf_token, delete_album},
     web::{Action, Resource, enforce_policy},
 };
 

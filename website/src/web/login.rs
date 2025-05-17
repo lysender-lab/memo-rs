@@ -15,7 +15,10 @@ use crate::{
     Error, Result,
     error::{ResponseBuilderSnafu, TemplateSnafu},
     models::{LoginFormPayload, TemplateData},
-    services::{AuthPayload, authenticate, validate_catpcha},
+    services::{
+        auth::{AuthPayload, authenticate},
+        captcha::validate_catpcha,
+    },
 };
 use crate::{error::ErrorInfo, models::Pref, run::AppState};
 use memo::actor::Actor;

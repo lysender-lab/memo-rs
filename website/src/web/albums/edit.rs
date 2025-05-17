@@ -8,7 +8,7 @@ use crate::{
     error::{ResponseBuilderSnafu, TemplateSnafu, WhateverSnafu},
     models::{Album, UpdateAlbumForm},
     run::AppState,
-    services::{create_csrf_token, update_album},
+    services::{photos::update_album, token::create_csrf_token},
 };
 
 use crate::web::{Action, Resource, enforce_policy};

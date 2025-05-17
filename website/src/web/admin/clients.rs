@@ -12,7 +12,7 @@ use crate::{
     Error, Result,
     ctx::Ctx,
     error::{ErrorInfo, ResponseBuilderSnafu, TemplateSnafu, WhateverSnafu},
-    models::{Album, ListAlbumsParams, PaginationLinks},
+    models::{Album, ListAlbumsParams, PaginationLinks, Pref, TemplateData},
     run::AppState,
     services::photos::list_albums,
     web::{Action, Resource, enforce_policy},
@@ -27,7 +27,32 @@ struct AlbumsTemplate {
     can_create: bool,
 }
 
-pub async fn album_listing_handler(
+#[derive(Template)]
+#[template(path = "pages/clients.html")]
+struct ClientsPageTemplate {
+    t: TemplateData,
+}
+
+pub async fn clients_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(pref): Extension<Pref>,
+    State(state): State<AppState>,
+) -> Result<Response<Body>> {
+    let actor = ctx.actor().expect("actor is required");
+    let _ = enforce_policy(actor, Resource::Album, Action::Read)?;
+
+    let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
+    t.title = String::from("Clients");
+
+    let tpl = ClientsPageTemplate { t };
+
+    Ok(Response::builder()
+        .status(200)
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)?)
+}
+
+pub async fn clients_listing_handler(
     Extension(ctx): Extension<Ctx>,
     State(state): State<AppState>,
     Query(query): Query<ListAlbumsParams>,

@@ -1,5 +1,6 @@
 use axum::body::Bytes;
 use axum::http::HeaderMap;
+use memo::client::ClientDto;
 use reqwest::{Client, StatusCode};
 use snafu::{ResultExt, ensure};
 
@@ -12,55 +13,33 @@ use crate::models::{
 use crate::services::token::verify_csrf_token;
 use crate::{Error, Result};
 
-pub async fn list_albums(
-    api_url: &str,
-    token: &str,
-    client_id: &str,
-    bucket_id: &str,
-    params: &ListAlbumsParams,
-) -> Result<Paginated<Album>> {
-    let url = format!(
-        "{}/clients/{}/buckets/{}/dirs",
-        api_url, client_id, bucket_id
-    );
-    let mut page = "1".to_string();
-    let mut per_page = "10".to_string();
+pub async fn list_clients(api_url: &str, token: &str) -> Result<Vec<ClientDto>> {
+    let url = format!("{}/clients", api_url);
 
-    if let Some(p) = params.page {
-        page = p.to_string();
-    }
-    if let Some(pp) = params.per_page {
-        per_page = pp.to_string();
-    }
-    let mut query: Vec<(&str, &str)> = vec![("page", &page), ("per_page", &per_page)];
-    if let Some(keyword) = &params.keyword {
-        query.push(("keyword", keyword));
-    }
     let response = Client::new()
         .get(url)
         .bearer_auth(token)
-        .query(&query)
         .send()
         .await
         .context(HttpClientSnafu {
-            msg: "Unable to list albums. Try again later.".to_string(),
+            msg: "Unable to list clients. Try again later.".to_string(),
         })?;
 
     if !response.status().is_success() {
         return Err(handle_response_error(response).await);
     }
 
-    let albums = response
-        .json::<Paginated<Album>>()
+    let clients = response
+        .json::<Vec<ClientDto>>()
         .await
         .context(HttpResponseParseSnafu {
-            msg: "Unable to parse albums.".to_string(),
+            msg: "Unable to parse clients.".to_string(),
         })?;
 
-    Ok(albums)
+    Ok(clients)
 }
 
-pub async fn create_album(
+pub async fn create_client(
     config: &Config,
     token: &str,
     client_id: &str,
@@ -103,38 +82,29 @@ pub async fn create_album(
     Ok(album)
 }
 
-pub async fn get_album(
-    api_url: &str,
-    token: &str,
-    client_id: &str,
-    bucket_id: &str,
-    album_id: &str,
-) -> Result<Album> {
-    let url = format!(
-        "{}/clients/{}/buckets/{}/dirs/{}",
-        api_url, client_id, bucket_id, album_id
-    );
+pub async fn get_client(api_url: &str, token: &str, client_id: &str) -> Result<ClientDto> {
+    let url = format!("{}/clients/{}", api_url, client_id);
     let response = Client::new()
         .get(url)
         .bearer_auth(token)
         .send()
         .await
         .context(HttpClientSnafu {
-            msg: "Unable to get album. Try again later.",
+            msg: "Unable to get client. Try again later.",
         })?;
 
     if !response.status().is_success() {
         return Err(handle_response_error(response).await);
     }
 
-    let album = response
-        .json::<Album>()
+    let client = response
+        .json::<ClientDto>()
         .await
         .context(HttpResponseParseSnafu {
-            msg: "Unable to parse album.",
+            msg: "Unable to parse client.",
         })?;
 
-    Ok(album)
+    Ok(client)
 }
 
 pub async fn update_album(
