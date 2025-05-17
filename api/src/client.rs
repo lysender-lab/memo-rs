@@ -4,7 +4,7 @@ use diesel::dsl::count_star;
 use diesel::prelude::*;
 use diesel::{QueryDsl, SelectableHelper};
 use memo::client::ClientDto;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use snafu::{ResultExt, ensure};
 use validator::Validate;
 
@@ -16,7 +16,7 @@ use crate::schema::clients::{self, dsl};
 use crate::state::AppState;
 use memo::{utils::generate_id, validators::flatten_errors};
 
-#[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize, Deserialize)]
+#[derive(Debug, Clone, Queryable, Selectable, Insertable)]
 #[diesel(table_name = crate::schema::clients)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct Client {

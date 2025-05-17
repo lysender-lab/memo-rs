@@ -1,14 +1,14 @@
-mod admin;
-mod albums;
-mod error;
-mod index;
-mod login;
-mod logout;
-mod middleware;
-mod photos;
-mod policies;
-mod pref;
-mod routes;
+pub mod albums;
+pub mod clients;
+pub mod error;
+pub mod index;
+pub mod login;
+pub mod logout;
+pub mod middleware;
+pub mod photos;
+pub mod policies;
+pub mod pref;
+pub mod routes;
 
 pub const AUTH_TOKEN_COOKIE: &str = "auth_token";
 pub const THEME_COOKIE: &str = "theme";

@@ -4,7 +4,7 @@ use deadpool_diesel::sqlite::Pool;
 use diesel::dsl::count_star;
 use diesel::prelude::*;
 use diesel::{QueryDsl, SelectableHelper};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use snafu::{OptionExt, ResultExt, ensure};
 use validator::Validate;
 
@@ -22,7 +22,7 @@ use memo::user::UserDto;
 use memo::utils::generate_id;
 use memo::validators::flatten_errors;
 
-#[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
+#[derive(Debug, Clone, Queryable, Selectable, Insertable)]
 #[diesel(table_name = crate::schema::users)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct User {

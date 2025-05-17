@@ -5,6 +5,7 @@ use axum::{
     extract::{Query, State},
     response::Response,
 };
+use memo::client::ClientDto;
 use snafu::{OptionExt, ResultExt};
 use urlencoding::encode;
 
@@ -14,17 +15,18 @@ use crate::{
     error::{ErrorInfo, ResponseBuilderSnafu, TemplateSnafu, WhateverSnafu},
     models::{Album, ListAlbumsParams, PaginationLinks, Pref, TemplateData},
     run::AppState,
-    services::photos::list_albums,
+    services::{clients::list_clients, photos::list_albums},
     web::{Action, Resource, enforce_policy},
 };
 
 #[derive(Template)]
-#[template(path = "widgets/albums.html")]
-struct AlbumsTemplate {
+#[template(path = "widgets/clients.html")]
+struct ClientsTemplate {
     error_message: Option<String>,
-    albums: Vec<Album>,
-    pagination: Option<PaginationLinks>,
+    clients: Vec<ClientDto>,
     can_create: bool,
+    can_edit: bool,
+    can_delete: bool,
 }
 
 #[derive(Template)]
@@ -55,46 +57,36 @@ pub async fn clients_handler(
 pub async fn clients_listing_handler(
     Extension(ctx): Extension<Ctx>,
     State(state): State<AppState>,
-    Query(query): Query<ListAlbumsParams>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
-    let default_bucket_id = actor.default_bucket_id.clone();
 
-    let mut tpl = AlbumsTemplate {
+    let mut tpl = ClientsTemplate {
         error_message: None,
-        albums: Vec::new(),
-        pagination: None,
-        can_create: enforce_policy(actor, Resource::Album, Action::Create).is_ok(),
+        clients: Vec::new(),
+        can_create: enforce_policy(actor, Resource::Client, Action::Create).is_ok(),
+        can_edit: enforce_policy(actor, Resource::Client, Action::Update).is_ok(),
+        can_delete: enforce_policy(actor, Resource::Client, Action::Delete).is_ok(),
     };
 
-    let bucket_id = default_bucket_id.context(WhateverSnafu {
-        msg: "No default bucket",
-    })?;
-
     let token = ctx.token().expect("token is required");
-    match list_albums(&config.api_url, token, &actor.client_id, &bucket_id, &query).await {
-        Ok(albums) => {
-            let mut keyword_param: String = "".to_string();
-            if let Some(keyword) = &query.keyword {
-                keyword_param = format!("&keyword={}", encode(keyword).to_string());
-            }
-            tpl.albums = albums.data;
-            tpl.pagination = Some(PaginationLinks::new(&albums.meta, "", &keyword_param));
+    match list_clients(&config.api_url, token).await {
+        Ok(clients) => {
+            tpl.clients = clients;
             build_response(tpl)
         }
         Err(err) => build_error_response(tpl, err),
     }
 }
 
-fn build_response(tpl: AlbumsTemplate) -> Result<Response<Body>> {
+fn build_response(tpl: ClientsTemplate) -> Result<Response<Body>> {
     Ok(Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
         .context(ResponseBuilderSnafu)?)
 }
 
-fn build_error_response(mut tpl: AlbumsTemplate, error: Error) -> Result<Response<Body>> {
+fn build_error_response(mut tpl: ClientsTemplate, error: Error) -> Result<Response<Body>> {
     let error_info = ErrorInfo::from(&error);
     tpl.error_message = Some(error_info.message);
 

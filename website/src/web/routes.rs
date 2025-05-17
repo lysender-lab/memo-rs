@@ -19,7 +19,7 @@ use crate::web::{
     photo_listing_handler, photos_page_handler, post_login_handler, post_new_album_handler,
 };
 
-use super::admin::clients::clients_handler;
+use super::clients::{clients_handler, clients_listing_handler};
 use super::middleware::{
     album_listing_middleware, album_middleware, auth_middleware, client_middleware,
     photo_middleware, pref_middleware, require_auth_middleware,
@@ -145,17 +145,13 @@ fn photo_routes(state: AppState) -> Router<AppState> {
 fn client_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(clients_handler))
-        .route("/listing", get(album_listing_handler))
+        .route("/listing", get(clients_listing_handler))
         .route("/new", get(new_album_handler).post(post_new_album_handler))
-        .nest("/{client_id}", admin_client_inner_routes(state.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            album_listing_middleware,
-        ))
+        .nest("/{client_id}", client_inner_routes(state.clone()))
         .with_state(state)
 }
 
-fn admin_client_inner_routes(state: AppState) -> Router<AppState> {
+fn client_inner_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(photos_page_handler))
         .route("/edit-controls", get(edit_album_controls_handler))

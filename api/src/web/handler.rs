@@ -146,7 +146,8 @@ pub async fn list_clients_handler(
         client_id = Some(actor.client_id.clone());
     }
     let clients = state.db.clients.list(client_id).await?;
-    Ok(JsonResponse::new(serde_json::to_string(&clients).unwrap()))
+    let dtos: Vec<ClientDto> = clients.into_iter().map(|x| x.into()).collect();
+    Ok(JsonResponse::new(serde_json::to_string(&dtos).unwrap()))
 }
 
 pub async fn create_client_handler(
@@ -167,7 +168,8 @@ pub async fn create_client_handler(
     })?;
 
     let created = create_client(&state, &data, false).await?;
-    Ok(JsonResponse::new(serde_json::to_string(&created).unwrap()))
+    let dto: ClientDto = created.into();
+    Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
 }
 
 pub async fn get_client_handler(Extension(client): Extension<ClientDto>) -> Result<JsonResponse> {
