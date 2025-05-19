@@ -4,6 +4,8 @@
     method="post"
     action="/login"
 >
+    <h1 class="title is-4 has-text-weight-bold">Login to Memories</h1>
+
     {% match error_message %}
         {% when Some with (msg) %}
             <div class="error-message mb-5 tag is-danger">

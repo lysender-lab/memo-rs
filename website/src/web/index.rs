@@ -3,7 +3,7 @@ use axum::{
     Extension,
     body::Body,
     extract::{Query, State},
-    response::Response,
+    response::{IntoResponse, Redirect, Response},
 };
 use snafu::ResultExt;
 
@@ -32,6 +32,11 @@ pub async fn index_handler(
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
     let _ = enforce_policy(actor, Resource::Album, Action::Read)?;
+
+    if actor.is_system_admin() {
+        // Redirect to clients page
+        return Ok(Redirect::to("/clients").into_response());
+    }
 
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
     t.title = String::from("Home");
