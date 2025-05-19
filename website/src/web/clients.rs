@@ -10,7 +10,7 @@ use memo::client::ClientDto;
 use snafu::{OptionExt, ResultExt};
 use urlencoding::encode;
 
-use crate::services::clients::create_client;
+use crate::services::clients::{create_client, update_client};
 use crate::{
     Error, Result,
     ctx::Ctx,
@@ -197,9 +197,6 @@ pub async fn post_new_client_handler(
 struct ClientPageTemplate {
     t: TemplateData,
     client: ClientDto,
-    updated: bool,
-    can_edit: bool,
-    can_delete: bool,
 }
 
 pub async fn client_page_handler(
@@ -208,22 +205,130 @@ pub async fn client_page_handler(
     Extension(client): Extension<ClientDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
-    let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
 
     t.title = format!("Client - {}", &client.name);
 
-    let tpl = ClientPageTemplate {
+    let tpl = ClientPageTemplate { t, client };
+
+    Ok(Response::builder()
+        .status(200)
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)?)
+}
+
+#[derive(Template)]
+#[template(path = "pages/edit_client.html")]
+struct EditClientTemplate {
+    t: TemplateData,
+    client: ClientDto,
+    action: String,
+    payload: ClientFormSubmitData,
+    error_message: Option<String>,
+}
+
+#[derive(Template)]
+#[template(path = "widgets/edit_client_form.html")]
+struct EditClientFormTemplate {
+    client: ClientDto,
+    action: String,
+    payload: ClientFormSubmitData,
+    error_message: Option<String>,
+}
+
+pub async fn edit_client_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(pref): Extension<Pref>,
+    Extension(client): Extension<ClientDto>,
+    State(state): State<AppState>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::Client, Action::Update)?;
+
+    let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
+    t.title = String::from(format!("Edit - {}", &client.name));
+
+    let token = create_csrf_token(&client.id, &config.jwt_secret)?;
+
+    let tpl = EditClientTemplate {
         t,
-        client,
-        updated: false,
-        can_edit: enforce_policy(actor, Resource::Client, Action::Update).is_ok(),
-        can_delete: enforce_policy(actor, Resource::Client, Action::Delete).is_ok(),
+        client: client.clone(),
+        action: format!("/clients/{}/edit", &client.id),
+        payload: ClientFormSubmitData {
+            name: client.name,
+            status: client.status,
+            token,
+        },
+        error_message: None,
     };
 
     Ok(Response::builder()
         .status(200)
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)?)
+}
+
+pub async fn post_edit_client_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(client): Extension<ClientDto>,
+    State(state): State<AppState>,
+    payload: Form<ClientFormSubmitData>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::Client, Action::Update)?;
+
+    let token = create_csrf_token(&client.id, &config.jwt_secret)?;
+
+    let mut tpl = EditClientFormTemplate {
+        client: client.clone(),
+        action: format!("/clients/{}/edit", &client.id),
+        payload: ClientFormSubmitData {
+            name: "".to_string(),
+            status: "active".to_string(),
+            token,
+        },
+        error_message: None,
+    };
+
+    let status: StatusCode;
+
+    let payload = ClientFormSubmitData {
+        name: payload.name.clone(),
+        status: payload.status.clone(),
+        token: payload.token.clone(),
+    };
+
+    let token = ctx.token().expect("token is required");
+    let result = update_client(&config, token, &client.id, &payload).await;
+
+    match result {
+        Ok(updated_client) => {
+            let next_url = format!("/clients/{}", &updated_client.id);
+            // Weird but can't do a redirect here, let htmx handle it
+            return Ok(Response::builder()
+                .status(200)
+                .header("HX-Redirect", next_url)
+                .body(Body::from("".to_string()))
+                .context(ResponseBuilderSnafu)?);
+        }
+        Err(err) => {
+            let error_info = ErrorInfo::from(&err);
+            status = error_info.status_code;
+            tpl.error_message = Some(error_info.message);
+        }
+    }
+
+    tpl.payload.name = payload.name.clone();
+    tpl.payload.status = payload.status.clone();
+
+    // Will only arrive here on error
+    Ok(Response::builder()
+        .status(status)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
         .context(ResponseBuilderSnafu)?)
 }

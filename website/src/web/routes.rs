@@ -20,8 +20,8 @@ use crate::web::{
 };
 
 use super::clients::{
-    client_page_handler, clients_handler, clients_listing_handler, new_client_handler,
-    post_new_client_handler,
+    client_page_handler, clients_handler, clients_listing_handler, edit_client_handler,
+    new_client_handler, post_edit_client_handler, post_new_client_handler,
 };
 use super::middleware::{
     album_listing_middleware, album_middleware, auth_middleware, client_middleware,
@@ -163,7 +163,7 @@ fn client_inner_routes(state: AppState) -> Router<AppState> {
         .route("/edit-controls", get(edit_album_controls_handler))
         .route(
             "/edit",
-            get(edit_album_handler).post(post_edit_album_handler),
+            get(edit_client_handler).post(post_edit_client_handler),
         )
         .route(
             "/delete",

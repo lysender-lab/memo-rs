@@ -8,16 +8,16 @@
                 <li><a href="/">Home</a></li>
                 <li><a href="/clients">Clients</a></li>
                 <li class="is-active">
-                    <a href="/clients/new" aria-current="page">New client</a>
+                    <a href="/clients/{{ client.id }}/edit" aria-current="page">Edit - {{+ client.name }}</a>
                 </li>
             </ul>
         </nav>
 
-        <h1 class="title">Create new client</h1>
+        <h1 class="title">Edit - {{+ client.name }}</h1>
 
         <div class="columns">
             <div class="column is-half">
-                {% include "widgets/new_client_form.html" %}
+                {% include "widgets/edit_client_form.html" %}
             </div>
         </div>
     </div>

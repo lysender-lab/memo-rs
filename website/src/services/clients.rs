@@ -103,23 +103,19 @@ pub async fn get_client(api_url: &str, token: &str, client_id: &str) -> Result<C
     Ok(client)
 }
 
-pub async fn update_album(
+pub async fn update_client(
     config: &Config,
     token: &str,
     client_id: &str,
-    bucket_id: &str,
-    album_id: &str,
-    form: &UpdateAlbumForm,
-) -> Result<Album> {
+    form: &ClientFormSubmitData,
+) -> Result<ClientDto> {
     let csrf_result = verify_csrf_token(&form.token, &config.jwt_secret)?;
-    ensure!(csrf_result == album_id, CsrfTokenSnafu);
+    ensure!(&csrf_result == client_id, CsrfTokenSnafu);
 
-    let url = format!(
-        "{}/clients/{}/buckets/{}/dirs/{}",
-        &config.api_url, client_id, bucket_id, album_id
-    );
-    let data = UpdateAlbum {
-        label: form.label.clone(),
+    let url = format!("{}/clients/{}", &config.api_url, client_id);
+    let data = ClientSubmitData {
+        name: form.name.clone(),
+        status: form.status.clone(),
     };
     let response = Client::new()
         .patch(url)
@@ -128,21 +124,21 @@ pub async fn update_album(
         .send()
         .await
         .context(HttpClientSnafu {
-            msg: "Unable to update album. Try again later.",
+            msg: "Unable to update client. Try again later.",
         })?;
 
     if !response.status().is_success() {
         return Err(handle_response_error(response).await);
     }
 
-    let album = response
-        .json::<Album>()
+    let client = response
+        .json::<ClientDto>()
         .await
         .context(HttpResponseParseSnafu {
-            msg: "Unable to parse album information.",
+            msg: "Unable to parse client information.",
         })?;
 
-    Ok(album)
+    Ok(client)
 }
 
 pub async fn delete_album(
