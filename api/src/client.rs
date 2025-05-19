@@ -328,7 +328,7 @@ impl ClientRepoable for ClientRepo {
         if let Some(name) = data.name.clone() {
             if let Some(existing) = self.find_by_name(&name).await? {
                 ensure!(
-                    existing.id != id,
+                    &existing.id == id,
                     ValidationSnafu {
                         msg: "Client name already exists".to_string(),
                     }

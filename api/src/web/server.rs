@@ -158,7 +158,7 @@ mod tests {
     use crate::{
         auth::user::{TEST_ADMIN_USER_ID, TEST_USER_ID},
         bucket::TEST_BUCKET_ID,
-        client::{Client, TEST_ADMIN_CLIENT_ID, TEST_CLIENT_ID},
+        client::{TEST_ADMIN_CLIENT_ID, TEST_CLIENT_ID},
         dir::{Dir, TEST_DIR_ID},
     };
 
@@ -231,7 +231,7 @@ mod tests {
     async fn test_list_clients_as_user() {
         let server = create_test_app();
         let token = create_test_user_auth_token().unwrap();
-        let clients: Vec<Client> = server
+        let clients: Vec<ClientDto> = server
             .get("/clients")
             .authorization_bearer(token.as_str())
             .await
@@ -248,7 +248,7 @@ mod tests {
     async fn test_list_clients_as_admin() {
         let server = create_test_app();
         let token = create_test_admin_auth_token().unwrap();
-        let clients: Vec<Client> = server
+        let clients: Vec<ClientDto> = server
             .get("/clients")
             .authorization_bearer(token.as_str())
             .await
