@@ -1,9 +1,11 @@
-mod login;
-mod pagination;
-mod params;
-mod photos;
-mod pref;
-mod template;
+pub mod clients;
+pub mod login;
+pub mod pagination;
+pub mod params;
+pub mod photos;
+pub mod pref;
+pub mod template;
+pub mod tokens;
 
 pub use login::*;
 pub use pagination::*;

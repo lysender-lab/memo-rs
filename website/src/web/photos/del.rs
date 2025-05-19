@@ -4,13 +4,14 @@ use axum::{Extension, body::Body, extract::State, response::Response};
 use snafu::ResultExt;
 
 use crate::error::ResponseBuilderSnafu;
+use crate::models::tokens::TokenFormData;
 use crate::services::photos::delete_photo;
 use crate::services::token::create_csrf_token;
 use crate::{
     Error, Result,
     ctx::Ctx,
     error::{ErrorInfo, TemplateSnafu},
-    models::{Album, DeletePhotoForm, Photo},
+    models::{Album, Photo},
     run::AppState,
     web::{Action, Resource, enforce_policy, handle_error_message},
 };
@@ -25,7 +26,7 @@ struct PreDeletePhotoTemplate {
 #[template(path = "widgets/confirm_delete_photo_form.html")]
 struct ConfirmDeletePhotoTemplate {
     photo: Photo,
-    payload: DeletePhotoForm,
+    payload: TokenFormData,
     error_message: Option<String>,
 }
 
@@ -72,7 +73,7 @@ pub async fn confirm_delete_photo_handler(
     // Just render the form on first load or on error
     let tpl = ConfirmDeletePhotoTemplate {
         photo,
-        payload: DeletePhotoForm { token },
+        payload: TokenFormData { token },
         error_message: None,
     };
 
@@ -87,7 +88,7 @@ pub async fn exec_delete_photo_handler(
     Extension(album): Extension<Album>,
     Extension(photo): Extension<Photo>,
     State(state): State<AppState>,
-    payload: Form<DeletePhotoForm>,
+    payload: Form<TokenFormData>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
@@ -141,7 +142,7 @@ pub async fn exec_delete_photo_handler(
     // We may need to render an error message somewhere in the page
     let tpl = ConfirmDeletePhotoTemplate {
         photo,
-        payload: DeletePhotoForm { token },
+        payload: TokenFormData { token },
         error_message,
     };
 

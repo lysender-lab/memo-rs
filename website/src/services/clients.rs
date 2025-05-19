@@ -6,6 +6,7 @@ use snafu::{ResultExt, ensure};
 
 use crate::config::Config;
 use crate::error::{CsrfTokenSnafu, ErrorResponse, HttpClientSnafu, HttpResponseParseSnafu};
+use crate::models::clients::{ClientFormSubmitData, ClientSubmitData};
 use crate::models::{
     Album, FileObject, ListAlbumsParams, ListPhotosParams, NewAlbum, NewAlbumForm, Paginated,
     Photo, UpdateAlbum, UpdateAlbumForm,
@@ -42,21 +43,16 @@ pub async fn list_clients(api_url: &str, token: &str) -> Result<Vec<ClientDto>> 
 pub async fn create_client(
     config: &Config,
     token: &str,
-    client_id: &str,
-    bucket_id: &str,
-    form: NewAlbumForm,
-) -> Result<Album> {
+    form: &ClientFormSubmitData,
+) -> Result<ClientDto> {
     let csrf_result = verify_csrf_token(&form.token, &config.jwt_secret)?;
-    ensure!(csrf_result == "new_album", CsrfTokenSnafu);
+    ensure!(csrf_result == "new_client", CsrfTokenSnafu);
 
-    let url = format!(
-        "{}/clients/{}/buckets/{}/dirs",
-        &config.api_url, client_id, bucket_id
-    );
+    let url = format!("{}/clients", &config.api_url);
 
-    let data = NewAlbum {
-        name: form.name,
-        label: form.label,
+    let data = ClientSubmitData {
+        name: form.name.clone(),
+        status: form.status.clone(),
     };
     let response = Client::new()
         .post(url)
@@ -65,21 +61,21 @@ pub async fn create_client(
         .send()
         .await
         .context(HttpClientSnafu {
-            msg: "Unable to create album. Try again later.".to_string(),
+            msg: "Unable to create client. Try again later.".to_string(),
         })?;
 
     if !response.status().is_success() {
         return Err(handle_response_error(response).await);
     }
 
-    let album = response
-        .json::<Album>()
+    let client = response
+        .json::<ClientDto>()
         .await
         .context(HttpResponseParseSnafu {
-            msg: "Unable to parse album information.",
+            msg: "Unable to parse client information.",
         })?;
 
-    Ok(album)
+    Ok(client)
 }
 
 pub async fn get_client(api_url: &str, token: &str, client_id: &str) -> Result<ClientDto> {

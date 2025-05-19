@@ -46,16 +46,6 @@ pub struct UpdateAlbum {
     pub label: String,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
-pub struct DeleteAlbumForm {
-    pub token: String,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-pub struct DeletePhotoForm {
-    pub token: String,
-}
-
 #[derive(Clone, Deserialize)]
 pub struct FileObject {
     pub id: String,

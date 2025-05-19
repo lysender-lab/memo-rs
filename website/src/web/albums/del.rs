@@ -5,13 +5,14 @@ use axum::{Extension, body::Body, extract::State, response::Response};
 use snafu::{OptionExt, ResultExt};
 
 use crate::error::{ResponseBuilderSnafu, TemplateSnafu, WhateverSnafu};
+use crate::models::tokens::TokenFormData;
 use crate::services::photos::delete_album;
 use crate::services::token::create_csrf_token;
 use crate::{
     Result,
     ctx::Ctx,
     error::ErrorInfo,
-    models::{Album, DeleteAlbumForm},
+    models::Album,
     run::AppState,
     web::{Action, Resource, enforce_policy},
 };
@@ -20,7 +21,7 @@ use crate::{
 #[template(path = "widgets/delete_album_form.html")]
 struct DeleteAlbumTemplate {
     album: Album,
-    payload: DeleteAlbumForm,
+    payload: TokenFormData,
     error_message: Option<String>,
 }
 
@@ -37,7 +38,7 @@ pub async fn get_delete_album_handler(
 
     let tpl = DeleteAlbumTemplate {
         album,
-        payload: DeleteAlbumForm { token },
+        payload: TokenFormData { token },
         error_message: None,
     };
 
@@ -52,7 +53,7 @@ pub async fn post_delete_album_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(album): Extension<Album>,
     State(state): State<AppState>,
-    payload: Form<DeleteAlbumForm>,
+    payload: Form<TokenFormData>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
@@ -85,7 +86,7 @@ pub async fn post_delete_album_handler(
             // Render same form but trigger a redirect to home
             let tpl = DeleteAlbumTemplate {
                 album,
-                payload: DeleteAlbumForm {
+                payload: TokenFormData {
                     token: "".to_string(),
                 },
                 error_message,
@@ -106,7 +107,7 @@ pub async fn post_delete_album_handler(
     // Just render the form on first load or on error
     let tpl = DeleteAlbumTemplate {
         album,
-        payload: DeleteAlbumForm { token },
+        payload: TokenFormData { token },
         error_message,
     };
 
