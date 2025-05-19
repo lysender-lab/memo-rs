@@ -27,6 +27,7 @@ use super::middleware::{
     album_listing_middleware, album_middleware, auth_middleware, client_middleware,
     photo_middleware, pref_middleware, require_auth_middleware,
 };
+use super::users::users_handler;
 use super::{
     album_listing_handler, confirm_delete_photo_handler, dark_theme_handler,
     edit_album_controls_handler, edit_album_handler, exec_delete_photo_handler,
@@ -169,12 +170,18 @@ fn client_inner_routes(state: AppState) -> Router<AppState> {
             "/delete",
             get(get_delete_album_handler).post(post_delete_album_handler),
         )
-        .nest("/users", upload_route(state.clone()))
+        .nest("/users", users_routes(state.clone()))
         .nest("/buckets", upload_route(state.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             client_middleware,
         ))
+        .with_state(state)
+}
+
+fn users_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(users_handler))
         .with_state(state)
 }
 

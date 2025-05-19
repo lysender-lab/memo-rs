@@ -1,25 +1,18 @@
 use askama::Template;
 use axum::http::StatusCode;
-use axum::{
-    Extension, Form,
-    body::Body,
-    extract::{Query, State},
-    response::Response,
-};
+use axum::{Extension, Form, body::Body, extract::State, response::Response};
 use memo::client::ClientDto;
-use snafu::{OptionExt, ResultExt};
-use urlencoding::encode;
+use snafu::{ResultExt, ensure};
 
+use crate::error::ForbiddenSnafu;
 use crate::services::clients::{create_client, update_client};
 use crate::{
     Error, Result,
     ctx::Ctx,
-    error::{ErrorInfo, ResponseBuilderSnafu, TemplateSnafu, WhateverSnafu},
-    models::{
-        Album, ListAlbumsParams, PaginationLinks, Pref, TemplateData, clients::ClientFormSubmitData,
-    },
+    error::{ErrorInfo, ResponseBuilderSnafu, TemplateSnafu},
+    models::{Pref, TemplateData, clients::ClientFormSubmitData},
     run::AppState,
-    services::{clients::list_clients, photos::list_albums, token::create_csrf_token},
+    services::{clients::list_clients, token::create_csrf_token},
     web::{Action, Resource, enforce_policy},
 };
 
@@ -28,9 +21,6 @@ use crate::{
 struct ClientsTemplate {
     error_message: Option<String>,
     clients: Vec<ClientDto>,
-    can_create: bool,
-    can_edit: bool,
-    can_delete: bool,
 }
 
 #[derive(Template)]
@@ -46,6 +36,13 @@ pub async fn clients_handler(
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
     let _ = enforce_policy(actor, Resource::Album, Action::Read)?;
+
+    ensure!(
+        actor.is_system_admin(),
+        ForbiddenSnafu {
+            msg: "Clients page require system admin privileges."
+        }
+    );
 
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
     t.title = String::from("Clients");
@@ -63,14 +60,10 @@ pub async fn clients_listing_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
 
     let mut tpl = ClientsTemplate {
         error_message: None,
         clients: Vec::new(),
-        can_create: enforce_policy(actor, Resource::Client, Action::Create).is_ok(),
-        can_edit: enforce_policy(actor, Resource::Client, Action::Update).is_ok(),
-        can_delete: enforce_policy(actor, Resource::Client, Action::Delete).is_ok(),
     };
 
     let token = ctx.token().expect("token is required");

@@ -9,6 +9,7 @@ pub mod photos;
 pub mod policies;
 pub mod pref;
 pub mod routes;
+pub mod users;
 
 pub const AUTH_TOKEN_COOKIE: &str = "auth_token";
 pub const THEME_COOKIE: &str = "theme";

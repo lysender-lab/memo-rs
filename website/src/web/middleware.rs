@@ -10,7 +10,7 @@ use snafu::{OptionExt, ensure};
 use crate::{
     Error, Result,
     ctx::{Ctx, CtxValue},
-    error::{ErrorInfo, NotFoundSnafu, WhateverSnafu},
+    error::{ErrorInfo, ForbiddenSnafu, NotFoundSnafu, WhateverSnafu},
     models::{AlbumParams, ClientParams, PhotoParams, Pref},
     run::AppState,
     services::{
@@ -166,15 +166,13 @@ pub async fn client_middleware(
     let actor = ctx.actor().expect("actor is required");
     let _ = enforce_policy(actor, Resource::Client, Action::Read)?;
 
-    // Regular users cannot view other clients
-    if !actor.is_system_admin() {
-        ensure!(
-            &actor.client_id == &params.client_id,
-            NotFoundSnafu {
-                msg: "Client not found"
-            }
-        );
-    }
+    // Regular users cannot view clients admin pages
+    ensure!(
+        actor.is_system_admin(),
+        ForbiddenSnafu {
+            msg: "Client pages require system admin privileges"
+        }
+    );
 
     let token = ctx.token().expect("token is required");
     let config = state.config.clone();

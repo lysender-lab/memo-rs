@@ -6,33 +6,68 @@
         <nav class="breadcrumb" aria-label="breadcrumbs">
             <ul>
                 <li><a href="/">Home</a></li>
+                <li><a href="/clients">Clients</a></li>
+                <li><a href="/clients/{{ client.id }}">{{ client.name }}</a></li>
                 <li class="is-active">
-                    <a href="/clients" aria-current="page">
-                        <span>Clients</span>
+                    <a href="/clients/{{ client.id }}/users" aria-current="page">
+                        <span>Users</span>
                     </a>
                 </li>
             </ul>
         </nav>
 
-        <div class="albums-container">
-            <nav class="albums panel is-dark">
-                <p class="panel-heading">
-                   Clients
-                </p>
-                <div
-                    class="album-items"
-                    hx-get="/clients/listing"
-                    hx-trigger="load"
-                >
-                    <span class="panel-block is-skeleton">&nbsp;</span>
-                    <span class="panel-block is-skeleton">&nbsp;</span>
-                    <span class="panel-block is-skeleton">&nbsp;</span>
-                    <span class="panel-block is-skeleton">&nbsp;</span>
-                    <span class="panel-block is-skeleton">&nbsp;</span>
-                    <span class="panel-block is-skeleton">&nbsp;</span>
-                </div>
-            </nav>
+        <h1 class="title">User Management</h1>
+
+        <div class="buttons">
+            <a class="button is-primary" href="/clients/{{ client.id }}/users/new">
+                <span class="icon is-small">
+                    <i class="fas fa-plus"></i>
+                </span>
+                <span>New User</span>
+            </a>
         </div>
+
+        {% if users.len() > 0 %}
+        <div class="box">
+            <table class="table is-striped is-hoverable is-fullwidth">
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>Status</th>
+                  <th>Roles</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for user in users %}
+                <tr>
+                    <td><a href="/clients/{{ client.id }}/users/{{ user.id }}">{{ user.username }}</a></td>
+                    <td>
+                        {% if user.status == "active" %}
+                        <span class="tag is-success">Active</span>
+                        {% else %}
+                        <span class="tag">Inactive</span>
+                        {% endif %}
+                    </td>
+                  <td>
+                    {% for role in user.roles %}
+                        <span class="tag is-dark">{{ role }}</span>
+                    {% endfor %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="message is-info">
+            <div class="message-header">
+                <p>No users</p>
+            </div>
+            <div class="message-body">
+                There are no users yet for this client.
+            </div>
+        </div>
+        {% endif %}
     </div>
 </section>
 {% endblock %}
