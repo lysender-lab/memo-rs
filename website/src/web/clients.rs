@@ -192,6 +192,42 @@ pub async fn post_new_client_handler(
         .context(ResponseBuilderSnafu)?)
 }
 
+#[derive(Template)]
+#[template(path = "pages/client.html")]
+struct ClientPageTemplate {
+    t: TemplateData,
+    client: ClientDto,
+    updated: bool,
+    can_edit: bool,
+    can_delete: bool,
+}
+
+pub async fn client_page_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(pref): Extension<Pref>,
+    Extension(client): Extension<ClientDto>,
+    State(state): State<AppState>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+    let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
+
+    t.title = format!("Client - {}", &client.name);
+
+    let tpl = ClientPageTemplate {
+        t,
+        client,
+        updated: false,
+        can_edit: enforce_policy(actor, Resource::Client, Action::Update).is_ok(),
+        can_delete: enforce_policy(actor, Resource::Client, Action::Delete).is_ok(),
+    };
+
+    Ok(Response::builder()
+        .status(200)
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)?)
+}
+
 fn build_response(tpl: ClientsTemplate) -> Result<Response<Body>> {
     Ok(Response::builder()
         .status(200)

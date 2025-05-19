@@ -1,0 +1,55 @@
+{% extends "layout/base.html" %}
+
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li class="is-active">
+                    <a href="/clients/{{ client.id }}" aria-current="page">
+                        <span id="breadcrumb-album-label">{{ client.name }}</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+
+        <h1 class="title" id="album-title">
+            {{ client.name }}
+        </h1>
+
+        <div class="box">
+            <h1 class="title is-4 has-text-weight-bold">Client</h1>
+
+            <div class="columns is-variable is-6">
+              <div class="column is-one-third">
+                <p class="has-text-grey-dark"><strong>Name:</strong></p>
+                <p>{{client.name}}</p>
+              </div>
+
+              <div class="column is-one-third">
+                <p class="has-text-grey-dark"><strong>Status:</strong></p>
+                {% if client.status == "active" %}
+                    <p><span class="tag is-success">Active</span></p>
+                {% else %}
+                    <p><span class="tag">Inactive</span></p>
+                {% endif %}
+              </div>
+
+              <div class="column is-one-third">
+                <p class="has-text-grey-dark"><strong>Default Bucket:</strong></p>
+                <p>bucket-name</p>
+              </div>
+            </div>
+
+            <hr>
+
+            <div class="buttons">
+                <a class="button is-primary" href="/clients/{{ client.id }}/edit">Edit Client</a>
+                <a class="button is-info" href="/clients/{{ client.id }}/users">Manage Users</a>
+                <a class="button is-warning" href="/clients/{{ client.id }}/buckets">Manage Buckets</a>
+            </div>
+          </div>
+    </div>
+</section>
+{% endblock %}
