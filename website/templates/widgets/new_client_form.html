@@ -1,15 +1,16 @@
 <form method="post" action="{{ action }}" hx-post="{{ action }}">
     <div class="card">
         <div class="card-content">
+            <h1 class="title is-4 has-text-weight-bold">Client</h1>
+
             {% match error_message %}
                 {% when Some with (msg) %}
-                    <div class="panel-block">
-                        <div class="error-message mb-5 tag is-danger">
-                            <p>{{ msg }}</p>
-                        </div>
+                    <div class="mb-5 notification is-danger">
+                        {{ msg }}
                     </div>
                 {% when None %}
             {% endmatch %}
+
             <div class="field">
                 <label class="label">Name</label>
                 <div class="control">
