@@ -28,8 +28,9 @@ use super::middleware::{
     photo_middleware, pref_middleware, require_auth_middleware, user_middleware,
 };
 use super::users::{
-    new_user_handler, post_new_user_handler, reset_user_password_handler, update_user_role_handler,
-    update_user_status_handler, user_controls_handler, user_page_handler, users_handler,
+    new_user_handler, post_new_user_handler, post_update_user_status_handler,
+    reset_user_password_handler, update_user_role_handler, update_user_status_handler,
+    user_controls_handler, user_page_handler, users_handler,
 };
 use super::{
     album_listing_handler, confirm_delete_photo_handler, dark_theme_handler,
@@ -194,7 +195,10 @@ fn user_inner_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(user_page_handler))
         .route("/edit_controls", get(user_controls_handler))
-        .route("/update_status", get(update_user_status_handler))
+        .route(
+            "/update_status",
+            get(update_user_status_handler).post(post_update_user_status_handler),
+        )
         .route("/update_role", get(update_user_role_handler))
         .route("/reset_password", get(reset_user_password_handler))
         .route_layer(middleware::from_fn_with_state(

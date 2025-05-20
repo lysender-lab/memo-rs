@@ -26,7 +26,7 @@
                 <p>{{user.username}}</p>
               </div>
 
-              <div class="column is-one-third">
+              <div id="user-status-w" class="column is-one-third">
                 <p class="has-text-grey-dark"><strong>Status:</strong></p>
                 {% if user.status == "active" %}
                     <p><span class="tag is-success">Active</span></p>
@@ -35,7 +35,7 @@
                 {% endif %}
               </div>
 
-              <div class="column is-one-third">
+              <div id="user-roles-w" class="column is-one-third">
                 <p class="has-text-grey-dark"><strong>Roles:</strong></p>
                 {% for role in user.roles %}
                     <p><span class="tag is-dark">{{ role }}</span></p>

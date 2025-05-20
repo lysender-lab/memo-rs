@@ -1,23 +1,16 @@
 use askama::Template;
+use axum::debug_handler;
 use axum::http::StatusCode;
-use axum::{
-    Extension, Form,
-    body::Body,
-    extract::{Query, State},
-    response::Response,
-};
+use axum::{Extension, Form, body::Body, extract::State, response::Response};
 use memo::client::ClientDto;
 use memo::user::UserDto;
-use snafu::{OptionExt, ResultExt};
-use urlencoding::encode;
+use snafu::ResultExt;
 
 use crate::models::options::SelectOption;
 use crate::models::users::{
     NewUserFormData, ResetPasswordFormData, UserActiveFormData, UserRoleFormData,
 };
-use crate::services::clients::{create_client, update_client};
-use crate::services::photos::create_album;
-use crate::services::users::{create_user, list_users};
+use crate::services::users::{create_user, list_users, update_user_status};
 use crate::{
     Error, Result,
     ctx::Ctx,
@@ -29,17 +22,6 @@ use crate::{
     services::{clients::list_clients, photos::list_albums, token::create_csrf_token},
     web::{Action, Resource, enforce_policy},
 };
-
-// #[derive(Template)]
-// #[template(path = "widgets/users.html")]
-// struct UsersTemplate {
-//     error_message: Option<String>,
-//     client: ClientDto,
-//     users: Vec<UserDto>,
-//     can_create: bool,
-//     can_edit: bool,
-//     can_delete: bool,
-// }
 
 #[derive(Template)]
 #[template(path = "pages/users.html")]
@@ -222,6 +204,7 @@ struct UserPageTemplate {
     t: TemplateData,
     client: ClientDto,
     user: UserDto,
+    updated: bool,
 }
 
 pub async fn user_page_handler(
@@ -236,7 +219,12 @@ pub async fn user_page_handler(
 
     t.title = format!("User - {}", &user.username);
 
-    let tpl = UserPageTemplate { t, client, user };
+    let tpl = UserPageTemplate {
+        t,
+        client,
+        user,
+        updated: false,
+    };
 
     Ok(Response::builder()
         .status(200)
@@ -249,13 +237,18 @@ pub async fn user_page_handler(
 struct UserControlsTemplate {
     client: ClientDto,
     user: UserDto,
+    updated: bool,
 }
 
 pub async fn user_controls_handler(
     Extension(client): Extension<ClientDto>,
     Extension(user): Extension<UserDto>,
 ) -> Result<Response<Body>> {
-    let tpl = UserControlsTemplate { client, user };
+    let tpl = UserControlsTemplate {
+        client,
+        user,
+        updated: false,
+    };
 
     Ok(Response::builder()
         .status(200)
@@ -286,7 +279,7 @@ pub async fn update_user_status_handler(
     let token = create_csrf_token(&user.id, &config.jwt_secret)?;
 
     let mut status_opt = None;
-    if &user.status == "status" {
+    if &user.status == "active" {
         status_opt = Some("1".to_string());
     }
 
@@ -305,6 +298,82 @@ pub async fn update_user_status_handler(
         .header("Content-Type", "text/html")
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
         .context(ResponseBuilderSnafu)?)
+}
+
+#[debug_handler]
+pub async fn post_update_user_status_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(client): Extension<ClientDto>,
+    Extension(user): Extension<UserDto>,
+    State(state): State<AppState>,
+    payload: Form<UserActiveFormData>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::User, Action::Update)?;
+
+    let token = create_csrf_token(&user.id, &config.jwt_secret)?;
+    let cid = client.id.clone();
+    let uid = user.id.clone();
+
+    let mut tpl = UpdateUserStatusTemplate {
+        client: client.clone(),
+        user,
+        payload: UserActiveFormData {
+            token,
+            active: payload.active.clone(),
+        },
+        error_message: None,
+    };
+
+    let data = UserActiveFormData {
+        active: payload.active.clone(),
+        token: payload.token.clone(),
+    };
+
+    let token = ctx.token().expect("token is required");
+    let result = update_user_status(&config, token, &cid, &uid, &data).await;
+
+    match result {
+        Ok(updated_user) => {
+            // Render back the controls but when updated roles and status
+            let tpl = UserControlsTemplate {
+                client,
+                user: updated_user,
+                updated: true,
+            };
+
+            Ok(Response::builder()
+                .status(200)
+                .header("Content-Type", "text/html")
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
+        }
+        Err(err) => {
+            let status;
+            match err {
+                Error::Validation { msg } => {
+                    status = StatusCode::BAD_REQUEST;
+                    tpl.error_message = Some(msg);
+                }
+                Error::LoginRequired => {
+                    status = StatusCode::UNAUTHORIZED;
+                    tpl.error_message = Some("Login required.".to_string());
+                }
+                any_err => {
+                    status = StatusCode::INTERNAL_SERVER_ERROR;
+                    tpl.error_message = Some(any_err.to_string());
+                }
+            };
+
+            Ok(Response::builder()
+                .status(status)
+                .header("Content-Type", "text/html")
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
+        }
+    }
 }
 
 #[derive(Template)]
