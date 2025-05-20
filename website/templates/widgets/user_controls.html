@@ -1,0 +1,25 @@
+<div class="buttons">
+    <button
+        class="button is-primary"
+        hx-get="/clients/{{ client.id }}/users/{{ user.id }}/update_status"
+        hx-target="#user-controls-w"
+    >
+        Update Status
+    </button>
+
+    <button
+        class="button is-info"
+        hx-get="/clients/{{ client.id }}/users/{{ user.id }}/update_role"
+        hx-target="#user-controls-w"
+    >
+        Update Role
+    </button>
+
+    <button
+        class="button is-warning"
+        hx-get="/clients/{{ client.id }}/users/{{ user.id }}/reset_password"
+        hx-target="#user-controls-w"
+    >
+        Reset Password
+    </button>
+</div>

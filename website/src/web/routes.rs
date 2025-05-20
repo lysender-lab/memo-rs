@@ -25,9 +25,12 @@ use super::clients::{
 };
 use super::middleware::{
     album_listing_middleware, album_middleware, auth_middleware, client_middleware,
-    photo_middleware, pref_middleware, require_auth_middleware,
+    photo_middleware, pref_middleware, require_auth_middleware, user_middleware,
 };
-use super::users::users_handler;
+use super::users::{
+    new_user_handler, post_new_user_handler, reset_user_password_handler, update_user_role_handler,
+    update_user_status_handler, user_controls_handler, user_page_handler, users_handler,
+};
 use super::{
     album_listing_handler, confirm_delete_photo_handler, dark_theme_handler,
     edit_album_controls_handler, edit_album_handler, exec_delete_photo_handler,
@@ -182,6 +185,22 @@ fn client_inner_routes(state: AppState) -> Router<AppState> {
 fn users_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(users_handler))
+        .route("/new", get(new_user_handler).post(post_new_user_handler))
+        .nest("/{user_id}", user_inner_routes(state.clone()))
+        .with_state(state)
+}
+
+fn user_inner_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(user_page_handler))
+        .route("/edit_controls", get(user_controls_handler))
+        .route("/update_status", get(update_user_status_handler))
+        .route("/update_role", get(update_user_role_handler))
+        .route("/reset_password", get(reset_user_password_handler))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            user_middleware,
+        ))
         .with_state(state)
 }
 

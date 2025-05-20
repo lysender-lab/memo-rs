@@ -1,0 +1,18 @@
+{% macro h_select(name, selected, placeholder, classes, options) %}
+<select
+    name="{{ name }}"
+    class="{{ classes }}"
+    required
+>
+    {% if selected == "" %}
+    <option value="" disabled selected>{{ placeholder }}</option>
+    {% endif %}
+    {% for opt in options %}
+        {% if selected == opt.value %}
+        <option value="{{ opt.value }}" selected>{{ opt.label }}</option>
+        {% else %}
+        <option value="{{ opt.value }}">{{ opt.label }}</option>
+        {% endif %}
+    {% endfor %}
+</select>
+{% endmacro %}

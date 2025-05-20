@@ -11,12 +11,13 @@ use crate::{
     Error, Result,
     ctx::{Ctx, CtxValue},
     error::{ErrorInfo, ForbiddenSnafu, NotFoundSnafu, WhateverSnafu},
-    models::{AlbumParams, ClientParams, PhotoParams, Pref},
+    models::{AlbumParams, ClientParams, PhotoParams, Pref, UserParams},
     run::AppState,
     services::{
         auth::authenticate_token,
         clients::get_client,
         photos::{get_album, get_photo},
+        users::get_user,
     },
     web::{Action, Resource, enforce_policy, handle_error},
 };
@@ -178,6 +179,25 @@ pub async fn client_middleware(
     let config = state.config.clone();
 
     let client = get_client(&config.api_url, token, &params.client_id).await?;
+
+    req.extensions_mut().insert(client);
+    Ok(next.run(req).await)
+}
+
+pub async fn user_middleware(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<Ctx>,
+    Path(params): Path<UserParams>,
+    mut req: Request,
+    next: Next,
+) -> Result<Response> {
+    let actor = ctx.actor().expect("actor is required");
+    let _ = enforce_policy(actor, Resource::User, Action::Read)?;
+
+    let token = ctx.token().expect("token is required");
+    let config = state.config.clone();
+
+    let client = get_user(&config.api_url, token, &params.client_id, &params.user_id).await?;
 
     req.extensions_mut().insert(client);
     Ok(next.run(req).await)

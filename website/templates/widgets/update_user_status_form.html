@@ -1,0 +1,51 @@
+<form
+    method="post"
+    action="/clients/{{ client.id }}/users/{{ user.id }}/update_status"
+    action="/clients/{{ client.id }}/users/{{ user.id }}/update_status"
+    hx-target="#user-controls-w"
+>
+    <div class="columns">
+        <div class="column is-half">
+            <div class="card">
+                <div class="card-content">
+                    <h1 class="title is-4 has-text-weight-bold">User Status</h1>
+
+                    {% match error_message %}
+                        {% when Some with (msg) %}
+                            <div class="panel-block">
+                                <div class="error-message mb-5 tag is-danger">
+                                    <p>{{ msg }}</p>
+                                </div>
+                            </div>
+                        {% when None %}
+                    {% endmatch %}
+
+                    <div class="field">
+                        <div class="control">
+                            <label class="checkbox">
+                                <input name="active" type="checkbox" value="1" />
+                                Active
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="pt-3 field is-grouped">
+                        <div class="control">
+                            <input type="hidden" name="token" value="{{ payload.token }}" />
+                            <button class="button is-link" type="submit" name="submit">Submit</button>
+                        </div>
+                        <div class="control">
+                            <button
+                                class="button is-link is-light"
+                                hx-get="/clients/{{ client.id }}/users/{{ user.id }}/edit_controls"
+                                hx-target="#user-controls-w"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>

@@ -159,8 +159,8 @@ pub async fn post_new_client_handler(
     let result = create_client(&config, token, &payload).await;
 
     match result {
-        Ok(album) => {
-            let next_url = format!("/clients/{}", &album.id);
+        Ok(_) => {
+            let next_url = "/clients".to_string();
             // Weird but can't do a redirect here, let htmx handle it
             return Ok(Response::builder()
                 .status(200)
