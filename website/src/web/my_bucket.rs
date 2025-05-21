@@ -2,7 +2,6 @@ use askama::Template;
 use axum::extract::Query;
 use axum::{Extension, body::Body, extract::State, response::Response};
 use memo::bucket::BucketDto;
-use memo::role::Permission;
 use snafu::ResultExt;
 
 use crate::models::ListAlbumsParams;
