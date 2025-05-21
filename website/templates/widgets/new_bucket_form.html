@@ -1,0 +1,63 @@
+<form
+    method="post"
+    action="/clients/{{ client.id }}/buckets/new"
+    hx-post="/clients/{{ client.id }}/buckets/new"
+>
+    <div class="card">
+        <div class="card-content">
+            <h1 class="title is-4 has-text-weight-bold">Bucket</h1>
+
+            {% match error_message %}
+                {% when Some with (msg) %}
+                    <div class="mb-5 notification is-danger">
+                        {{ msg }}
+                    </div>
+                {% when None %}
+            {% endmatch %}
+
+            <div class="field">
+                <label class="label">Name</label>
+                <div class="control">
+                    <input
+                        class="input"
+                        type="text"
+                        id="create-bucket-name"
+                        name="name"
+                        value="{{ payload.name }}"
+                        placeholder="Bucket Name"
+                        required
+                        minlength="1"
+                        maxlength="60"
+                    >
+                </div>
+            </div>
+
+            <div class="field">
+                <label class="label">Content Type</label>
+                <div class="control">
+                    <label class="checkbox">
+                        {%if let Some(images_only) = payload.images_only %}
+                        <input name="images_only" type="checkbox" value="1" checked />
+                        {% else %}
+                        <input name="images_only" type="checkbox" value="1" />
+                        {% endif %}
+                        &nbsp;Images only
+                    </label>
+                </div>
+            </div>
+
+            <hr />
+
+            <div class="field is-grouped">
+                <div class="control">
+                    <input type="hidden" name="token" value="{{ payload.token }}" />
+                    <button class="button is-link" type="submit" name="submit">Submit</button>
+                </div>
+                <div class="control">
+                    <a class="button is-link is-light" href="/clients/{{ client.id }}/buckets">Cancel</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+

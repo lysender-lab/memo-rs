@@ -1,0 +1,27 @@
+{% extends "layout/base.html" %}
+
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/clients">Clients</a></li>
+                <li><a href="/clients/{{ client.id }}">{{ client.name }}</a></li>
+                <li><a href="/clients/{{ client.id }}/buckets">Buckets</a></li>
+                <li class="is-active">
+                    <a href="/clients/{{ client.id }}/buckets/new" aria-current="page">New bucket</a>
+                </li>
+            </ul>
+        </nav>
+
+        <h1 class="title">Create new bucket</h1>
+
+        <div class="columns">
+            <div class="column is-half">
+                {% include "widgets/new_bucket_form.html" %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
