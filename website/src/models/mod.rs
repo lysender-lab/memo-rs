@@ -1,3 +1,4 @@
+pub mod buckets;
 pub mod clients;
 pub mod login;
 pub mod options;

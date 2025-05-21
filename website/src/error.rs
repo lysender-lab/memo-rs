@@ -166,8 +166,17 @@ pub enum Error {
     #[snafu(display("{}", msg))]
     Service { msg: String },
 
+    #[snafu(display("File not found"))]
+    FileNotFound,
+
     #[snafu(display("Album not found"))]
     AlbumNotFound,
+
+    #[snafu(display("Bucket not found"))]
+    BucketNotFound,
+
+    #[snafu(display("Client not found"))]
+    ClientNotFound,
 
     #[snafu(display("Stale form data. Refresh the page and try again."))]
     CsrfToken,
@@ -218,12 +227,15 @@ impl From<&Error> for StatusCode {
             Error::RequiresAuth => StatusCode::UNAUTHORIZED,
             Error::InvalidPassword => StatusCode::UNAUTHORIZED,
             Error::InactiveUser => StatusCode::UNAUTHORIZED,
-            Error::UserNotFound => StatusCode::UNAUTHORIZED,
+            Error::UserNotFound => StatusCode::NOT_FOUND,
             Error::InvalidRoles { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidPermissions { .. } => StatusCode::BAD_REQUEST,
             Error::LoginFailed { .. } => StatusCode::UNAUTHORIZED,
             Error::LoginRequired => StatusCode::UNAUTHORIZED,
+            Error::FileNotFound => StatusCode::NOT_FOUND,
             Error::AlbumNotFound => StatusCode::NOT_FOUND,
+            Error::BucketNotFound => StatusCode::NOT_FOUND,
+            Error::ClientNotFound => StatusCode::NOT_FOUND,
             Error::CsrfToken => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }

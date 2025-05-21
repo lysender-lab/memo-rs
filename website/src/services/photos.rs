@@ -1,14 +1,15 @@
 use axum::body::Bytes;
 use axum::http::HeaderMap;
-use reqwest::{Client, StatusCode};
+use reqwest::Client;
 use snafu::{ResultExt, ensure};
 
 use crate::config::Config;
-use crate::error::{CsrfTokenSnafu, ErrorResponse, HttpClientSnafu, HttpResponseParseSnafu};
+use crate::error::{CsrfTokenSnafu, HttpClientSnafu, HttpResponseParseSnafu};
 use crate::models::{
     Album, FileObject, ListAlbumsParams, ListPhotosParams, NewAlbum, NewAlbumForm, Paginated,
     Photo, UpdateAlbum, UpdateAlbumForm,
 };
+use crate::services::handle_response_error;
 use crate::services::token::verify_csrf_token;
 use crate::{Error, Result};
 
@@ -47,7 +48,7 @@ pub async fn list_albums(
         })?;
 
     if !response.status().is_success() {
-        return Err(handle_response_error(response).await);
+        return Err(handle_response_error(response, "albums", Error::FileNotFound).await);
     }
 
     let albums = response
@@ -90,7 +91,7 @@ pub async fn create_album(
         })?;
 
     if !response.status().is_success() {
-        return Err(handle_response_error(response).await);
+        return Err(handle_response_error(response, "albums", Error::FileNotFound).await);
     }
 
     let album = response
@@ -124,7 +125,7 @@ pub async fn get_album(
         })?;
 
     if !response.status().is_success() {
-        return Err(handle_response_error(response).await);
+        return Err(handle_response_error(response, "albums", Error::FileNotFound).await);
     }
 
     let album = response
@@ -166,7 +167,7 @@ pub async fn update_album(
         })?;
 
     if !response.status().is_success() {
-        return Err(handle_response_error(response).await);
+        return Err(handle_response_error(response, "albums", Error::FileNotFound).await);
     }
 
     let album = response
@@ -203,7 +204,7 @@ pub async fn delete_album(
         })?;
 
     if !response.status().is_success() {
-        return Err(handle_response_error(response).await);
+        return Err(handle_response_error(response, "albums", Error::FileNotFound).await);
     }
 
     Ok(())
@@ -239,7 +240,7 @@ pub async fn list_photos(
         })?;
 
     if !response.status().is_success() {
-        return Err(handle_response_error(response).await);
+        return Err(handle_response_error(response, "photos", Error::FileNotFound).await);
     }
 
     let listing =
@@ -300,7 +301,7 @@ pub async fn upload_photo(
         })?;
 
     if !response.status().is_success() {
-        return Err(handle_response_error(response).await);
+        return Err(handle_response_error(response, "photos", Error::FileNotFound).await);
     }
 
     let file = response
@@ -369,67 +370,4 @@ pub async fn delete_photo(
         })?;
 
     Ok(())
-}
-
-pub async fn parse_response_error(response: reqwest::Response) -> Result<String> {
-    let Some(content_type) = response.headers().get("Content-Type") else {
-        return Err(Error::Service {
-            msg: "Unable to identify service response type".to_string(),
-        });
-    };
-
-    let Ok(content_type) = content_type.to_str() else {
-        return Err(Error::Service {
-            msg: "Unable to identify service response type".to_string(),
-        });
-    };
-
-    match content_type {
-        "application/json" => {
-            // Expected response when properly handled by the backend service
-            let json = response
-                .json::<ErrorResponse>()
-                .await
-                .context(HttpResponseParseSnafu {
-                    msg: "Unable to parse error response.",
-                })?;
-            Ok(json.message)
-        }
-        "text/plain" | "text/plain; charset=utf-8" => {
-            // Probably some default http error
-            let text_res = response.text().await;
-            match text_res {
-                Ok(text) => Ok(text),
-                Err(_) => Err(Error::Service {
-                    msg: "Unable to parse text service error response".to_string(),
-                }),
-            }
-        }
-        _ => Err(Error::Service {
-            msg: "Unable to parse service error response".to_string(),
-        }),
-    }
-}
-
-async fn handle_response_error(response: reqwest::Response) -> Error {
-    // Assumes that ok responses are already handled
-    match response.status() {
-        StatusCode::BAD_REQUEST => {
-            let message_res = parse_response_error(response).await;
-            match message_res {
-                Ok(msg) => Error::BadRequest { msg },
-                Err(_) => Error::BadRequest {
-                    msg: "Bad Request.".to_string(),
-                },
-            }
-        }
-        StatusCode::UNAUTHORIZED => Error::LoginRequired,
-        StatusCode::FORBIDDEN => Error::Forbidden {
-            msg: "You have no permissions to view albums".to_string(),
-        },
-        StatusCode::NOT_FOUND => Error::AlbumNotFound,
-        _ => Error::Service {
-            msg: "Service error. Try again later.".to_string(),
-        },
-    }
 }

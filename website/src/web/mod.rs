@@ -1,4 +1,5 @@
 pub mod albums;
+pub mod buckets;
 pub mod clients;
 pub mod error;
 pub mod index;

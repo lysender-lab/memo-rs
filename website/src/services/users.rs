@@ -1,5 +1,5 @@
 use memo::user::UserDto;
-use reqwest::{Client, StatusCode};
+use reqwest::Client;
 use snafu::{ResultExt, ensure};
 
 use crate::config::Config;
@@ -11,7 +11,7 @@ use crate::models::users::{
 use crate::services::token::verify_csrf_token;
 use crate::{Error, Result};
 
-use super::clients::parse_response_error;
+use super::handle_response_error;
 
 pub async fn list_users(api_url: &str, token: &str, client_id: &str) -> Result<Vec<UserDto>> {
     let url = format!("{}/clients/{}/users", api_url, client_id);
@@ -26,7 +26,7 @@ pub async fn list_users(api_url: &str, token: &str, client_id: &str) -> Result<V
         })?;
 
     if !response.status().is_success() {
-        return Err(handle_response_error(response).await);
+        return Err(handle_response_error(response, "users", Error::UserNotFound).await);
     }
 
     let users = response
@@ -75,7 +75,7 @@ pub async fn create_user(
         })?;
 
     if !response.status().is_success() {
-        return Err(handle_response_error(response).await);
+        return Err(handle_response_error(response, "users", Error::UserNotFound).await);
     }
 
     let user = response
@@ -105,7 +105,7 @@ pub async fn get_user(
         })?;
 
     if !response.status().is_success() {
-        return Err(handle_response_error(response).await);
+        return Err(handle_response_error(response, "users", Error::UserNotFound).await);
     }
 
     let user = response
@@ -149,7 +149,7 @@ pub async fn update_user_status(
         })?;
 
     if !response.status().is_success() {
-        return Err(handle_response_error(response).await);
+        return Err(handle_response_error(response, "users", Error::UserNotFound).await);
     }
 
     let user = response
@@ -191,7 +191,7 @@ pub async fn update_user_roles(
         })?;
 
     if !response.status().is_success() {
-        return Err(handle_response_error(response).await);
+        return Err(handle_response_error(response, "users", Error::UserNotFound).await);
     }
 
     let user = response
@@ -241,7 +241,7 @@ pub async fn reset_user_password(
         })?;
 
     if !response.status().is_success() {
-        return Err(handle_response_error(response).await);
+        return Err(handle_response_error(response, "users", Error::UserNotFound).await);
     }
 
     let user = response
@@ -254,19 +254,18 @@ pub async fn reset_user_password(
     Ok(user)
 }
 
-pub async fn delete_album(
+pub async fn delete_user(
     config: &Config,
     token: &str,
     client_id: &str,
-    bucket_id: &str,
-    album_id: &str,
+    user_id: &str,
     csrf_token: &str,
 ) -> Result<()> {
     let csrf_result = verify_csrf_token(&csrf_token, &config.jwt_secret)?;
-    ensure!(csrf_result == album_id, CsrfTokenSnafu);
+    ensure!(csrf_result == user_id, CsrfTokenSnafu);
     let url = format!(
-        "{}/clients/{}/buckets/{}/dirs/{}",
-        &config.api_url, client_id, bucket_id, album_id
+        "{}/clients/{}/users/{}",
+        &config.api_url, client_id, user_id,
     );
     let response = Client::new()
         .delete(url)
@@ -278,31 +277,8 @@ pub async fn delete_album(
         })?;
 
     if !response.status().is_success() {
-        return Err(handle_response_error(response).await);
+        return Err(handle_response_error(response, "users", Error::UserNotFound).await);
     }
 
     Ok(())
-}
-
-async fn handle_response_error(response: reqwest::Response) -> Error {
-    // Assumes that ok responses are already handled
-    match response.status() {
-        StatusCode::BAD_REQUEST => {
-            let message_res = parse_response_error(response).await;
-            match message_res {
-                Ok(msg) => Error::BadRequest { msg },
-                Err(_) => Error::BadRequest {
-                    msg: "Bad Request.".to_string(),
-                },
-            }
-        }
-        StatusCode::UNAUTHORIZED => Error::LoginRequired,
-        StatusCode::FORBIDDEN => Error::Forbidden {
-            msg: "You have no permissions to view users".to_string(),
-        },
-        StatusCode::NOT_FOUND => Error::UserNotFound,
-        _ => Error::Service {
-            msg: "Service error. Try again later.".to_string(),
-        },
-    }
 }
