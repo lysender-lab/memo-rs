@@ -30,6 +30,30 @@ pub struct SearchDirsParams {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
+pub struct NewDirFormData {
+    pub name: String,
+    pub label: String,
+    pub token: String,
+}
+
+#[derive(Clone, Serialize)]
+pub struct NewDirData {
+    pub name: String,
+    pub label: String,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct UpdateDirFormData {
+    pub label: String,
+    pub token: String,
+}
+
+#[derive(Clone, Serialize)]
+pub struct UpdateDirData {
+    pub label: String,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
 pub struct NewBucketFormData {
     pub name: String,
     pub images_only: Option<String>,
@@ -88,6 +112,49 @@ pub async fn list_dirs(
         })?;
 
     Ok(dirs)
+}
+
+pub async fn create_dir(
+    config: &Config,
+    token: &str,
+    client_id: &str,
+    bucket_id: &str,
+    form: NewDirFormData,
+) -> Result<Dir> {
+    let csrf_result = verify_csrf_token(&form.token, &config.jwt_secret)?;
+    ensure!(csrf_result == "new_dir", CsrfTokenSnafu);
+
+    let url = format!(
+        "{}/clients/{}/buckets/{}/dirs",
+        &config.api_url, client_id, bucket_id
+    );
+
+    let data = NewDirData {
+        name: form.name,
+        label: form.label,
+    };
+    let response = Client::new()
+        .post(url)
+        .bearer_auth(token)
+        .json(&data)
+        .send()
+        .await
+        .context(HttpClientSnafu {
+            msg: "Unable to create dir. Try again later.".to_string(),
+        })?;
+
+    if !response.status().is_success() {
+        return Err(handle_response_error(response, "dirs", Error::BucketNotFound).await);
+    }
+
+    let dir = response
+        .json::<Dir>()
+        .await
+        .context(HttpResponseParseSnafu {
+            msg: "Unable to parse dir information.",
+        })?;
+
+    Ok(dir)
 }
 
 pub async fn create_bucket(

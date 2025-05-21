@@ -1,0 +1,72 @@
+<form
+    method="post"
+    action="/buckets/{{ bucket.id }}/new_dir"
+    hx-post="/buckets/{{ bucket.id }}/new_dir"
+>
+    <div class="card">
+        <div class="card-content">
+            <h1 class="title is-4 has-text-weight-bold">
+                {% if bucket.images_only %}
+                Album
+                {% else %}
+                Directory
+                {% endif %}
+            </h1>
+
+            {% match error_message %}
+                {% when Some with (msg) %}
+                    <div class="panel-block">
+                        <div class="error-message mb-5 tag is-danger">
+                            <p>{{ msg }}</p>
+                        </div>
+                    </div>
+                {% when None %}
+            {% endmatch %}
+
+            <div class="field">
+                <label class="label">Label</label>
+                <div class="control">
+                    <input
+                        class="input"
+                        type="text"
+                        id="create-album-label"
+                        name="label"
+                        value="{{ payload.label }}"
+                        placeholder="Label"
+                        required
+                        minlength="1"
+                        maxlength="60"
+                    >
+                </div>
+            </div>
+
+            <div class="field">
+                <label class="label">Name</label>
+                <div class="control">
+                    <input
+                        class="input"
+                        type="text"
+                        id="create-album-name"
+                        name="name"
+                        value="{{ payload.name }}"
+                        placeholder="name"
+                        required
+                        minlength="1"
+                        maxlength="50"
+                    >
+                </div>
+            </div>
+
+            <div class="pt-3 field is-grouped">
+                <div class="control">
+                    <input type="hidden" name="token" value="{{ payload.token }}" />
+                    <button class="button is-link" type="submit" name="submit">Submit</button>
+                </div>
+                <div class="control">
+                    <a class="button is-link is-light" href="/buckets/{{ bucket.id }}">Cancel</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+

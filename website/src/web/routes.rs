@@ -28,7 +28,7 @@ use super::clients::{
     edit_client_controls_handler, edit_client_handler, new_client_handler,
     post_delete_client_handler, post_edit_client_handler, post_new_client_handler,
 };
-use super::dirs::search_dirs_handler;
+use super::dirs::{new_dir_handler, post_new_dir_handler, search_dirs_handler};
 use super::middleware::{
     album_listing_middleware, album_middleware, auth_middleware, bucket_middleware,
     client_middleware, my_bucket_middleware, photo_middleware, pref_middleware,
@@ -264,6 +264,7 @@ fn my_bucket_inner_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(my_bucket_page_handler))
         .route("/search_dirs", get(search_dirs_handler))
+        .route("/new_dir", get(new_dir_handler).post(post_new_dir_handler))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             my_bucket_middleware,

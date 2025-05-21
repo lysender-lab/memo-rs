@@ -1,5 +1,6 @@
 use askama::Template;
 use axum::extract::Query;
+use axum::http::StatusCode;
 use axum::{Extension, Form, body::Body, extract::State, response::Response};
 use memo::bucket::BucketDto;
 use memo::client::ClientDto;
@@ -10,7 +11,7 @@ use urlencoding::encode;
 use crate::models::PaginationLinks;
 use crate::models::tokens::TokenFormData;
 use crate::services::buckets::{NewBucketFormData, create_bucket, delete_bucket};
-use crate::services::dirs::{Dir, SearchDirsParams, list_dirs};
+use crate::services::dirs::{Dir, NewDirFormData, SearchDirsParams, create_dir, list_dirs};
 use crate::{
     Error, Result,
     ctx::Ctx,
@@ -63,6 +64,122 @@ pub async fn search_dirs_handler(
             build_response(tpl)
         }
         Err(err) => build_error_response(tpl, err),
+    }
+}
+
+#[derive(Template)]
+#[template(path = "pages/new_dir.html")]
+struct NewDirTemplate {
+    t: TemplateData,
+    bucket: BucketDto,
+    payload: NewDirFormData,
+    error_message: Option<String>,
+}
+
+#[derive(Template)]
+#[template(path = "widgets/new_dir_form.html")]
+struct DirFormTemplate {
+    bucket: BucketDto,
+    payload: NewDirFormData,
+    error_message: Option<String>,
+}
+
+pub async fn new_dir_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(pref): Extension<Pref>,
+    Extension(bucket): Extension<BucketDto>,
+    State(state): State<AppState>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::Album, Action::Create)?;
+
+    let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
+    t.title = String::from(match &bucket.images_only {
+        &true => "Create New Album",
+        &false => "Create New Directory",
+    });
+
+    let token = create_csrf_token("new_dir", &config.jwt_secret)?;
+
+    let tpl = NewDirTemplate {
+        t,
+        bucket,
+        payload: NewDirFormData {
+            name: "".to_string(),
+            label: "".to_string(),
+            token,
+        },
+        error_message: None,
+    };
+
+    Ok(Response::builder()
+        .status(200)
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)?)
+}
+
+pub async fn post_new_dir_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(bucket): Extension<BucketDto>,
+    State(state): State<AppState>,
+    payload: Form<NewDirFormData>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::Album, Action::Create)?;
+
+    let token = create_csrf_token("new_album", &config.jwt_secret)?;
+    let cid = bucket.client_id.clone();
+    let bid = bucket.id.clone();
+
+    let mut tpl = DirFormTemplate {
+        bucket,
+        payload: NewDirFormData {
+            name: "".to_string(),
+            label: "".to_string(),
+            token,
+        },
+        error_message: None,
+    };
+
+    let status: StatusCode;
+
+    let dir = NewDirFormData {
+        name: payload.name.clone(),
+        label: payload.label.clone(),
+        token: payload.token.clone(),
+    };
+
+    let token = ctx.token().expect("token is required");
+    let result = create_dir(&config, token, &cid, &bid, dir).await;
+
+    match result {
+        Ok(_) => {
+            let next_url = format!("/buckets/{}", &bid);
+            // Weird but can't do a redirect here, let htmx handle it
+            Ok(Response::builder()
+                .status(200)
+                .header("HX-Redirect", next_url)
+                .body(Body::from("".to_string()))
+                .context(ResponseBuilderSnafu)?)
+        }
+        Err(err) => {
+            let error_info = ErrorInfo::from(&err);
+            status = error_info.status_code;
+            tpl.error_message = Some(error_info.message);
+
+            tpl.payload.name = payload.name.clone();
+            tpl.payload.label = payload.label.clone();
+
+            // Will only arrive here on error
+            Ok(Response::builder()
+                .status(status)
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
+        }
     }
 }
 

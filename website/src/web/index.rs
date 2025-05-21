@@ -2,7 +2,7 @@ use askama::Template;
 use axum::{
     Extension,
     body::Body,
-    extract::{Query, State},
+    extract::State,
     response::{IntoResponse, Redirect, Response},
 };
 use memo::bucket::BucketDto;
@@ -12,7 +12,7 @@ use crate::{
     Result,
     ctx::Ctx,
     error::{ResponseBuilderSnafu, TemplateSnafu},
-    models::{ListAlbumsParams, TemplateData},
+    models::TemplateData,
     services::buckets::list_buckets,
 };
 use crate::{models::Pref, run::AppState};
@@ -24,14 +24,12 @@ use super::{Action, Resource, enforce_policy};
 struct IndexTemplate {
     t: TemplateData,
     buckets: Vec<BucketDto>,
-    query_params: String,
 }
 
 pub async fn index_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(pref): Extension<Pref>,
     State(state): State<AppState>,
-    Query(query): Query<ListAlbumsParams>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
     let _ = enforce_policy(actor, Resource::Bucket, Action::Read)?;
@@ -47,11 +45,7 @@ pub async fn index_handler(
     let token = ctx.token().expect("token is required");
     let buckets = list_buckets(&state.config.api_url, token, &actor.client_id).await?;
 
-    let tpl = IndexTemplate {
-        t,
-        buckets,
-        query_params: query.to_string(),
-    };
+    let tpl = IndexTemplate { t, buckets };
 
     Ok(Response::builder()
         .status(200)

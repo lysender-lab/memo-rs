@@ -1,0 +1,37 @@
+{% extends "layout/base.html" %}
+
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/buckets/{{ bucket.id }}">{{ bucket.name }}</a></li>
+                <li class="is-active">
+                    <a href="/buckets/{{ bucket.id }}/new_dir" aria-current="page">
+                        {% if bucket.images_only %}
+                        New Album
+                        {% else %}
+                        New Directory
+                        {% endif %}
+                    </a>
+                </li>
+            </ul>
+        </nav>
+
+        <h1 class="title">
+            {% if bucket.images_only %}
+            Create new album
+            {% else %}
+            Create new directory
+            {% endif %}
+        </h1>
+
+        <div class="columns">
+            <div class="column is-half">
+                {% include "widgets/new_dir_form.html" %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
