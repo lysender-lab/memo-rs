@@ -17,7 +17,11 @@
 
         <h1 class="title">User Information</h1>
 
-        <div class="box">
+        <div id="edit-user-container">
+            {% include "widgets/edit_user_controls.html" %}
+        </div>
+
+        <div class="box mt-5">
             <h1 class="title is-4 has-text-weight-bold">User</h1>
 
             <div class="columns is-variable is-6">
@@ -41,12 +45,6 @@
                     <p><span class="tag is-dark">{{ role }}</span></p>
                 {% endfor %}
               </div>
-            </div>
-
-            <hr>
-
-            <div id="user-controls-w">
-                {% include "widgets/user_controls.html" %}
             </div>
           </div>
     </div>

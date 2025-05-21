@@ -2,7 +2,7 @@
     method="post"
     action="/clients/{{ client.id }}/users/{{ user.id }}/update_status"
     hx-post="/clients/{{ client.id }}/users/{{ user.id }}/update_status"
-    hx-target="#user-controls-w"
+    hx-target="#edit-user-container"
 >
     <div class="columns">
         <div class="column is-half">
@@ -40,7 +40,7 @@
                             <button
                                 class="button is-link is-light"
                                 hx-get="/clients/{{ client.id }}/users/{{ user.id }}/edit_controls"
-                                hx-target="#user-controls-w"
+                                hx-target="#edit-user-container"
                             >
                                 Cancel
                             </button>

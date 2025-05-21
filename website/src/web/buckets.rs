@@ -211,6 +211,8 @@ struct UserPageTemplate {
     client: ClientDto,
     user: UserDto,
     updated: bool,
+    can_edit: bool,
+    can_delete: bool,
 }
 
 pub async fn user_page_handler(
@@ -230,6 +232,8 @@ pub async fn user_page_handler(
         client,
         user,
         updated: false,
+        can_edit: true,
+        can_delete: true,
     };
 
     Ok(Response::builder()
@@ -239,11 +243,13 @@ pub async fn user_page_handler(
 }
 
 #[derive(Template)]
-#[template(path = "widgets/user_controls.html")]
+#[template(path = "widgets/edit_user_controls.html")]
 struct UserControlsTemplate {
     client: ClientDto,
     user: UserDto,
     updated: bool,
+    can_edit: bool,
+    can_delete: bool,
 }
 
 pub async fn user_controls_handler(
@@ -254,6 +260,8 @@ pub async fn user_controls_handler(
         client,
         user,
         updated: false,
+        can_edit: true,
+        can_delete: true,
     };
 
     Ok(Response::builder()
@@ -348,6 +356,8 @@ pub async fn post_update_user_status_handler(
                 client,
                 user: updated_user,
                 updated: true,
+                can_edit: true,
+                can_delete: true,
             };
 
             Ok(Response::builder()
@@ -467,6 +477,8 @@ pub async fn post_update_user_role_handler(
                 client,
                 user: updated_user,
                 updated: true,
+                can_edit: true,
+                can_delete: true,
             };
 
             Ok(Response::builder()
@@ -583,6 +595,8 @@ pub async fn post_reset_password_handler(
                 client,
                 user,
                 updated: false,
+                can_edit: true,
+                can_delete: true,
             };
 
             Ok(Response::builder()

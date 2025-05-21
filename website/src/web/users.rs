@@ -3,6 +3,7 @@ use axum::debug_handler;
 use axum::http::StatusCode;
 use axum::{Extension, Form, body::Body, extract::State, response::Response};
 use memo::client::ClientDto;
+use memo::role::Permission;
 use memo::user::UserDto;
 use snafu::ResultExt;
 
@@ -205,6 +206,8 @@ struct UserPageTemplate {
     client: ClientDto,
     user: UserDto,
     updated: bool,
+    can_edit: bool,
+    can_delete: bool,
 }
 
 pub async fn user_page_handler(
@@ -224,6 +227,8 @@ pub async fn user_page_handler(
         client,
         user,
         updated: false,
+        can_edit: actor.has_permissions(&vec![Permission::UsersEdit]),
+        can_delete: actor.has_permissions(&vec![Permission::UsersDelete]),
     };
 
     Ok(Response::builder()
@@ -233,21 +238,30 @@ pub async fn user_page_handler(
 }
 
 #[derive(Template)]
-#[template(path = "widgets/user_controls.html")]
+#[template(path = "widgets/edit_user_controls.html")]
 struct UserControlsTemplate {
     client: ClientDto,
     user: UserDto,
     updated: bool,
+    can_edit: bool,
+    can_delete: bool,
 }
 
 pub async fn user_controls_handler(
+    Extension(ctx): Extension<Ctx>,
     Extension(client): Extension<ClientDto>,
     Extension(user): Extension<UserDto>,
 ) -> Result<Response<Body>> {
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::User, Action::Update)?;
+
     let tpl = UserControlsTemplate {
         client,
         user,
         updated: false,
+        can_edit: actor.has_permissions(&vec![Permission::UsersEdit]),
+        can_delete: actor.has_permissions(&vec![Permission::UsersDelete]),
     };
 
     Ok(Response::builder()
@@ -342,6 +356,8 @@ pub async fn post_update_user_status_handler(
                 client,
                 user: updated_user,
                 updated: true,
+                can_edit: actor.has_permissions(&vec![Permission::UsersEdit]),
+                can_delete: actor.has_permissions(&vec![Permission::UsersDelete]),
             };
 
             Ok(Response::builder()
@@ -461,6 +477,8 @@ pub async fn post_update_user_role_handler(
                 client,
                 user: updated_user,
                 updated: true,
+                can_edit: actor.has_permissions(&vec![Permission::UsersEdit]),
+                can_delete: actor.has_permissions(&vec![Permission::UsersDelete]),
             };
 
             Ok(Response::builder()
@@ -577,6 +595,8 @@ pub async fn post_reset_password_handler(
                 client,
                 user,
                 updated: false,
+                can_edit: actor.has_permissions(&vec![Permission::UsersEdit]),
+                can_delete: actor.has_permissions(&vec![Permission::UsersDelete]),
             };
 
             Ok(Response::builder()
