@@ -173,7 +173,7 @@ pub async fn update_user_roles(
     ensure!(&csrf_result == user_id, CsrfTokenSnafu);
 
     let url = format!(
-        "{}/clients/{}/users/{}/update_role",
+        "{}/clients/{}/users/{}/update_roles",
         &config.api_url, client_id, user_id
     );
     let data = UserRolesData {

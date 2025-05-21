@@ -3,7 +3,7 @@
 <form
     method="post"
     action="/clients/{{ client.id }}/users/{{ user.id }}/update_role"
-    action="/clients/{{ client.id }}/users/{{ user.id }}/update_role"
+    hx-post="/clients/{{ client.id }}/users/{{ user.id }}/update_role"
     hx-target="#user-controls-w"
 >
     <div class="columns">
