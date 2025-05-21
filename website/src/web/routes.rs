@@ -21,8 +21,8 @@ use crate::web::{
 
 use super::buckets::buckets_handler;
 use super::clients::{
-    client_page_handler, clients_handler, clients_listing_handler, edit_client_handler,
-    new_client_handler, post_edit_client_handler, post_new_client_handler,
+    client_page_handler, clients_handler, clients_listing_handler, edit_client_controls_handler,
+    edit_client_handler, new_client_handler, post_edit_client_handler, post_new_client_handler,
 };
 use super::middleware::{
     album_listing_middleware, album_middleware, auth_middleware, client_middleware,
@@ -167,7 +167,7 @@ fn client_routes(state: AppState) -> Router<AppState> {
 fn client_inner_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(client_page_handler))
-        .route("/edit-controls", get(edit_album_controls_handler))
+        .route("/edit_controls", get(edit_client_controls_handler))
         .route(
             "/edit",
             get(edit_client_handler).post(post_edit_client_handler),

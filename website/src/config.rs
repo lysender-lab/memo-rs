@@ -37,7 +37,6 @@ pub struct Config {
 #[derive(Clone, Deserialize)]
 pub struct AssetManifest {
     pub main_js: String,
-    pub vendor_js: String,
     pub gallery_js: String,
     pub upload_js: String,
     pub main_css: String,
@@ -117,7 +116,6 @@ impl AssetManifest {
 
         Ok(AssetManifest {
             main_js: format!("/assets/bundles/js/main-{}.js", config.suffix),
-            vendor_js: format!("/assets/bundles/js/vendor-{}.js", config.suffix),
             gallery_js: format!("/assets/bundles/js/gallery-{}.js", config.suffix),
             upload_js: format!("/assets/bundles/js/upload-{}.js", config.suffix),
             main_css: format!("/assets/bundles/css/main-{}.css", config.suffix),

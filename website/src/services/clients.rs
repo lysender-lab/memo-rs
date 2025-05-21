@@ -13,7 +13,7 @@ use super::handle_response_error;
 #[derive(Clone, Deserialize, Serialize)]
 pub struct ClientFormSubmitData {
     pub name: String,
-    pub status: String,
+    pub active: Option<String>,
     pub token: String,
 }
 
@@ -61,7 +61,10 @@ pub async fn create_client(
 
     let data = ClientSubmitData {
         name: form.name.clone(),
-        status: form.status.clone(),
+        status: match form.active {
+            Some(_) => "active".to_string(),
+            None => "inactive".to_string(),
+        },
     };
     let response = Client::new()
         .post(url)
@@ -124,7 +127,10 @@ pub async fn update_client(
     let url = format!("{}/clients/{}", &config.api_url, client_id);
     let data = ClientSubmitData {
         name: form.name.clone(),
-        status: form.status.clone(),
+        status: match form.active {
+            Some(_) => "active".to_string(),
+            None => "inactive".to_string(),
+        },
     };
     let response = Client::new()
         .patch(url)

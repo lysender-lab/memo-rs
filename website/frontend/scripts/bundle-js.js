@@ -26,10 +26,6 @@ if (!suffix) {
 // Organize js files in bundles
 const bundles = [
   {
-    bundle: `assets/bundles/js/vendor-${suffix}.js`,
-    files: ['assets/vendors/htmx/2.0.2/js/htmx.min.js'],
-  },
-  {
     bundle: `assets/bundles/js/gallery-${suffix}.js`,
     files: [
       'assets/vendors/photoswipe/5.4.4/umd/photoswipe.umd.min.js',

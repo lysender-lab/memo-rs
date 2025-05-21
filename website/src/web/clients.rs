@@ -2,6 +2,7 @@ use askama::Template;
 use axum::http::StatusCode;
 use axum::{Extension, Form, body::Body, extract::State, response::Response};
 use memo::client::ClientDto;
+use memo::role::Permission;
 use snafu::{ResultExt, ensure};
 
 use crate::error::ForbiddenSnafu;
@@ -109,14 +110,14 @@ pub async fn new_client_handler(
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
     t.title = String::from("Create New Client");
 
-    let token = create_csrf_token("new_album", &config.jwt_secret)?;
+    let token = create_csrf_token("new_client", &config.jwt_secret)?;
 
     let tpl = NewClientTemplate {
         t,
         action: "/clients/new".to_string(),
         payload: ClientFormSubmitData {
             name: "".to_string(),
-            status: "active".to_string(),
+            active: Some("1".to_string()),
             token,
         },
         error_message: None,
@@ -144,7 +145,7 @@ pub async fn post_new_client_handler(
         action: "/clients/new".to_string(),
         payload: ClientFormSubmitData {
             name: "".to_string(),
-            status: "active".to_string(),
+            active: Some("1".to_string()),
             token,
         },
         error_message: None,
@@ -154,7 +155,7 @@ pub async fn post_new_client_handler(
 
     let payload = ClientFormSubmitData {
         name: payload.name.clone(),
-        status: payload.status.clone(),
+        active: payload.active.clone(),
         token: payload.token.clone(),
     };
 
@@ -179,7 +180,7 @@ pub async fn post_new_client_handler(
     }
 
     tpl.payload.name = payload.name.clone();
-    tpl.payload.status = payload.status.clone();
+    tpl.payload.active = payload.active.clone();
 
     // Will only arrive here on error
     Ok(Response::builder()
@@ -193,6 +194,9 @@ pub async fn post_new_client_handler(
 struct ClientPageTemplate {
     t: TemplateData,
     client: ClientDto,
+    can_edit: bool,
+    can_delete: bool,
+    updated: bool,
 }
 
 pub async fn client_page_handler(
@@ -206,7 +210,13 @@ pub async fn client_page_handler(
 
     t.title = format!("Client - {}", &client.name);
 
-    let tpl = ClientPageTemplate { t, client };
+    let tpl = ClientPageTemplate {
+        t,
+        client,
+        can_edit: actor.has_permissions(&vec![Permission::ClientsEdit]),
+        can_delete: actor.has_permissions(&vec![Permission::ClientsDelete]),
+        updated: false,
+    };
 
     Ok(Response::builder()
         .status(200)
@@ -215,27 +225,15 @@ pub async fn client_page_handler(
 }
 
 #[derive(Template)]
-#[template(path = "pages/edit_client.html")]
-struct EditClientTemplate {
-    t: TemplateData,
-    client: ClientDto,
-    action: String,
-    payload: ClientFormSubmitData,
-    error_message: Option<String>,
-}
-
-#[derive(Template)]
 #[template(path = "widgets/edit_client_form.html")]
 struct EditClientFormTemplate {
     client: ClientDto,
-    action: String,
     payload: ClientFormSubmitData,
     error_message: Option<String>,
 }
 
 pub async fn edit_client_handler(
     Extension(ctx): Extension<Ctx>,
-    Extension(pref): Extension<Pref>,
     Extension(client): Extension<ClientDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
@@ -244,18 +242,16 @@ pub async fn edit_client_handler(
 
     let _ = enforce_policy(actor, Resource::Client, Action::Update)?;
 
-    let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
-    t.title = String::from(format!("Edit - {}", &client.name));
-
     let token = create_csrf_token(&client.id, &config.jwt_secret)?;
 
-    let tpl = EditClientTemplate {
-        t,
+    let tpl = EditClientFormTemplate {
         client: client.clone(),
-        action: format!("/clients/{}/edit", &client.id),
         payload: ClientFormSubmitData {
             name: client.name,
-            status: client.status,
+            active: match client.status.as_str() {
+                "active" => Some("1".to_string()),
+                _ => None,
+            },
             token,
         },
         error_message: None,
@@ -282,10 +278,9 @@ pub async fn post_edit_client_handler(
 
     let mut tpl = EditClientFormTemplate {
         client: client.clone(),
-        action: format!("/clients/{}/edit", &client.id),
         payload: ClientFormSubmitData {
             name: "".to_string(),
-            status: "active".to_string(),
+            active: Some("1".to_string()),
             token,
         },
         error_message: None,
@@ -295,7 +290,7 @@ pub async fn post_edit_client_handler(
 
     let payload = ClientFormSubmitData {
         name: payload.name.clone(),
-        status: payload.status.clone(),
+        active: payload.active.clone(),
         token: payload.token.clone(),
     };
 
@@ -304,27 +299,61 @@ pub async fn post_edit_client_handler(
 
     match result {
         Ok(updated_client) => {
-            let next_url = format!("/clients/{}", &updated_client.id);
-            // Weird but can't do a redirect here, let htmx handle it
-            return Ok(Response::builder()
+            // Render the controls back
+            let tpl = EditClientControlsTemplate {
+                client: updated_client,
+                updated: true,
+                can_edit: actor.has_permissions(&vec![Permission::ClientsEdit]),
+                can_delete: actor.has_permissions(&vec![Permission::ClientsDelete]),
+            };
+
+            Ok(Response::builder()
                 .status(200)
-                .header("HX-Redirect", next_url)
-                .body(Body::from("".to_string()))
-                .context(ResponseBuilderSnafu)?);
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
         }
         Err(err) => {
             let error_info = ErrorInfo::from(&err);
             status = error_info.status_code;
             tpl.error_message = Some(error_info.message);
+
+            tpl.payload.name = payload.name.clone();
+            tpl.payload.active = payload.active.clone();
+
+            Ok(Response::builder()
+                .status(status)
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
         }
     }
+}
 
-    tpl.payload.name = payload.name.clone();
-    tpl.payload.status = payload.status.clone();
+#[derive(Template)]
+#[template(path = "widgets/edit_client_controls.html")]
+struct EditClientControlsTemplate {
+    client: ClientDto,
+    updated: bool,
+    can_edit: bool,
+    can_delete: bool,
+}
 
-    // Will only arrive here on error
+pub async fn edit_client_controls_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(client): Extension<ClientDto>,
+) -> Result<Response<Body>> {
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::Client, Action::Update)?;
+
+    let tpl = EditClientControlsTemplate {
+        client,
+        updated: false,
+        can_edit: actor.has_permissions(&vec![Permission::ClientsEdit]),
+        can_delete: actor.has_permissions(&vec![Permission::ClientsDelete]),
+    };
+
     Ok(Response::builder()
-        .status(status)
+        .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
         .context(ResponseBuilderSnafu)?)
 }
