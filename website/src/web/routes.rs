@@ -19,6 +19,7 @@ use crate::web::{
     photo_listing_handler, photos_page_handler, post_login_handler, post_new_album_handler,
 };
 
+use super::buckets::buckets_handler;
 use super::clients::{
     client_page_handler, clients_handler, clients_listing_handler, edit_client_handler,
     new_client_handler, post_edit_client_handler, post_new_client_handler,
@@ -176,7 +177,7 @@ fn client_inner_routes(state: AppState) -> Router<AppState> {
             get(get_delete_album_handler).post(post_delete_album_handler),
         )
         .nest("/users", users_routes(state.clone()))
-        .nest("/buckets", upload_route(state.clone()))
+        .nest("/buckets", buckets_routes(state.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             client_middleware,
@@ -212,6 +213,14 @@ fn user_inner_routes(state: AppState) -> Router<AppState> {
             state.clone(),
             user_middleware,
         ))
+        .with_state(state)
+}
+
+fn buckets_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(buckets_handler))
+        .route("/new", get(new_user_handler).post(post_new_user_handler))
+        .nest("/{bucket_id}", user_inner_routes(state.clone()))
         .with_state(state)
 }
 

@@ -2,11 +2,13 @@ use askama::Template;
 use axum::debug_handler;
 use axum::http::StatusCode;
 use axum::{Extension, Form, body::Body, extract::State, response::Response};
+use memo::bucket::BucketDto;
 use memo::client::ClientDto;
 use memo::user::UserDto;
 use snafu::ResultExt;
 
 use crate::models::options::SelectOption;
+use crate::services::buckets::list_buckets;
 use crate::services::users::{
     NewUserFormData, ResetPasswordData, ResetPasswordFormData, UserActiveFormData, UserRoleFormData,
 };
@@ -28,29 +30,29 @@ use crate::{
 };
 
 #[derive(Template)]
-#[template(path = "pages/users.html")]
-struct UsersPageTemplate {
+#[template(path = "pages/buckets.html")]
+struct BucketsPageTemplate {
     t: TemplateData,
     client: ClientDto,
-    users: Vec<UserDto>,
+    buckets: Vec<BucketDto>,
 }
 
-pub async fn users_handler(
+pub async fn buckets_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(pref): Extension<Pref>,
     Extension(client): Extension<ClientDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::User, Action::Read)?;
+    let _ = enforce_policy(actor, Resource::Bucket, Action::Read)?;
 
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
-    t.title = String::from("Users");
+    t.title = String::from("Buckets");
 
     let token = ctx.token().expect("token is required");
-    let users = list_users(state.config.api_url.as_str(), token, client.id.as_str()).await?;
+    let buckets = list_buckets(state.config.api_url.as_str(), token, client.id.as_str()).await?;
 
-    let tpl = UsersPageTemplate { t, client, users };
+    let tpl = BucketsPageTemplate { t, client, buckets };
 
     Ok(Response::builder()
         .status(200)
