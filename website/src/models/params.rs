@@ -26,6 +26,12 @@ pub struct MyBucketParams {
 }
 
 #[derive(Deserialize)]
+pub struct MyDirParams {
+    pub bucket_id: String,
+    pub dir_id: String,
+}
+
+#[derive(Deserialize)]
 pub struct AlbumParams {
     pub album_id: Option<String>,
 }
@@ -40,6 +46,11 @@ pub struct ListAlbumsParams {
 #[derive(Deserialize)]
 pub struct UploadParams {
     pub token: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct ListFilesParams {
+    pub page: Option<u32>,
 }
 
 #[derive(Deserialize)]

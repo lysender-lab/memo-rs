@@ -5,6 +5,7 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::CookieJar;
+use memo::bucket::BucketDto;
 use snafu::{OptionExt, ensure};
 
 use crate::{
@@ -12,13 +13,15 @@ use crate::{
     ctx::{Ctx, CtxValue},
     error::{ErrorInfo, ForbiddenSnafu, WhateverSnafu},
     models::{
-        AlbumParams, BucketParams, ClientParams, MyBucketParams, PhotoParams, Pref, UserParams,
+        AlbumParams, BucketParams, ClientParams, MyBucketParams, MyDirParams, PhotoParams, Pref,
+        UserParams,
     },
     run::AppState,
     services::{
         auth::authenticate_token,
         buckets::get_bucket,
         clients::get_client,
+        dirs::get_dir,
         photos::{get_album, get_photo},
         users::get_user,
     },
@@ -123,6 +126,31 @@ pub async fn album_middleware(
     .await?;
 
     req.extensions_mut().insert(album);
+    Ok(next.run(req).await)
+}
+
+pub async fn dir_middleware(
+    Extension(ctx): Extension<Ctx>,
+    Extension(bucket): Extension<BucketDto>,
+    State(state): State<AppState>,
+    Path(params): Path<MyDirParams>,
+    mut req: Request,
+    next: Next,
+) -> Result<Response> {
+    let actor = ctx.actor().expect("actor is required");
+    let _ = enforce_policy(actor, Resource::Album, Action::Read)?;
+
+    let token = ctx.token().expect("token is required");
+    let dir = get_dir(
+        &state.config.api_url,
+        token,
+        &bucket.client_id,
+        &bucket.id,
+        &params.dir_id,
+    )
+    .await?;
+
+    req.extensions_mut().insert(dir);
     Ok(next.run(req).await)
 }
 

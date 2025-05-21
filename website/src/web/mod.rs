@@ -3,6 +3,7 @@ pub mod buckets;
 pub mod clients;
 pub mod dirs;
 pub mod error;
+pub mod files;
 pub mod index;
 pub mod login;
 pub mod logout;

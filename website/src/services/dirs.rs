@@ -11,7 +11,7 @@ use memo::pagination::Paginated;
 
 use super::handle_response_error;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Dir {
     pub id: String,
     pub bucket_id: String,
@@ -152,6 +152,40 @@ pub async fn create_dir(
         .await
         .context(HttpResponseParseSnafu {
             msg: "Unable to parse dir information.",
+        })?;
+
+    Ok(dir)
+}
+
+pub async fn get_dir(
+    api_url: &str,
+    token: &str,
+    client_id: &str,
+    bucket_id: &str,
+    dir_id: &str,
+) -> Result<Dir> {
+    let url = format!(
+        "{}/clients/{}/buckets/{}/dirs/{}",
+        api_url, client_id, bucket_id, dir_id
+    );
+    let response = Client::new()
+        .get(url)
+        .bearer_auth(token)
+        .send()
+        .await
+        .context(HttpClientSnafu {
+            msg: "Unable to get dir. Try again later.",
+        })?;
+
+    if !response.status().is_success() {
+        return Err(handle_response_error(response, "dirs", Error::AlbumNotFound).await);
+    }
+
+    let dir = response
+        .json::<Dir>()
+        .await
+        .context(HttpResponseParseSnafu {
+            msg: "Unable to parse dir.",
         })?;
 
     Ok(dir)

@@ -31,7 +31,7 @@ use super::clients::{
 use super::dirs::{new_dir_handler, post_new_dir_handler, search_dirs_handler};
 use super::middleware::{
     album_listing_middleware, album_middleware, auth_middleware, bucket_middleware,
-    client_middleware, my_bucket_middleware, photo_middleware, pref_middleware,
+    client_middleware, dir_middleware, my_bucket_middleware, photo_middleware, pref_middleware,
     require_auth_middleware, user_middleware,
 };
 use super::my_bucket::my_bucket_page_handler;
@@ -265,9 +265,32 @@ fn my_bucket_inner_routes(state: AppState) -> Router<AppState> {
         .route("/", get(my_bucket_page_handler))
         .route("/search_dirs", get(search_dirs_handler))
         .route("/new_dir", get(new_dir_handler).post(post_new_dir_handler))
+        .nest("/dirs/{dir_id}", dir_inner_routes(state.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             my_bucket_middleware,
+        ))
+        .with_state(state)
+}
+
+fn dir_inner_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(photos_page_handler))
+        .route("/edit-controls", get(edit_album_controls_handler))
+        .route(
+            "/edit",
+            get(edit_album_handler).post(post_edit_album_handler),
+        )
+        .route(
+            "/delete",
+            get(get_delete_album_handler).post(post_delete_album_handler),
+        )
+        .route("/photo-grid", get(photo_listing_handler))
+        .nest("/upload", upload_route(state.clone()))
+        .nest("/photos/{photo_id}", photo_routes(state.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            dir_middleware,
         ))
         .with_state(state)
 }
