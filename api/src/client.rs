@@ -156,7 +156,7 @@ pub async fn delete_client(state: &AppState, id: &str) -> Result<()> {
     };
 
     ensure!(
-        client.admin,
+        !client.admin,
         ValidationSnafu {
             msg: "Cannot delete admin client".to_string(),
         }

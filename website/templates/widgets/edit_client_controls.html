@@ -66,6 +66,8 @@
 
 <p id="dyn-client-name" hx-swap-oob="true">{{client.name}}</p>
 
+<span id="breadcrumb-album-label" hx-swap-oob="true">{{ client.name }}</span>
+
 {% if client.status == "active" %}
     <p id="dyn-client-status" hx-swap-oob="true"><span class="tag is-success">Active</span></p>
 {% else %}

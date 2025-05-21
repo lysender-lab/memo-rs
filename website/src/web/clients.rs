@@ -6,7 +6,8 @@ use memo::role::Permission;
 use snafu::{ResultExt, ensure};
 
 use crate::error::ForbiddenSnafu;
-use crate::services::clients::{create_client, update_client};
+use crate::models::tokens::TokenFormData;
+use crate::services::clients::{create_client, delete_client, update_client};
 use crate::{
     Error, Result,
     ctx::Ctx,
@@ -356,6 +357,91 @@ pub async fn edit_client_controls_handler(
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
         .context(ResponseBuilderSnafu)?)
+}
+
+#[derive(Template)]
+#[template(path = "widgets/delete_client_form.html")]
+struct DeleteClientFormTemplate {
+    client: ClientDto,
+    payload: TokenFormData,
+    error_message: Option<String>,
+}
+
+pub async fn delete_client_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(client): Extension<ClientDto>,
+    State(state): State<AppState>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::Client, Action::Delete)?;
+
+    let token = create_csrf_token(&client.id, &config.jwt_secret)?;
+
+    let tpl = DeleteClientFormTemplate {
+        client: client.clone(),
+        payload: TokenFormData { token },
+        error_message: None,
+    };
+
+    Ok(Response::builder()
+        .status(200)
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)?)
+}
+
+pub async fn post_delete_client_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(client): Extension<ClientDto>,
+    State(state): State<AppState>,
+    payload: Form<TokenFormData>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::Client, Action::Delete)?;
+
+    let token = create_csrf_token(&client.id, &config.jwt_secret)?;
+
+    let mut tpl = DeleteClientFormTemplate {
+        client: client.clone(),
+        payload: TokenFormData { token },
+        error_message: None,
+    };
+
+    let status: StatusCode;
+
+    let token = ctx.token().expect("token is required");
+    let result = delete_client(&config, token, &client.id, &payload.token).await;
+
+    match result {
+        Ok(_) => {
+            // Render same form but trigger a redirect to home
+            let tpl = DeleteClientFormTemplate {
+                client,
+                payload: TokenFormData {
+                    token: "".to_string(),
+                },
+                error_message: None,
+            };
+            return Ok(Response::builder()
+                .status(200)
+                .header("HX-Redirect", "/")
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?);
+        }
+        Err(err) => {
+            let error_info = ErrorInfo::from(&err);
+            status = error_info.status_code;
+            tpl.error_message = Some(error_info.message);
+
+            Ok(Response::builder()
+                .status(status)
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
+        }
+    }
 }
 
 fn build_response(tpl: ClientsTemplate) -> Result<Response<Body>> {
