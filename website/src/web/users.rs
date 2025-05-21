@@ -8,9 +8,11 @@ use snafu::ResultExt;
 
 use crate::models::options::SelectOption;
 use crate::models::users::{
-    NewUserFormData, ResetPasswordFormData, UserActiveFormData, UserRoleFormData,
+    NewUserFormData, ResetPasswordData, ResetPasswordFormData, UserActiveFormData, UserRoleFormData,
 };
-use crate::services::users::{create_user, list_users, update_user_roles, update_user_status};
+use crate::services::users::{
+    create_user, list_users, reset_user_password, update_user_roles, update_user_status,
+};
 use crate::{
     Error, Result,
     ctx::Ctx,
@@ -532,4 +534,81 @@ pub async fn reset_user_password_handler(
         .header("Content-Type", "text/html")
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
         .context(ResponseBuilderSnafu)?)
+}
+
+#[debug_handler]
+pub async fn post_reset_password_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(client): Extension<ClientDto>,
+    Extension(user): Extension<UserDto>,
+    State(state): State<AppState>,
+    payload: Form<ResetPasswordFormData>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::User, Action::Update)?;
+
+    let token = create_csrf_token(&user.id, &config.jwt_secret)?;
+    let cid = client.id.clone();
+    let uid = user.id.clone();
+
+    let mut tpl = ResetUserPasswordTemplate {
+        client: client.clone(),
+        user: user.clone(),
+        payload: ResetPasswordFormData {
+            token,
+            password: payload.password.clone(),
+            confirm_password: payload.confirm_password.clone(),
+        },
+        error_message: None,
+    };
+
+    let data = ResetPasswordFormData {
+        token: payload.token.clone(),
+        password: payload.password.clone(),
+        confirm_password: payload.confirm_password.clone(),
+    };
+
+    let token = ctx.token().expect("token is required");
+    let result = reset_user_password(&config, token, &cid, &uid, &data).await;
+
+    match result {
+        Ok(_) => {
+            let tpl = UserControlsTemplate {
+                client,
+                user,
+                updated: false,
+            };
+
+            Ok(Response::builder()
+                .status(200)
+                .header("Content-Type", "text/html")
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
+        }
+        Err(err) => {
+            let status;
+            match err {
+                Error::Validation { msg } => {
+                    status = StatusCode::BAD_REQUEST;
+                    tpl.error_message = Some(msg);
+                }
+                Error::LoginRequired => {
+                    status = StatusCode::UNAUTHORIZED;
+                    tpl.error_message = Some("Login required.".to_string());
+                }
+                any_err => {
+                    status = StatusCode::INTERNAL_SERVER_ERROR;
+                    tpl.error_message = Some(any_err.to_string());
+                }
+            };
+
+            Ok(Response::builder()
+                .status(status)
+                .header("Content-Type", "text/html")
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
+        }
+    }
 }

@@ -14,10 +14,8 @@
 
                     {% match error_message %}
                         {% when Some with (msg) %}
-                            <div class="panel-block">
-                                <div class="error-message mb-5 tag is-danger">
-                                    <p>{{ msg }}</p>
-                                </div>
+                            <div class="mb-5 notification is-danger">
+                                {{ msg }}
                             </div>
                         {% when None %}
                     {% endmatch %}
