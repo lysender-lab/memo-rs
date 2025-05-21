@@ -8,6 +8,8 @@ use memo::user::UserDto;
 use snafu::ResultExt;
 
 use crate::models::options::SelectOption;
+use crate::models::tokens::TokenFormData;
+use crate::services::users::delete_user;
 use crate::{
     Error, Result,
     ctx::Ctx,
@@ -625,6 +627,95 @@ pub async fn post_reset_password_handler(
             Ok(Response::builder()
                 .status(status)
                 .header("Content-Type", "text/html")
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
+        }
+    }
+}
+
+#[derive(Template)]
+#[template(path = "widgets/delete_user_form.html")]
+struct DeleteUserFormTemplate {
+    client: ClientDto,
+    user: UserDto,
+    payload: TokenFormData,
+    error_message: Option<String>,
+}
+
+pub async fn delete_user_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(client): Extension<ClientDto>,
+    Extension(user): Extension<UserDto>,
+    State(state): State<AppState>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::User, Action::Delete)?;
+
+    let token = create_csrf_token(&user.id, &config.jwt_secret)?;
+
+    let tpl = DeleteUserFormTemplate {
+        client,
+        user,
+        payload: TokenFormData { token },
+        error_message: None,
+    };
+
+    Ok(Response::builder()
+        .status(200)
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)?)
+}
+
+pub async fn post_delete_user_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(client): Extension<ClientDto>,
+    Extension(user): Extension<UserDto>,
+    State(state): State<AppState>,
+    payload: Form<TokenFormData>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::User, Action::Delete)?;
+
+    let token = create_csrf_token(&user.id, &config.jwt_secret)?;
+
+    let mut tpl = DeleteUserFormTemplate {
+        client: client.clone(),
+        user: user.clone(),
+        payload: TokenFormData { token },
+        error_message: None,
+    };
+
+    let token = ctx.token().expect("token is required");
+    let result = delete_user(&config, token, &client.id, &user.id, &payload.token).await;
+
+    match result {
+        Ok(_) => {
+            // Render same form but trigger a redirect to home
+            let cid = client.id.clone();
+            let tpl = DeleteUserFormTemplate {
+                client,
+                user,
+                payload: TokenFormData {
+                    token: "".to_string(),
+                },
+                error_message: None,
+            };
+            return Ok(Response::builder()
+                .status(200)
+                .header("HX-Redirect", format!("/clients/{}/users", &cid))
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?);
+        }
+        Err(err) => {
+            let error_info = ErrorInfo::from(&err);
+            tpl.error_message = Some(error_info.message);
+
+            Ok(Response::builder()
+                .status(error_info.status_code)
                 .body(Body::from(tpl.render().context(TemplateSnafu)?))
                 .context(ResponseBuilderSnafu)?)
         }

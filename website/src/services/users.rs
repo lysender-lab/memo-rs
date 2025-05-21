@@ -315,13 +315,14 @@ pub async fn delete_user(
         "{}/clients/{}/users/{}",
         &config.api_url, client_id, user_id,
     );
+    println!("{}", &url);
     let response = Client::new()
         .delete(url)
         .bearer_auth(token)
         .send()
         .await
         .context(HttpClientSnafu {
-            msg: "Unable to delete album. Try again later.".to_string(),
+            msg: "Unable to delete user. Try again later.".to_string(),
         })?;
 
     if !response.status().is_success() {

@@ -427,7 +427,7 @@ pub async fn post_delete_client_handler(
             };
             return Ok(Response::builder()
                 .status(200)
-                .header("HX-Redirect", "/")
+                .header("HX-Redirect", "/clients")
                 .body(Body::from(tpl.render().context(TemplateSnafu)?))
                 .context(ResponseBuilderSnafu)?);
         }
