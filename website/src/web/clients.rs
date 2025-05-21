@@ -10,9 +10,12 @@ use crate::{
     Error, Result,
     ctx::Ctx,
     error::{ErrorInfo, ResponseBuilderSnafu, TemplateSnafu},
-    models::{Pref, TemplateData, clients::ClientFormSubmitData},
+    models::{Pref, TemplateData},
     run::AppState,
-    services::{clients::list_clients, token::create_csrf_token},
+    services::{
+        clients::{ClientFormSubmitData, list_clients},
+        token::create_csrf_token,
+    },
     web::{Action, Resource, enforce_policy},
 };
 

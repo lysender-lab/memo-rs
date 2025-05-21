@@ -7,7 +7,7 @@ use memo::user::UserDto;
 use snafu::ResultExt;
 
 use crate::models::options::SelectOption;
-use crate::models::users::{
+use crate::services::users::{
     NewUserFormData, ResetPasswordData, ResetPasswordFormData, UserActiveFormData, UserRoleFormData,
 };
 use crate::services::users::{
@@ -17,11 +17,13 @@ use crate::{
     Error, Result,
     ctx::Ctx,
     error::{ErrorInfo, ResponseBuilderSnafu, TemplateSnafu, WhateverSnafu},
-    models::{
-        Album, ListAlbumsParams, PaginationLinks, Pref, TemplateData, clients::ClientFormSubmitData,
-    },
+    models::{Album, ListAlbumsParams, PaginationLinks, Pref, TemplateData},
     run::AppState,
-    services::{clients::list_clients, photos::list_albums, token::create_csrf_token},
+    services::{
+        clients::{ClientFormSubmitData, list_clients},
+        photos::list_albums,
+        token::create_csrf_token,
+    },
     web::{Action, Resource, enforce_policy},
 };
 

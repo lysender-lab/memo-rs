@@ -1,18 +1,31 @@
 use memo::bucket::BucketDto;
 use reqwest::{Client, StatusCode};
+use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 
-use crate::config::Config;
-use crate::error::{CsrfTokenSnafu, HttpClientSnafu, HttpResponseParseSnafu, ValidationSnafu};
-use crate::models::buckets::{NewBucketData, NewBucketFormData};
-use crate::models::users::{
+use super::users::{
     NewUserData, NewUserFormData, ResetPasswordData, ResetPasswordFormData, UserActiveFormData,
     UserRoleFormData, UserRolesData, UserStatusData,
 };
+use crate::config::Config;
+use crate::error::{CsrfTokenSnafu, HttpClientSnafu, HttpResponseParseSnafu, ValidationSnafu};
 use crate::services::token::verify_csrf_token;
 use crate::{Error, Result};
 
 use super::handle_response_error;
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct NewBucketFormData {
+    pub name: String,
+    pub images_only: Option<String>,
+    pub token: String,
+}
+
+#[derive(Clone, Serialize)]
+pub struct NewBucketData {
+    pub name: String,
+    pub images_only: bool,
+}
 
 pub async fn list_buckets(api_url: &str, token: &str, client_id: &str) -> Result<Vec<BucketDto>> {
     let url = format!("{}/clients/{}/buckets", api_url, client_id);

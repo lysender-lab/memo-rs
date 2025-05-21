@@ -10,7 +10,7 @@ use snafu::{OptionExt, ensure};
 use crate::{
     Error, Result,
     ctx::{Ctx, CtxValue},
-    error::{ErrorInfo, ForbiddenSnafu, NotFoundSnafu, WhateverSnafu},
+    error::{ErrorInfo, ForbiddenSnafu, WhateverSnafu},
     models::{AlbumParams, ClientParams, PhotoParams, Pref, UserParams},
     run::AppState,
     services::{

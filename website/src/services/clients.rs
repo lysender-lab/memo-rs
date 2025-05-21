@@ -1,14 +1,27 @@
 use memo::client::ClientDto;
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 
 use crate::config::Config;
 use crate::error::{CsrfTokenSnafu, HttpClientSnafu, HttpResponseParseSnafu};
-use crate::models::clients::{ClientFormSubmitData, ClientSubmitData};
 use crate::services::token::verify_csrf_token;
 use crate::{Error, Result};
 
 use super::handle_response_error;
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct ClientFormSubmitData {
+    pub name: String,
+    pub status: String,
+    pub token: String,
+}
+
+#[derive(Clone, Serialize)]
+pub struct ClientSubmitData {
+    pub name: String,
+    pub status: String,
+}
 
 pub async fn list_clients(api_url: &str, token: &str) -> Result<Vec<ClientDto>> {
     let url = format!("{}/clients", api_url);

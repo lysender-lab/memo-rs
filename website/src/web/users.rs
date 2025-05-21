@@ -7,21 +7,19 @@ use memo::user::UserDto;
 use snafu::ResultExt;
 
 use crate::models::options::SelectOption;
-use crate::models::users::{
-    NewUserFormData, ResetPasswordData, ResetPasswordFormData, UserActiveFormData, UserRoleFormData,
-};
-use crate::services::users::{
-    create_user, list_users, reset_user_password, update_user_roles, update_user_status,
-};
 use crate::{
     Error, Result,
     ctx::Ctx,
-    error::{ErrorInfo, ResponseBuilderSnafu, TemplateSnafu, WhateverSnafu},
-    models::{
-        Album, ListAlbumsParams, PaginationLinks, Pref, TemplateData, clients::ClientFormSubmitData,
-    },
+    error::{ErrorInfo, ResponseBuilderSnafu, TemplateSnafu},
+    models::{Pref, TemplateData},
     run::AppState,
-    services::{clients::list_clients, photos::list_albums, token::create_csrf_token},
+    services::{
+        token::create_csrf_token,
+        users::{
+            NewUserFormData, ResetPasswordFormData, UserActiveFormData, UserRoleFormData,
+            create_user, list_users, reset_user_password, update_user_roles, update_user_status,
+        },
+    },
     web::{Action, Resource, enforce_policy},
 };
 
