@@ -67,8 +67,6 @@ pub async fn post_delete_album_handler(
 
     let token = create_csrf_token(&album.id, &config.jwt_secret)?;
 
-    let mut error_message: Option<String> = None;
-    let mut status_code = StatusCode::OK;
     let auth_token = ctx.token().expect("token is required");
 
     let result = delete_album(
@@ -81,7 +79,7 @@ pub async fn post_delete_album_handler(
     )
     .await;
 
-    let _ = match result {
+    match result {
         Ok(_) => {
             // Render same form but trigger a redirect to home
             let tpl = DeleteAlbumTemplate {
@@ -89,30 +87,29 @@ pub async fn post_delete_album_handler(
                 payload: TokenFormData {
                     token: "".to_string(),
                 },
-                error_message,
+                error_message: None,
             };
-            return Ok(Response::builder()
+            Ok(Response::builder()
                 .status(200)
                 .header("HX-Redirect", "/")
                 .body(Body::from(tpl.render().context(TemplateSnafu)?))
-                .context(ResponseBuilderSnafu)?);
+                .context(ResponseBuilderSnafu)?)
         }
         Err(err) => {
             let error_info = ErrorInfo::from(&err);
-            error_message = Some(error_info.message);
-            status_code = error_info.status_code;
+            let error_message = Some(error_info.message);
+
+            // Just render the form on first load or on error
+            let tpl = DeleteAlbumTemplate {
+                album,
+                payload: TokenFormData { token },
+                error_message,
+            };
+
+            Ok(Response::builder()
+                .status(error_info.status_code)
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
         }
-    };
-
-    // Just render the form on first load or on error
-    let tpl = DeleteAlbumTemplate {
-        album,
-        payload: TokenFormData { token },
-        error_message,
-    };
-
-    Ok(Response::builder()
-        .status(status_code)
-        .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+    }
 }

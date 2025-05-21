@@ -15,6 +15,12 @@ pub struct UserParams {
 }
 
 #[derive(Deserialize)]
+pub struct BucketParams {
+    pub client_id: String,
+    pub bucket_id: String,
+}
+
+#[derive(Deserialize)]
 pub struct AlbumParams {
     pub album_id: Option<String>,
 }

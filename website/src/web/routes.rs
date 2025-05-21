@@ -19,15 +19,18 @@ use crate::web::{
     photo_listing_handler, photos_page_handler, post_login_handler, post_new_album_handler,
 };
 
-use super::buckets::{buckets_handler, new_bucket_handler, post_new_bucket_handler};
+use super::buckets::{
+    bucket_controls_handler, bucket_page_handler, buckets_handler, delete_bucket_handler,
+    new_bucket_handler, post_delete_bucket_handler, post_new_bucket_handler,
+};
 use super::clients::{
     client_page_handler, clients_handler, clients_listing_handler, delete_client_handler,
     edit_client_controls_handler, edit_client_handler, new_client_handler,
     post_delete_client_handler, post_edit_client_handler, post_new_client_handler,
 };
 use super::middleware::{
-    album_listing_middleware, album_middleware, auth_middleware, client_middleware,
-    photo_middleware, pref_middleware, require_auth_middleware, user_middleware,
+    album_listing_middleware, album_middleware, auth_middleware, bucket_middleware,
+    client_middleware, photo_middleware, pref_middleware, require_auth_middleware, user_middleware,
 };
 use super::users::{
     delete_user_handler, new_user_handler, post_delete_user_handler, post_new_user_handler,
@@ -228,7 +231,22 @@ fn buckets_routes(state: AppState) -> Router<AppState> {
             "/new",
             get(new_bucket_handler).post(post_new_bucket_handler),
         )
-        .nest("/{bucket_id}", user_inner_routes(state.clone()))
+        .nest("/{bucket_id}", bucket_inner_routes(state.clone()))
+        .with_state(state)
+}
+
+fn bucket_inner_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(bucket_page_handler))
+        .route("/edit_controls", get(bucket_controls_handler))
+        .route(
+            "/delete",
+            get(delete_bucket_handler).post(post_delete_bucket_handler),
+        )
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            bucket_middleware,
+        ))
         .with_state(state)
 }
 

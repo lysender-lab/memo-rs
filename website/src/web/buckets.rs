@@ -1,30 +1,19 @@
 use askama::Template;
-use axum::debug_handler;
-use axum::http::StatusCode;
 use axum::{Extension, Form, body::Body, extract::State, response::Response};
 use memo::bucket::BucketDto;
 use memo::client::ClientDto;
 use memo::role::Permission;
-use memo::user::UserDto;
 use snafu::ResultExt;
 
-use crate::models::options::SelectOption;
 use crate::models::tokens::TokenFormData;
-use crate::services::buckets::{NewBucketFormData, create_bucket, list_buckets};
-use crate::services::users::delete_user;
+use crate::services::buckets::{NewBucketFormData, create_bucket, delete_bucket, list_buckets};
 use crate::{
-    Error, Result,
+    Result,
     ctx::Ctx,
     error::{ErrorInfo, ResponseBuilderSnafu, TemplateSnafu},
     models::{Pref, TemplateData},
     run::AppState,
-    services::{
-        token::create_csrf_token,
-        users::{
-            NewUserFormData, ResetPasswordFormData, UserActiveFormData, UserRoleFormData,
-            create_user, list_users, reset_user_password, update_user_roles, update_user_status,
-        },
-    },
+    services::token::create_csrf_token,
     web::{Action, Resource, enforce_policy},
 };
 
@@ -169,35 +158,31 @@ pub async fn post_new_bucket_handler(
 }
 
 #[derive(Template)]
-#[template(path = "pages/user.html")]
-struct UserPageTemplate {
+#[template(path = "pages/bucket.html")]
+struct BucketPageTemplate {
     t: TemplateData,
     client: ClientDto,
-    user: UserDto,
-    updated: bool,
-    can_edit: bool,
+    bucket: BucketDto,
     can_delete: bool,
 }
 
-pub async fn user_page_handler(
+pub async fn bucket_page_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(pref): Extension<Pref>,
     Extension(client): Extension<ClientDto>,
-    Extension(user): Extension<UserDto>,
+    Extension(bucket): Extension<BucketDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
 
-    t.title = format!("User - {}", &user.username);
+    t.title = format!("Bucket - {}", &bucket.name);
 
-    let tpl = UserPageTemplate {
+    let tpl = BucketPageTemplate {
         t,
         client,
-        user,
-        updated: false,
-        can_edit: actor.has_permissions(&vec![Permission::UsersEdit]),
-        can_delete: actor.has_permissions(&vec![Permission::UsersDelete]),
+        bucket,
+        can_delete: actor.has_permissions(&vec![Permission::BucketsDelete]),
     };
 
     Ok(Response::builder()
@@ -207,30 +192,26 @@ pub async fn user_page_handler(
 }
 
 #[derive(Template)]
-#[template(path = "widgets/edit_user_controls.html")]
-struct UserControlsTemplate {
+#[template(path = "widgets/edit_bucket_controls.html")]
+struct BucketControlsTemplate {
     client: ClientDto,
-    user: UserDto,
-    updated: bool,
-    can_edit: bool,
+    bucket: BucketDto,
     can_delete: bool,
 }
 
-pub async fn user_controls_handler(
+pub async fn bucket_controls_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(client): Extension<ClientDto>,
-    Extension(user): Extension<UserDto>,
+    Extension(bucket): Extension<BucketDto>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::User, Action::Update)?;
+    let _ = enforce_policy(actor, Resource::Bucket, Action::Update)?;
 
-    let tpl = UserControlsTemplate {
+    let tpl = BucketControlsTemplate {
         client,
-        user,
-        updated: false,
-        can_edit: actor.has_permissions(&vec![Permission::UsersEdit]),
-        can_delete: actor.has_permissions(&vec![Permission::UsersDelete]),
+        bucket,
+        can_delete: actor.has_permissions(&vec![Permission::BucketsDelete]),
     };
 
     Ok(Response::builder()
@@ -241,151 +222,30 @@ pub async fn user_controls_handler(
 }
 
 #[derive(Template)]
-#[template(path = "widgets/update_user_status_form.html")]
-struct UpdateUserStatusTemplate {
+#[template(path = "widgets/delete_bucket_form.html")]
+struct DeleteBucketFormTemplate {
     client: ClientDto,
-    user: UserDto,
-    payload: UserActiveFormData,
-    error_message: Option<String>,
-}
-
-pub async fn update_user_status_handler(
-    Extension(ctx): Extension<Ctx>,
-    Extension(client): Extension<ClientDto>,
-    Extension(user): Extension<UserDto>,
-    State(state): State<AppState>,
-) -> Result<Response<Body>> {
-    let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
-
-    let _ = enforce_policy(actor, Resource::User, Action::Update)?;
-    let token = create_csrf_token(&user.id, &config.jwt_secret)?;
-
-    let mut status_opt = None;
-    if &user.status == "active" {
-        status_opt = Some("1".to_string());
-    }
-
-    let tpl = UpdateUserStatusTemplate {
-        client,
-        user,
-        payload: UserActiveFormData {
-            token,
-            active: status_opt,
-        },
-        error_message: None,
-    };
-
-    Ok(Response::builder()
-        .status(200)
-        .header("Content-Type", "text/html")
-        .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
-}
-
-#[debug_handler]
-pub async fn post_update_user_status_handler(
-    Extension(ctx): Extension<Ctx>,
-    Extension(client): Extension<ClientDto>,
-    Extension(user): Extension<UserDto>,
-    State(state): State<AppState>,
-    payload: Form<UserActiveFormData>,
-) -> Result<Response<Body>> {
-    let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
-
-    let _ = enforce_policy(actor, Resource::User, Action::Update)?;
-
-    let token = create_csrf_token(&user.id, &config.jwt_secret)?;
-    let cid = client.id.clone();
-    let uid = user.id.clone();
-
-    let mut tpl = UpdateUserStatusTemplate {
-        client: client.clone(),
-        user,
-        payload: UserActiveFormData {
-            token,
-            active: payload.active.clone(),
-        },
-        error_message: None,
-    };
-
-    let data = UserActiveFormData {
-        active: payload.active.clone(),
-        token: payload.token.clone(),
-    };
-
-    let token = ctx.token().expect("token is required");
-    let result = update_user_status(&config, token, &cid, &uid, &data).await;
-
-    match result {
-        Ok(updated_user) => {
-            // Render back the controls but when updated roles and status
-            let tpl = UserControlsTemplate {
-                client,
-                user: updated_user,
-                updated: true,
-                can_edit: actor.has_permissions(&vec![Permission::UsersEdit]),
-                can_delete: actor.has_permissions(&vec![Permission::UsersDelete]),
-            };
-
-            Ok(Response::builder()
-                .status(200)
-                .header("Content-Type", "text/html")
-                .body(Body::from(tpl.render().context(TemplateSnafu)?))
-                .context(ResponseBuilderSnafu)?)
-        }
-        Err(err) => {
-            let status;
-            match err {
-                Error::Validation { msg } => {
-                    status = StatusCode::BAD_REQUEST;
-                    tpl.error_message = Some(msg);
-                }
-                Error::LoginRequired => {
-                    status = StatusCode::UNAUTHORIZED;
-                    tpl.error_message = Some("Login required.".to_string());
-                }
-                any_err => {
-                    status = StatusCode::INTERNAL_SERVER_ERROR;
-                    tpl.error_message = Some(any_err.to_string());
-                }
-            };
-
-            Ok(Response::builder()
-                .status(status)
-                .header("Content-Type", "text/html")
-                .body(Body::from(tpl.render().context(TemplateSnafu)?))
-                .context(ResponseBuilderSnafu)?)
-        }
-    }
-}
-
-#[derive(Template)]
-#[template(path = "widgets/delete_user_form.html")]
-struct DeleteUserFormTemplate {
-    client: ClientDto,
-    user: UserDto,
+    bucket: BucketDto,
     payload: TokenFormData,
     error_message: Option<String>,
 }
 
-pub async fn delete_user_handler(
+pub async fn delete_bucket_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(client): Extension<ClientDto>,
-    Extension(user): Extension<UserDto>,
+    Extension(bucket): Extension<BucketDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::User, Action::Delete)?;
+    let _ = enforce_policy(actor, Resource::Bucket, Action::Delete)?;
 
-    let token = create_csrf_token(&user.id, &config.jwt_secret)?;
+    let token = create_csrf_token(&bucket.id, &config.jwt_secret)?;
 
-    let tpl = DeleteUserFormTemplate {
+    let tpl = DeleteBucketFormTemplate {
         client,
-        user,
+        bucket,
         payload: TokenFormData { token },
         error_message: None,
     };
@@ -396,37 +256,37 @@ pub async fn delete_user_handler(
         .context(ResponseBuilderSnafu)?)
 }
 
-pub async fn post_delete_user_handler(
+pub async fn post_delete_bucket_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(client): Extension<ClientDto>,
-    Extension(user): Extension<UserDto>,
+    Extension(bucket): Extension<BucketDto>,
     State(state): State<AppState>,
     payload: Form<TokenFormData>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::User, Action::Delete)?;
+    let _ = enforce_policy(actor, Resource::Bucket, Action::Delete)?;
 
-    let token = create_csrf_token(&user.id, &config.jwt_secret)?;
+    let token = create_csrf_token(&bucket.id, &config.jwt_secret)?;
 
-    let mut tpl = DeleteUserFormTemplate {
+    let mut tpl = DeleteBucketFormTemplate {
         client: client.clone(),
-        user: user.clone(),
+        bucket: bucket.clone(),
         payload: TokenFormData { token },
         error_message: None,
     };
 
     let token = ctx.token().expect("token is required");
-    let result = delete_user(&config, token, &client.id, &user.id, &payload.token).await;
+    let result = delete_bucket(&config, token, &client.id, &bucket.id, &payload.token).await;
 
     match result {
         Ok(_) => {
             // Render same form but trigger a redirect to home
             let cid = client.id.clone();
-            let tpl = DeleteUserFormTemplate {
+            let tpl = DeleteBucketFormTemplate {
                 client,
-                user,
+                bucket,
                 payload: TokenFormData {
                     token: "".to_string(),
                 },
@@ -434,7 +294,7 @@ pub async fn post_delete_user_handler(
             };
             return Ok(Response::builder()
                 .status(200)
-                .header("HX-Redirect", format!("/clients/{}/users", &cid))
+                .header("HX-Redirect", format!("/clients/{}/buckets", &cid))
                 .body(Body::from(tpl.render().context(TemplateSnafu)?))
                 .context(ResponseBuilderSnafu)?);
         }
