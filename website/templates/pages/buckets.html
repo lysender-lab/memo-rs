@@ -18,13 +18,24 @@
 
         <h1 class="title">Bucket Management</h1>
 
-        <div class="buttons">
-            <a class="button is-primary" href="/clients/{{ client.id }}/buckets/new">
-                <span class="icon is-small">
-                    <i class="fas fa-plus"></i>
-                </span>
-                <span>New Bucket</span>
-            </a>
+        <div class="is-flex is-justify-content-space-between mb-5">
+            <div>
+                <a class="button" href="/clients/{{ client.id }}">
+                    <span class="icon is-small">
+                        <i class="fas fa-arrow-left"></i>
+                    </span>
+                    <span>Back</span>
+                </a>
+            </div>
+
+            <div>
+                <a class="button is-primary" href="/clients/{{ client.id }}/buckets/new">
+                    <span class="icon is-small">
+                        <i class="fas fa-plus"></i>
+                    </span>
+                    <span>New Bucket</span>
+                </a>
+            </div>
         </div>
 
         {% if buckets.len() > 0 %}

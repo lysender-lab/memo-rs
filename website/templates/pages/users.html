@@ -18,13 +18,24 @@
 
         <h1 class="title">User Management</h1>
 
-        <div class="buttons">
-            <a class="button is-primary" href="/clients/{{ client.id }}/users/new">
-                <span class="icon is-small">
-                    <i class="fas fa-plus"></i>
-                </span>
-                <span>New User</span>
-            </a>
+        <div class="is-flex is-justify-content-space-between mb-5">
+            <div>
+                <a class="button" href="/clients/{{ client.id }}">
+                    <span class="icon is-small">
+                        <i class="fas fa-arrow-left"></i>
+                    </span>
+                    <span>Back</span>
+                </a>
+            </div>
+
+            <div>
+                <a class="button is-primary" href="/clients/{{ client.id }}/users/new">
+                    <span class="icon is-small">
+                        <i class="fas fa-plus"></i>
+                    </span>
+                    <span>New User</span>
+                </a>
+            </div>
         </div>
 
         {% if users.len() > 0 %}
