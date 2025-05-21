@@ -8,11 +8,12 @@ use crate::{
     Error, Result,
     ctx::Ctx,
     error::ErrorInfo,
-    models::{Album, ListPhotosParams, PaginatedMeta, Photo, Pref, TemplateData},
+    models::{Album, ListPhotosParams, Photo, Pref, TemplateData},
     run::AppState,
     services::photos::list_photos,
     web::policies::{Action, Resource, enforce_policy},
 };
+use memo::pagination::PaginatedMeta;
 
 #[derive(Template)]
 #[template(path = "pages/photos.html")]
@@ -109,8 +110,8 @@ pub async fn photo_listing_handler(
         Ok(listing) => {
             tpl.photos = listing.data;
 
-            if listing.meta.total_pages > listing.meta.page {
-                tpl.next_page = Some(listing.meta.page + 1);
+            if listing.meta.total_pages > listing.meta.page as i64 {
+                tpl.next_page = Some(listing.meta.page as i64 + 1);
             }
 
             // Get the last item

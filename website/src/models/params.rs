@@ -21,6 +21,11 @@ pub struct BucketParams {
 }
 
 #[derive(Deserialize)]
+pub struct MyBucketParams {
+    pub bucket_id: String,
+}
+
+#[derive(Deserialize)]
 pub struct AlbumParams {
     pub album_id: Option<String>,
 }

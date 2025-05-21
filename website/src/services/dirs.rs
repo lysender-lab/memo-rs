@@ -1,0 +1,193 @@
+use memo::bucket::BucketDto;
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use snafu::{ResultExt, ensure};
+
+use crate::config::Config;
+use crate::error::{CsrfTokenSnafu, HttpClientSnafu, HttpResponseParseSnafu};
+use crate::services::token::verify_csrf_token;
+use crate::{Error, Result};
+use memo::pagination::Paginated;
+
+use super::handle_response_error;
+
+#[derive(Serialize, Deserialize)]
+pub struct Dir {
+    pub id: String,
+    pub bucket_id: String,
+    pub name: String,
+    pub label: String,
+    pub file_count: i32,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Deserialize)]
+pub struct SearchDirsParams {
+    pub keyword: Option<String>,
+    pub page: Option<u32>,
+    pub per_page: Option<u32>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct NewBucketFormData {
+    pub name: String,
+    pub images_only: Option<String>,
+    pub token: String,
+}
+
+#[derive(Clone, Serialize)]
+pub struct NewBucketData {
+    pub name: String,
+    pub images_only: bool,
+}
+
+pub async fn list_dirs(
+    api_url: &str,
+    token: &str,
+    client_id: &str,
+    bucket_id: &str,
+    params: &SearchDirsParams,
+) -> Result<Paginated<Dir>> {
+    let url = format!(
+        "{}/clients/{}/buckets/{}/dirs",
+        api_url, client_id, bucket_id
+    );
+    let mut page = "1".to_string();
+    let mut per_page = "10".to_string();
+
+    if let Some(p) = params.page {
+        page = p.to_string();
+    }
+    if let Some(pp) = params.per_page {
+        per_page = pp.to_string();
+    }
+    let mut query: Vec<(&str, &str)> = vec![("page", &page), ("per_page", &per_page)];
+    if let Some(keyword) = &params.keyword {
+        query.push(("keyword", keyword));
+    }
+    let response = Client::new()
+        .get(url)
+        .bearer_auth(token)
+        .query(&query)
+        .send()
+        .await
+        .context(HttpClientSnafu {
+            msg: "Unable to list dirs. Try again later.".to_string(),
+        })?;
+
+    if !response.status().is_success() {
+        return Err(handle_response_error(response, "dirs", Error::AlbumNotFound).await);
+    }
+
+    let dirs = response
+        .json::<Paginated<Dir>>()
+        .await
+        .context(HttpResponseParseSnafu {
+            msg: "Unable to parse dirs.".to_string(),
+        })?;
+
+    Ok(dirs)
+}
+
+pub async fn create_bucket(
+    config: &Config,
+    token: &str,
+    client_id: &str,
+    form: &NewBucketFormData,
+) -> Result<BucketDto> {
+    let csrf_result = verify_csrf_token(&form.token, &config.jwt_secret)?;
+    ensure!(csrf_result == "new_bucket", CsrfTokenSnafu);
+
+    let url = format!("{}/clients/{}/buckets", &config.api_url, client_id);
+
+    let data = NewBucketData {
+        name: form.name.clone(),
+        images_only: match form.images_only {
+            Some(_) => true,
+            None => false,
+        },
+    };
+
+    let response = Client::new()
+        .post(url)
+        .bearer_auth(token)
+        .json(&data)
+        .send()
+        .await
+        .context(HttpClientSnafu {
+            msg: "Unable to create bucket. Try again later.".to_string(),
+        })?;
+
+    if !response.status().is_success() {
+        return Err(handle_response_error(response, "buckets", Error::BucketNotFound).await);
+    }
+
+    let bucket = response
+        .json::<BucketDto>()
+        .await
+        .context(HttpResponseParseSnafu {
+            msg: "Unable to parse bucket information.",
+        })?;
+
+    Ok(bucket)
+}
+
+pub async fn get_bucket(
+    api_url: &str,
+    token: &str,
+    client_id: &str,
+    bucket_id: &str,
+) -> Result<BucketDto> {
+    let url = format!("{}/clients/{}/buckets/{}", api_url, client_id, bucket_id);
+    let response = Client::new()
+        .get(url)
+        .bearer_auth(token)
+        .send()
+        .await
+        .context(HttpClientSnafu {
+            msg: "Unable to get bucket. Try again later.",
+        })?;
+
+    if !response.status().is_success() {
+        return Err(handle_response_error(response, "buckets", Error::BucketNotFound).await);
+    }
+
+    let user = response
+        .json::<BucketDto>()
+        .await
+        .context(HttpResponseParseSnafu {
+            msg: "Unable to parse bucket.",
+        })?;
+
+    Ok(user)
+}
+
+pub async fn delete_bucket(
+    config: &Config,
+    token: &str,
+    client_id: &str,
+    bucket_id: &str,
+    csrf_token: &str,
+) -> Result<()> {
+    let csrf_result = verify_csrf_token(&csrf_token, &config.jwt_secret)?;
+    ensure!(csrf_result == bucket_id, CsrfTokenSnafu);
+    let url = format!(
+        "{}/clients/{}/buckets/{}",
+        &config.api_url, client_id, bucket_id
+    );
+    let response = Client::new()
+        .delete(url)
+        .bearer_auth(token)
+        .send()
+        .await
+        .context(HttpClientSnafu {
+            msg: "Unable to delete bucket. Try again later.".to_string(),
+        })?;
+
+    if !response.status().is_success() {
+        return Err(handle_response_error(response, "buckets", Error::BucketNotFound).await);
+    }
+
+    Ok(())
+}

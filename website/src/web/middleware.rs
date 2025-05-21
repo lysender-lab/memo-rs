@@ -11,7 +11,9 @@ use crate::{
     Error, Result,
     ctx::{Ctx, CtxValue},
     error::{ErrorInfo, ForbiddenSnafu, WhateverSnafu},
-    models::{AlbumParams, BucketParams, ClientParams, PhotoParams, Pref, UserParams},
+    models::{
+        AlbumParams, BucketParams, ClientParams, MyBucketParams, PhotoParams, Pref, UserParams,
+    },
     run::AppState,
     services::{
         auth::authenticate_token,
@@ -218,6 +220,25 @@ pub async fn bucket_middleware(
     let config = state.config.clone();
 
     let bucket = get_bucket(&config.api_url, token, &params.client_id, &params.bucket_id).await?;
+
+    req.extensions_mut().insert(bucket);
+    Ok(next.run(req).await)
+}
+
+pub async fn my_bucket_middleware(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<Ctx>,
+    Path(params): Path<MyBucketParams>,
+    mut req: Request,
+    next: Next,
+) -> Result<Response> {
+    let actor = ctx.actor().expect("actor is required");
+    let _ = enforce_policy(actor, Resource::Bucket, Action::Read)?;
+
+    let token = ctx.token().expect("token is required");
+    let config = state.config.clone();
+
+    let bucket = get_bucket(&config.api_url, token, &actor.client_id, &params.bucket_id).await?;
 
     req.extensions_mut().insert(bucket);
     Ok(next.run(req).await)

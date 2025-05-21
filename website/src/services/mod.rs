@@ -2,6 +2,7 @@ pub mod auth;
 pub mod buckets;
 pub mod captcha;
 pub mod clients;
+pub mod dirs;
 pub mod photos;
 pub mod token;
 pub mod users;

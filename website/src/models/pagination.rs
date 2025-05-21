@@ -1,18 +1,5 @@
-use serde::{Deserialize, Serialize};
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct PaginatedMeta {
-    pub page: i64,
-    pub per_page: i64,
-    pub total_records: i64,
-    pub total_pages: i64,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Paginated<T> {
-    pub meta: PaginatedMeta,
-    pub data: Vec<T>,
-}
+use memo::pagination::PaginatedMeta;
+use serde::Serialize;
 
 #[derive(Clone, Serialize)]
 pub struct PaginationLinks {
@@ -34,7 +21,7 @@ impl PaginationLinks {
         let mut prev = None;
         let mut next = None;
 
-        let page = meta.page;
+        let page = meta.page as i64;
         let total_pages = meta.total_pages;
 
         // Identify the previous and next pages

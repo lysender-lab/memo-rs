@@ -5,6 +5,7 @@ use axum::{
     extract::{Query, State},
     response::{IntoResponse, Redirect, Response},
 };
+use memo::bucket::BucketDto;
 use snafu::ResultExt;
 
 use crate::{
@@ -12,6 +13,7 @@ use crate::{
     ctx::Ctx,
     error::{ResponseBuilderSnafu, TemplateSnafu},
     models::{ListAlbumsParams, TemplateData},
+    services::buckets::list_buckets,
 };
 use crate::{models::Pref, run::AppState};
 
@@ -21,6 +23,7 @@ use super::{Action, Resource, enforce_policy};
 #[template(path = "pages/index.html")]
 struct IndexTemplate {
     t: TemplateData,
+    buckets: Vec<BucketDto>,
     query_params: String,
 }
 
@@ -31,7 +34,7 @@ pub async fn index_handler(
     Query(query): Query<ListAlbumsParams>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::Album, Action::Read)?;
+    let _ = enforce_policy(actor, Resource::Bucket, Action::Read)?;
 
     if actor.is_system_admin() {
         // Redirect to clients page
@@ -41,21 +44,17 @@ pub async fn index_handler(
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
     t.title = String::from("Home");
 
+    let token = ctx.token().expect("token is required");
+    let buckets = list_buckets(&state.config.api_url, token, &actor.client_id).await?;
+
     let tpl = IndexTemplate {
         t,
+        buckets,
         query_params: query.to_string(),
     };
 
-    // Prevent caching the home page
     Ok(Response::builder()
         .status(200)
-        .header("Surrogate-Control", "no-store")
-        .header(
-            "Cache-Control",
-            "no-store, no-cache, must-revalidate, proxy-revalidate",
-        )
-        .header("Pragma", "no-cache")
-        .header("Expires", 0)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
         .context(ResponseBuilderSnafu)?)
 }

@@ -1,0 +1,59 @@
+{% extends "layout/base.html" %}
+
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li class="is-active">
+                    <a href="/buckets/{{ bucket.id }}" aria-current="page">{{ bucket.name }}</a>
+                </li>
+            </ul>
+        </nav>
+
+        <h1 class="title">{{ bucket.name }}</h1>
+
+        <div class="albums-container">
+            <nav class="albums panel is-dark">
+                <p class="panel-heading">
+                    {% if bucket.images_only %}
+                    Albums
+                    {% else %}
+                    Directories
+                    {% endif %}
+                </p>
+                <div class="panel-block">
+                    <p class="control has-icons-left">
+                        <input
+                            class="input"
+                            type="search"
+                            placeholder="Search"
+                            name="keyword"
+                            hx-get="/buckets/{{ bucket.id }}/search_dirs"
+                            hx-trigger="input changed delay:500ms, search"
+                            hx-target=".album-items"
+                        />
+                        <span class="icon is-left">
+                            <i class="fas fa-search" aria-hidden="true"></i>
+                        </span>
+                    </p>
+                </div>
+
+                <div
+                    class="album-items"
+                    hx-get="/buckets/{{ bucket.id }}/search_dirs?{{ query_params }}"
+                    hx-trigger="load"
+                >
+                    <span class="panel-block is-skeleton">&nbsp;</span>
+                    <span class="panel-block is-skeleton">&nbsp;</span>
+                    <span class="panel-block is-skeleton">&nbsp;</span>
+                    <span class="panel-block is-skeleton">&nbsp;</span>
+                    <span class="panel-block is-skeleton">&nbsp;</span>
+                    <span class="panel-block is-skeleton">&nbsp;</span>
+                </div>
+            </nav>
+        </div>
+    </div>
+</section>
+{% endblock %}

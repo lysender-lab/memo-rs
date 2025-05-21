@@ -6,12 +6,13 @@ use snafu::{ResultExt, ensure};
 use crate::config::Config;
 use crate::error::{CsrfTokenSnafu, HttpClientSnafu, HttpResponseParseSnafu};
 use crate::models::{
-    Album, FileObject, ListAlbumsParams, ListPhotosParams, NewAlbum, NewAlbumForm, Paginated,
-    Photo, UpdateAlbum, UpdateAlbumForm,
+    Album, FileObject, ListAlbumsParams, ListPhotosParams, NewAlbum, NewAlbumForm, Photo,
+    UpdateAlbum, UpdateAlbumForm,
 };
 use crate::services::handle_response_error;
 use crate::services::token::verify_csrf_token;
 use crate::{Error, Result};
+use memo::pagination::Paginated;
 
 pub async fn list_albums(
     api_url: &str,

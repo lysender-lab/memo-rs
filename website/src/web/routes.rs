@@ -30,8 +30,10 @@ use super::clients::{
 };
 use super::middleware::{
     album_listing_middleware, album_middleware, auth_middleware, bucket_middleware,
-    client_middleware, photo_middleware, pref_middleware, require_auth_middleware, user_middleware,
+    client_middleware, my_bucket_middleware, photo_middleware, pref_middleware,
+    require_auth_middleware, user_middleware,
 };
+use super::my_bucket::my_bucket_page_handler;
 use super::users::{
     delete_user_handler, new_user_handler, post_delete_user_handler, post_new_user_handler,
     post_reset_password_handler, post_update_user_role_handler, post_update_user_status_handler,
@@ -84,6 +86,7 @@ pub fn private_routes(state: AppState) -> Router {
         .route("/prefs/theme/dark", post(dark_theme_handler))
         .nest("/albums", album_routes(state.clone()))
         .nest("/clients", client_routes(state.clone()))
+        .nest("/buckets", my_bucket_routes(state.clone()))
         .layer(middleware::map_response_with_state(
             state.clone(),
             response_mapper,
@@ -246,6 +249,23 @@ fn bucket_inner_routes(state: AppState) -> Router<AppState> {
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             bucket_middleware,
+        ))
+        .with_state(state)
+}
+
+fn my_bucket_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .nest("/{bucket_id}", my_bucket_inner_routes(state.clone()))
+        .with_state(state)
+}
+
+fn my_bucket_inner_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(my_bucket_page_handler))
+        .route("/search_dirs", get(bucket_controls_handler))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            my_bucket_middleware,
         ))
         .with_state(state)
 }
