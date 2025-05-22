@@ -2,7 +2,7 @@
 
 {% block content %}
 <section class="section">
-    <div class="container">
+    <div class="container" x-data="{ edit_photos: false }">
         <nav class="breadcrumb" aria-label="breadcrumbs">
             <ul>
                 <li><a href="/">Home</a></li>
@@ -32,7 +32,7 @@
                 id="photo-gallery"
                 hx-get="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/photo_grid?page=1"
                 hx-trigger="load"
-                class="photo-grid"
+                :class="edit_photos ? 'photo-grid photo-grid-edit' : 'photo-grid'"
             >
                 <div class="photo-grid-item has-background-{{ t.theme +}} skeleton-block">
                     <div class="photo-item">&nbsp;</div>
