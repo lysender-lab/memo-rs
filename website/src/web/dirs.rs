@@ -143,7 +143,7 @@ pub async fn post_new_dir_handler(
 
     let _ = enforce_policy(actor, Resource::Album, Action::Create)?;
 
-    let token = create_csrf_token("new_album", &config.jwt_secret)?;
+    let token = create_csrf_token("new_dir", &config.jwt_secret)?;
     let cid = bucket.client_id.clone();
     let bid = bucket.id.clone();
 
