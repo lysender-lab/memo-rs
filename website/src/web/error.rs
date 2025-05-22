@@ -2,10 +2,12 @@ use askama::Template;
 use axum::{body::Body, extract::State, http::StatusCode, response::Response};
 
 use crate::{
-    models::{Actor, Pref, TemplateData},
+    Error,
+    error::ErrorInfo,
+    models::{Pref, TemplateData},
     run::AppState,
 };
-use memo::Error;
+use memo::actor::Actor;
 
 #[derive(Clone, Template)]
 #[template(path = "pages/error.html")]
@@ -26,134 +28,6 @@ struct ErrorMessageData {
     message: String,
 }
 
-#[derive(Clone)]
-pub struct ErrorInfo {
-    pub status_code: StatusCode,
-    pub title: String,
-    pub message: String,
-    pub description: String,
-}
-
-impl ErrorInfo {
-    /// Creates a generic internal server error
-    pub fn new(message: String) -> Self {
-        Self {
-            status_code: StatusCode::INTERNAL_SERVER_ERROR,
-            title: "Internal Server Error".to_string(),
-            message: message.clone(),
-            description: message,
-        }
-    }
-}
-
-impl From<Error> for ErrorInfo {
-    fn from(e: Error) -> Self {
-        match e {
-            Error::AnyError(msg) => Self {
-                status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                title: "Internal Server Error".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::ValidationError(msg) => Self {
-                status_code: StatusCode::BAD_REQUEST,
-                title: "Validation Error".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::BadRequest(msg) => Self {
-                status_code: StatusCode::BAD_REQUEST,
-                title: "Bad Request".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::Forbidden(msg) => Self {
-                status_code: StatusCode::FORBIDDEN,
-                title: "Forbidden".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::LoginFailed(msg) => Self {
-                status_code: StatusCode::UNAUTHORIZED,
-                title: "Unauthorized".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::InvalidCaptcha(msg) => Self {
-                status_code: StatusCode::BAD_REQUEST,
-                title: "Invalid Captcha".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::CaptchaResponseError(msg) => Self {
-                status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                title: "Captcha Error".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::LoginRequired(msg) => Self {
-                status_code: StatusCode::UNAUTHORIZED,
-                title: "Unauthorized".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::NoDefaultBucket => Self {
-                status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                title: "Internal Server Error".to_string(),
-                message: "No default bucket".to_string(),
-                description: "No default bucket configured".to_string(),
-            },
-            Error::AlbumNotFound => Self {
-                status_code: StatusCode::NOT_FOUND,
-                title: "Not Found".to_string(),
-                message: "Album not found".to_string(),
-                description: "The album you are looking for does not exist".to_string(),
-            },
-            Error::PhotoNotFound => Self {
-                status_code: StatusCode::NOT_FOUND,
-                title: "Not Found".to_string(),
-                message: "Photo not found".to_string(),
-                description: "The photo you are looking for does not exist".to_string(),
-            },
-            Error::NoAuthCookie => Self {
-                status_code: StatusCode::UNAUTHORIZED,
-                title: "Unauthorized".to_string(),
-                message: "Login to continue".to_string(),
-                description: "You need to login to view this page".to_string(),
-            },
-            Error::InvalidCsrfToken => Self {
-                status_code: StatusCode::BAD_REQUEST,
-                title: "Bad Request".to_string(),
-                message: "Stale form data. Refresh the page and try again".to_string(),
-                description:
-                    "The form data you are using is out of date. Refresh the page and try again."
-                        .to_string(),
-            },
-            Error::JsonParseError(msg) => Self {
-                status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                title: "Bad Request".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-            Error::ServiceError(msg) => Self {
-                status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                title: "Internal Server Error".to_string(),
-                message: msg.clone(),
-                description: msg,
-            },
-
-            // Catch all other errors
-            _ => Self {
-                status_code: StatusCode::INTERNAL_SERVER_ERROR,
-                title: "Internal Server Error".to_string(),
-                message: "An unknown error occurred".to_string(),
-                description: "An unknown error occurred".to_string(),
-            },
-        }
-    }
-}
-
-#[axum::debug_handler]
 pub async fn error_handler(State(state): State<AppState>) -> Response<Body> {
     let actor = None;
     let pref = Pref::new();
@@ -165,8 +39,8 @@ pub async fn error_handler(State(state): State<AppState>) -> Response<Body> {
         ErrorInfo {
             status_code: StatusCode::NOT_FOUND,
             title: String::from("Not Found"),
-            message: String::from("Page not found"),
-            description: String::from("The page you are looking for cannot be found."),
+            message: String::from("The page you are looking for cannot be found."),
+            backtrace: None,
         },
         true,
     )
@@ -191,21 +65,25 @@ pub fn handle_error(
 
         Response::builder()
             .status(status_code)
-            .body(Body::from(tpl.render().unwrap()))
-            .unwrap()
+            .body(Body::from(
+                tpl.render().expect("Error template must render"),
+            ))
+            .expect("Response builder must succeed")
     } else {
         let status_code = error.status_code;
         let tpl = ErrorWidgetData { error };
 
         Response::builder()
             .status(status_code)
-            .body(Body::from(tpl.render().unwrap()))
-            .unwrap()
+            .body(Body::from(
+                tpl.render().expect("Error template must render"),
+            ))
+            .expect("Response builder must succeed")
     }
 }
 
 /// Render a simple error message
-pub fn handle_error_message(error: Error) -> Response<Body> {
+pub fn handle_error_message(error: &Error) -> Response<Body> {
     let error_info: ErrorInfo = error.into();
     let tpl = ErrorMessageData {
         message: error_info.message,
@@ -213,6 +91,8 @@ pub fn handle_error_message(error: Error) -> Response<Body> {
 
     Response::builder()
         .status(error_info.status_code)
-        .body(Body::from(tpl.render().unwrap()))
-        .unwrap()
+        .body(Body::from(
+            tpl.render().expect("Error template must render"),
+        ))
+        .expect("Response builder must succeed")
 }

@@ -1,9 +1,13 @@
 use clap::Parser;
 use serde::Deserialize;
+use snafu::{ResultExt, ensure};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::Result;
+use crate::error::{
+    ConfigFileSnafu, ConfigParseSnafu, ConfigSnafu, ManifestParseSnafu, ManifestReadSnafu,
+};
 
 #[derive(Clone, Deserialize)]
 pub struct AppConfig {
@@ -33,7 +37,6 @@ pub struct Config {
 #[derive(Clone, Deserialize)]
 pub struct AssetManifest {
     pub main_js: String,
-    pub vendor_js: String,
     pub gallery_js: String,
     pub upload_js: String,
     pub main_css: String,
@@ -47,40 +50,46 @@ struct BundleConfig {
 
 impl Config {
     pub fn build(filename: &PathBuf) -> Result<Config> {
-        let toml_string = match fs::read_to_string(filename) {
-            Ok(str) => str,
-            Err(e) => {
-                return Err(format!("Error reading config file: {}", e).into());
-            }
-        };
-
-        let config: AppConfig = match toml::from_str(toml_string.as_str()) {
-            Ok(value) => value,
-            Err(e) => {
-                return Err(format!("Error parsing config file: {}", e).into());
-            }
-        };
+        let toml_string = fs::read_to_string(filename).context(ConfigFileSnafu)?;
+        let config: AppConfig = toml::from_str(toml_string.as_str()).context(ConfigParseSnafu)?;
 
         // Validate config values
-        if config.jwt_secret.len() == 0 {
-            return Err("JWT secret is required.".into());
-        }
-        if config.captcha_api_key.len() == 0 {
-            return Err("Captcha API key is required.".into());
-        }
-        if config.captcha_site_key.len() == 0 {
-            return Err("Captcha site key is required.".into());
-        }
-        if config.api_url.len() == 0 {
-            return Err("API URL is required.".into());
-        }
-        if config.port == 0 {
-            return Err("Server port is required.".into());
-        }
-
-        if !config.frontend_dir.exists() {
-            return Err("Frontend directory does not exist.".into());
-        }
+        ensure!(
+            config.jwt_secret.len() > 0,
+            ConfigSnafu {
+                msg: "JWT secret is required.".to_string()
+            }
+        );
+        ensure!(
+            config.captcha_api_key.len() > 0,
+            ConfigSnafu {
+                msg: "Captcha API key is required.".to_string()
+            }
+        );
+        ensure!(
+            config.captcha_site_key.len() > 0,
+            ConfigSnafu {
+                msg: "Captcha site key is required.".to_string()
+            }
+        );
+        ensure!(
+            config.api_url.len() > 0,
+            ConfigSnafu {
+                msg: "API URL is required.".to_string()
+            }
+        );
+        ensure!(
+            config.port > 0,
+            ConfigSnafu {
+                msg: "Server port is required.".to_string()
+            }
+        );
+        ensure!(
+            config.frontend_dir.exists(),
+            ConfigSnafu {
+                msg: "Frontend directory does not exist.".to_string()
+            }
+        );
 
         let assets = AssetManifest::build(&config.frontend_dir)?;
 
@@ -101,17 +110,12 @@ impl Config {
 impl AssetManifest {
     pub fn build(frontend_dir: &PathBuf) -> Result<Self> {
         let filename = Path::new(frontend_dir).join("bundles.json");
-        let Ok(contents) = fs::read_to_string(filename) else {
-            return Err("Failed to read bundles.json".into());
-        };
-        let bundle_res = serde_json::from_str::<BundleConfig>(contents.as_str());
-        let Ok(config) = bundle_res else {
-            return Err("Failed to parse bundles.json".into());
-        };
+        let contents = fs::read_to_string(filename).context(ManifestReadSnafu)?;
+        let config =
+            serde_json::from_str::<BundleConfig>(contents.as_str()).context(ManifestParseSnafu)?;
 
         Ok(AssetManifest {
             main_js: format!("/assets/bundles/js/main-{}.js", config.suffix),
-            vendor_js: format!("/assets/bundles/js/vendor-{}.js", config.suffix),
             gallery_js: format!("/assets/bundles/js/gallery-{}.js", config.suffix),
             upload_js: format!("/assets/bundles/js/upload-{}.js", config.suffix),
             main_css: format!("/assets/bundles/css/main-{}.css", config.suffix),

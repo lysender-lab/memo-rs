@@ -1,0 +1,59 @@
+<form method="post" action="{{ action }}" hx-post="{{ action }}">
+    <div class="card">
+        <div class="card-content">
+            <h1 class="title is-4 has-text-weight-bold">Client</h1>
+
+            {% match error_message %}
+                {% when Some with (msg) %}
+                    <div class="mb-5 notification is-danger">
+                        {{ msg }}
+                    </div>
+                {% when None %}
+            {% endmatch %}
+
+            <div class="field">
+                <label class="label">Name</label>
+                <div class="control">
+                    <input
+                        class="input"
+                        type="text"
+                        id="create-client-name"
+                        name="name"
+                        value="{{ payload.name }}"
+                        placeholder="Client Name"
+                        required
+                        minlength="1"
+                        maxlength="60"
+                    >
+                </div>
+            </div>
+
+            <div class="field">
+                <label class="label">Status</label>
+                <div class="control">
+                    <label class="checkbox">
+                        {%if let Some(active) = payload.active %}
+                        <input name="active" type="checkbox" value="1" checked />
+                        {% else %}
+                        <input name="active" type="checkbox" value="1" />
+                        {% endif %}
+                        &nbsp;Active
+                    </label>
+                </div>
+            </div>
+
+            <hr />
+
+            <div class="field is-grouped">
+                <div class="control">
+                    <input type="hidden" name="token" value="{{ payload.token }}" />
+                    <button class="button is-link" type="submit" name="submit">Submit</button>
+                </div>
+                <div class="control">
+                    <a class="button is-link is-light" href="/clients">Cancel</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+

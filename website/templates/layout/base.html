@@ -24,7 +24,10 @@
 {% include "layout/footer.html" %}
 </div>
 
-<script src="{{ t.assets.vendor_js }}"></script>
+
+<script src="/assets/vendors/htmx/2.0.2/js/htmx.min.js"></script>
+<script src="/assets/vendors/alpinejs/3.14.9/alpinejs.min.js"></script>
+
 <script src="{{ t.assets.main_js }}"></script>
 
 {% for script in t.scripts %}

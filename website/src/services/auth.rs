@@ -1,9 +1,13 @@
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
 use std::collections::HashMap;
-use tracing::error;
 
-use crate::{Error, Result, models::Actor};
+use crate::{
+    Error, Result,
+    error::{HttpClientSnafu, HttpResponseParseSnafu},
+};
+use memo::actor::Actor;
 
 #[derive(Serialize)]
 pub struct AuthPayload {
@@ -21,52 +25,54 @@ pub async fn authenticate(api_url: &str, data: AuthPayload) -> Result<AuthRespon
     body.insert("username", data.username);
     body.insert("password", data.password);
 
-    let url = format!("{}/v1/auth/token", api_url);
-    let result = Client::new().post(url.as_str()).json(&body).send().await;
-    let Ok(response) = result else {
-        return Err("Unable to process login information. Try again later.".into());
-    };
+    let url = format!("{}/auth/token", api_url);
+    let response = Client::new()
+        .post(url.as_str())
+        .json(&body)
+        .send()
+        .await
+        .context(HttpClientSnafu {
+            msg: "Unable to process login information. Try again later.".to_string(),
+        })?;
 
     match response.status() {
-        StatusCode::OK => match response.json::<AuthResponse>().await {
-            Ok(auth) => Ok(auth),
-            Err(err) => {
-                error!("Error: {}", err);
-                Err(Error::JsonParseError(
-                    "Unable to parse user information. Try again later.".to_string(),
-                ))
-            }
-        },
-        StatusCode::BAD_REQUEST => Err(Error::LoginFailed(
-            "Invalid username or password".to_string(),
-        )),
-        StatusCode::UNAUTHORIZED => Err(Error::LoginFailed(
-            "Invalid username or password".to_string(),
-        )),
+        StatusCode::OK => {
+            let auth = response
+                .json::<AuthResponse>()
+                .await
+                .context(HttpResponseParseSnafu {
+                    msg: "Unable to parse user information. Try again later.".to_string(),
+                })?;
+            Ok(auth)
+        }
+        StatusCode::BAD_REQUEST => Err(Error::LoginFailed),
+        StatusCode::UNAUTHORIZED => Err(Error::LoginFailed),
         _ => Err("Unable to process login information. Try again later.".into()),
     }
 }
 
 pub async fn authenticate_token(api_url: &str, token: &str) -> Result<Actor> {
-    let url = format!("{}/v1/user/authz", api_url);
-    let result = Client::new()
+    let url = format!("{}/user/authz", api_url);
+    let response = Client::new()
         .get(url.as_str())
         .header("Authorization", format!("Bearer {}", token))
         .send()
-        .await;
-
-    let Ok(response) = result else {
-        return Err("Unable to process auth information. Try again later.".into());
-    };
+        .await
+        .context(HttpResponseParseSnafu {
+            msg: "Unable to process auth information. Try again later.".to_string(),
+        })?;
 
     match response.status() {
-        StatusCode::OK => match response.json::<Actor>().await {
-            Ok(actor) => Ok(actor),
-            Err(_) => Err(Error::JsonParseError(
-                "Unable to process auth information. Try again later.".to_string(),
-            )),
-        },
-        StatusCode::UNAUTHORIZED => Err(Error::LoginRequired("Login to continue.".to_string())),
+        StatusCode::OK => {
+            let actor = response
+                .json::<Actor>()
+                .await
+                .context(HttpResponseParseSnafu {
+                    msg: "Unable to process auth information. Try again later.".to_string(),
+                })?;
+            Ok(actor)
+        }
+        StatusCode::UNAUTHORIZED => Err(Error::LoginRequired),
         _ => Err("Unable to process auth information. Try again later.".into()),
     }
 }

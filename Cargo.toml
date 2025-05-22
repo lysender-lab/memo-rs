@@ -4,11 +4,12 @@ resolver = "2"
 members = [ "api", "memo", "website" ]
 
 [workspace.dependencies]
-askama = { version = "0.12.1", features = ["with-axum"] }
-askama_axum = "0.4.0"
+askama = { version = "0.14.0" }
+async-trait = "0.1.88"
 argon2 = { version = "0.5.3", features = ["std"] }
 axum = { version = "0.8.1", features = ["macros", "multipart"] }
 axum-extra = { version = "0.10.0", features = ["cookie"] }
+axum-test = "17.3.0"
 chrono = "0.4.40"
 clap = { version = "4.5.31", features = ["derive"] }
 deadpool-diesel = { version = "0.6.1", features = ["sqlite"] }
@@ -24,6 +25,9 @@ reqwest = { version = "0.12.14", features = ["json"] }
 rpassword = "7.3.1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
+snafu = { version = "0.8.5", features = ["backtrace"] }
+text_io = "0.1.13"
+thiserror = "2.0.12"
 tokio = { version = "1.44.0", features = ["full"] }
 toml = "0.8.20"
 tower = "0.5.2"

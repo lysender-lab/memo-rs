@@ -33,10 +33,12 @@
                     {% include "widgets/set_theme.html" %}
                 </div>
                 <div class="navbar-item">
-                    <span class="user-info">
-                        <span class="icon"><i class="fas fa-user"></i></span>
-                        <span>{{ actor.user.username }}</span>
-                    </span>
+                    <a href="/profile" class="has-text-white">
+                        <span class="user-info">
+                            <span class="icon"><i class="fas fa-user"></i></span>
+                            <span>{{ actor.user.username }}</span>
+                        </span>
+                    </a>
                 </div>
                 <div class="navbar-item">
                     <div class="buttons">
@@ -46,7 +48,7 @@
                             hx-post="/logout"
                             hx-swap="innerHTML"
                         >
-                                Log out
+                            Log out
                         </a>
                     </div>
                 </div>

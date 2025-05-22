@@ -1,7 +1,11 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
 
-use crate::Result;
+use crate::{
+    Result,
+    error::{HttpClientSnafu, HttpResponseParseSnafu},
+};
 
 const VERIFY_URL: &str =
     "https://recaptchaenterprise.googleapis.com/v1/projects/lysender-misc-project/assessments?key=";
@@ -74,16 +78,21 @@ pub async fn validate_catpcha(site_key: &str, api_key: &str, response: &str) -> 
     };
 
     let url = format!("{}{}", VERIFY_URL, api_key);
-    let result = Client::new().post(url).json(&post_body).send().await;
-    match result {
-        Ok(response) => {
-            if response.status().is_success() {
-                Ok(())
-            } else {
-                let err_str = response.text().await.unwrap();
-                Err(format!("Unable to validate captcha: {}", err_str).into())
-            }
-        }
-        Err(err_response) => Err(format!("Validate captcha error: {}", err_response).into()),
+    let response = Client::new()
+        .post(url)
+        .json(&post_body)
+        .send()
+        .await
+        .context(HttpClientSnafu {
+            msg: "Unable to validate captcha".to_string(),
+        })?;
+
+    if response.status().is_success() {
+        Ok(())
+    } else {
+        let err_str = response.text().await.context(HttpResponseParseSnafu {
+            msg: "Unable to parse captcha error response",
+        })?;
+        Err(format!("Unable to validate captcha: {}", err_str).into())
     }
 }

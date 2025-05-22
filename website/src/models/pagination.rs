@@ -1,18 +1,5 @@
-use serde::{Deserialize, Serialize};
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct PaginatedMeta {
-    pub page: i64,
-    pub per_page: i64,
-    pub total_records: i64,
-    pub total_pages: i64,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Paginated<T> {
-    pub meta: PaginatedMeta,
-    pub data: Vec<T>,
-}
+use memo::pagination::PaginatedMeta;
+use serde::Serialize;
 
 #[derive(Clone, Serialize)]
 pub struct PaginationLinks {
@@ -34,7 +21,7 @@ impl PaginationLinks {
         let mut prev = None;
         let mut next = None;
 
-        let page = meta.page;
+        let page = meta.page as i64;
         let total_pages = meta.total_pages;
 
         // Identify the previous and next pages
@@ -280,7 +267,7 @@ mod tests {
         assert!(links.prev.is_none());
         assert!(links.next.is_some());
         assert_eq!(links.items.len(), 5);
-        assert!(links.items.get(3).unwrap().is_none());
+        assert!(links.items.get(3).expect("item must exist").is_none());
     }
 
     #[test]
@@ -295,7 +282,7 @@ mod tests {
         assert!(links.prev.is_none());
         assert!(links.next.is_some());
         assert_eq!(links.items.len(), 5);
-        assert!(links.items.get(3).unwrap().is_none());
+        assert!(links.items.get(3).expect("item must exist").is_none());
     }
 
     #[test]
@@ -310,7 +297,7 @@ mod tests {
         assert!(links.prev.is_none());
         assert!(links.next.is_some());
         assert_eq!(links.items.len(), 5);
-        assert!(links.items.get(3).unwrap().is_none());
+        assert!(links.items.get(3).expect("item must exist").is_none());
     }
 
     #[test]
@@ -325,7 +312,7 @@ mod tests {
         assert!(links.prev.is_none());
         assert!(links.next.is_some());
         assert_eq!(links.items.len(), 5);
-        assert!(links.items.get(3).unwrap().is_none());
+        assert!(links.items.get(3).expect("item must exist").is_none());
     }
 
     #[test]
@@ -354,7 +341,7 @@ mod tests {
         assert!(links.prev.is_some());
         assert!(links.next.is_none());
         assert_eq!(links.items.len(), 5);
-        assert!(links.items.get(1).unwrap().is_none());
+        assert!(links.items.get(1).expect("item must exist").is_none());
     }
 
     #[test]
@@ -369,7 +356,7 @@ mod tests {
         assert!(links.prev.is_some());
         assert!(links.next.is_none());
         assert_eq!(links.items.len(), 5);
-        assert!(links.items.get(1).unwrap().is_none());
+        assert!(links.items.get(1).expect("item must exist").is_none());
     }
 
     #[test]
@@ -384,7 +371,7 @@ mod tests {
         assert!(links.prev.is_some());
         assert!(links.next.is_none());
         assert_eq!(links.items.len(), 5);
-        assert!(links.items.get(1).unwrap().is_none());
+        assert!(links.items.get(1).expect("item must exist").is_none());
     }
 
     #[test]
@@ -399,7 +386,7 @@ mod tests {
         assert!(links.prev.is_some());
         assert!(links.next.is_some());
         assert_eq!(links.items.len(), 5);
-        assert!(links.items.get(3).unwrap().is_none());
+        assert!(links.items.get(3).expect("item must exist").is_none());
     }
 
     #[test]

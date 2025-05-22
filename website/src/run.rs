@@ -1,7 +1,6 @@
-use std::sync::Arc;
-
 use axum::Router;
 use axum::extract::FromRef;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 use tower_cookies::CookieManagerLayer;
@@ -40,11 +39,11 @@ pub async fn run(config: Config) -> Result<()> {
     let addr = format!("{}:{}", ip, port);
     info!("HTTP Server runnung on {}", addr);
 
-    let listener = TcpListener::bind(addr).await.unwrap();
+    let listener = TcpListener::bind(addr).await.expect("Failed to bind");
     axum::serve(listener, routes_all.into_make_service())
         .with_graceful_shutdown(shutdown_signal())
         .await
-        .unwrap();
+        .expect("Server must start");
 
     info!("HTTP Server stopped");
 

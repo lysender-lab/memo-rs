@@ -17,6 +17,7 @@ diesel::table! {
         status -> Text,
         created_at -> BigInt,
         default_bucket_id -> Nullable<Text>,
+        admin -> Nullable<Integer>,
     }
 }
 
@@ -66,4 +67,10 @@ diesel::joinable!(buckets -> clients (client_id));
 diesel::joinable!(dirs -> buckets (bucket_id));
 diesel::joinable!(users -> clients (client_id));
 
-diesel::allow_tables_to_appear_in_same_query!(buckets, clients, dirs, files, users,);
+diesel::allow_tables_to_appear_in_same_query!(
+    buckets,
+    clients,
+    dirs,
+    files,
+    users,
+);

@@ -1,0 +1,101 @@
+<div class="is-flex is-justify-content-space-between">
+    {% if can_add_files %}
+    <div>
+        <div class="buttons">
+            <a class="button" href="/buckets/{{ bucket.id }}">
+                <span class="icon is-small">
+                    <i class="fas fa-arrow-left"></i>
+                </span>
+                <span>Back</span>
+            </a>
+
+            <a href="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/upload" class="button is-primary">
+                <span class="icon is-small">
+                    <i class="fas fa-plus"></i>
+                </span>
+                {% if bucket.images_only %}
+                <span>Add Photos</span>
+                {% else %}
+                <span>Add Files</span>
+                {% endif %}
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if can_edit || can_delete || can_delete_files %}
+    <div
+        :class="open ? 'dropdown is-right is-active' : 'dropdown is-right'"
+        id="btn-dir-menu"
+        x-data="{ open: false }"
+    >
+        <div class="dropdown-trigger">
+            <button
+                id="btn-dir-menu-trigger"
+                :class="edit_photos ? 'button is-info' : 'button'"
+                aria-haspopup="true"
+                aria-controls="dropdown-menu"
+                @click="open = !open"
+            >
+                <span class="icon is-small">
+                    <i class="fas fa-cog" aria-hidden="true"></i>
+                </span>
+            </button>
+        </div>
+        <div class="dropdown-menu" id="dropdown-menu" role="menu">
+            <div class="dropdown-content">
+                {% if can_delete_files %}
+                <a
+                    :class="edit_photos ? 'dropdown-item is-active' : 'dropdown-item'"
+                    id="menu-edit-photos"
+                    @click="open = !open; edit_photos = !edit_photos"
+                >
+                    <span class="icon is-small">
+                        <i class="fas fa-wrench" aria-hidden="true"></i>
+                    </span>
+                    Edit Photos
+                </a>
+                {% endif %}
+
+                {% if can_edit %}
+                <a
+                    class="dropdown-item"
+                    hx-get="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/edit"
+                    hx-target="#edit-dir-container"
+                >
+                    <span class="icon is-small">
+                        <i class="fas fa-pen" aria-hidden="true"></i>
+                    </span>
+                    Edit Label
+                </a>
+                {% endif %}
+
+                {% if can_delete %}
+                <hr class="dropdown-divider" />
+                <a
+                    class="dropdown-item has-text-danger"
+                    hx-get="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/delete"
+                    hx-target="#edit-dir-container"
+                >
+                    <span class="icon is-small">
+                        <i class="fas fa-times" aria-hidden="true"></i>
+                    </span>
+                    {% if bucket.images_only %}
+                    Delete Album
+                    {% else %}
+                    Delete Directory 
+                    {% endif %}
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% if updated %}
+<span id="breadcrumb-album-label" hx-swap-oob="true">{{ dir.label }}</span>
+<h1 class="title" id="album-title" hx-swap-oob="true">
+    {{ dir.label }}
+</h1>
+{% endif %}

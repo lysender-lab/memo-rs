@@ -1,0 +1,82 @@
+<div class="is-flex is-justify-content-space-between">
+    <div>
+        <div class="buttons">
+            <a class="button" href="/clients">
+                <span class="icon is-small">
+                    <i class="fas fa-arrow-left"></i>
+                </span>
+                <span>Back</span>
+            </a>
+            <a class="button is-info" href="/clients/{{ client.id }}/users">Manage Users</a>
+            <a class="button is-warning" href="/clients/{{ client.id }}/buckets">Manage Buckets</a>
+        </div>
+    </div>
+
+    {% if can_edit || can_delete %}
+    <div
+        :class="open ? 'dropdown is-right is-active' : 'dropdown is-right'"
+        id="btn-client-menu"
+        x-data="{ open: false }"
+    >
+        <div class="dropdown-trigger">
+            <button
+                id="btn-client-menu-trigger"
+                class="button"
+                aria-haspopup="true"
+                aria-controls="dropdown-menu"
+                @click="open = !open"
+            >
+                <span class="icon is-small">
+                    <i class="fas fa-cog" aria-hidden="true"></i>
+                </span>
+            </button>
+        </div>
+        <div class="dropdown-menu" id="dropdown-menu" role="menu">
+            <div class="dropdown-content">
+                {% if can_edit %}
+                <a
+                    class="dropdown-item"
+                    hx-get="/clients/{{ client.id }}/edit"
+                    hx-target="#edit-client-container"
+                >
+                    <span class="icon is-small">
+                        <i class="fas fa-pen" aria-hidden="true"></i>
+                    </span>
+                    Edit Client
+                </a>
+                {% endif %}
+
+                {% if can_delete %}
+                <hr class="dropdown-divider" />
+                <a
+                    class="dropdown-item has-text-danger"
+                    hx-get="/clients/{{ client.id }}/delete"
+                    hx-target="#edit-client-container"
+                >
+                    <span class="icon is-small">
+                        <i class="fas fa-times" aria-hidden="true"></i>
+                    </span>
+                    Delete Client
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% if updated %}
+<h1 class="title" id="album-title" hx-swap-oob="true">
+    {{ client.name }}
+</h1>
+
+<p id="dyn-client-name" hx-swap-oob="true">{{client.name}}</p>
+
+<span id="breadcrumb-album-label" hx-swap-oob="true">{{ client.name }}</span>
+
+{% if client.status == "active" %}
+    <p id="dyn-client-status" hx-swap-oob="true"><span class="tag is-success">Active</span></p>
+{% else %}
+    <p id="dync-client-status" hx-swap-oob="true"><span class="tag">Inactive</span></p>
+{% endif %}
+{% endif %}

@@ -1,8 +1,13 @@
 use askama::Template;
 use axum::{body::Body, extract::State, response::Response};
+use snafu::ResultExt;
 use tower_cookies::{Cookie, Cookies, cookie::time::Duration};
 
-use crate::run::AppState;
+use crate::{
+    Result,
+    error::{ResponseBuilderSnafu, TemplateSnafu},
+    run::AppState,
+};
 
 use super::THEME_COOKIE;
 
@@ -19,11 +24,14 @@ struct InnerTemplate {
 pub async fn light_theme_handler(
     cookies: Cookies,
     State(state): State<AppState>,
-) -> Response<Body> {
+) -> Result<Response<Body>> {
     theme_handler(state, cookies, "light", "LightThemeSetEvent").await
 }
 
-pub async fn dark_theme_handler(cookies: Cookies, State(state): State<AppState>) -> Response<Body> {
+pub async fn dark_theme_handler(
+    cookies: Cookies,
+    State(state): State<AppState>,
+) -> Result<Response<Body>> {
     theme_handler(state, cookies, "dark", "DarkThemeSetEvent").await
 }
 
@@ -32,7 +40,7 @@ async fn theme_handler(
     cookies: Cookies,
     theme: &str,
     event: &str,
-) -> Response<Body> {
+) -> Result<Response<Body>> {
     let theme_cookie = Cookie::build((THEME_COOKIE, theme.to_string()))
         .http_only(true)
         .max_age(Duration::days(365))
@@ -48,9 +56,9 @@ async fn theme_handler(
         },
     };
 
-    Response::builder()
+    Ok(Response::builder()
         .status(200)
         .header("HX-Trigger", event)
-        .body(Body::from(tpl.render().unwrap()))
-        .unwrap()
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)?)
 }

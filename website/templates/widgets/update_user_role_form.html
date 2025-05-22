@@ -1,0 +1,51 @@
+{%- import "../elements/select.html" as scope -%}
+
+<form
+    method="post"
+    action="/clients/{{ client.id }}/users/{{ user.id }}/update_role"
+    hx-post="/clients/{{ client.id }}/users/{{ user.id }}/update_role"
+    hx-target="#edit-user-container"
+>
+    <div class="columns">
+        <div class="column is-half">
+            <div class="card">
+                <div class="card-content">
+                    <h1 class="title is-4 has-text-weight-bold">User Role</h1>
+
+                    {% match error_message %}
+                        {% when Some with (msg) %}
+                            <div class="mb-5 notification is-danger">
+                                {{ msg }}
+                            </div>
+                        {% when None %}
+                    {% endmatch %}
+
+                    <div class="field">
+                        <label class="label">Role</label>
+                        <div class="control">
+                            <div class="select is-fullwidth">
+                                {% call scope::h_select("role", payload.role, "Select a role", "", role_options ) %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-3 field is-grouped">
+                        <div class="control">
+                            <input type="hidden" name="token" value="{{ payload.token }}" />
+                            <button class="button is-link" type="submit" name="submit">Submit</button>
+                        </div>
+                        <div class="control">
+                            <button
+                                class="button is-link is-light"
+                                hx-get="/clients/{{ client.id }}/users/{{ user.id }}/edit_controls"
+                                hx-target="#edit-user-container"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>

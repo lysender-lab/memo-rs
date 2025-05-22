@@ -1,8 +1,9 @@
 use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 
-use crate::{Error, Result};
+use crate::{Error, Result, error::CsrfTokenSnafu};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct Claims {
@@ -36,13 +37,10 @@ pub fn verify_csrf_token(token: &str, secret: &str) -> Result<String> {
         &DecodingKey::from_secret(secret.as_bytes()),
         &Validation::default(),
     ) else {
-        return Err(Error::InvalidCsrfToken);
+        return Err(Error::CsrfToken);
     };
 
-    if decoded.claims.sub.len() == 0 {
-        return Err(Error::InvalidCsrfToken);
-    }
-
+    ensure!(decoded.claims.sub.len() > 0, CsrfTokenSnafu);
     Ok(decoded.claims.sub)
 }
 
@@ -53,12 +51,12 @@ mod tests {
     #[test]
     fn test_jwt_token() {
         // Generate token
-        let token = create_csrf_token("example", "secret").unwrap();
+        let token = create_csrf_token("example", "secret").expect("Token should be generated");
         assert!(token.len() > 0);
         println!("Token: {}", token);
 
         // Validate it back
-        let value = verify_csrf_token(&token, "secret").unwrap();
+        let value = verify_csrf_token(&token, "secret").expect("Token should be verified");
         assert_eq!(value, "example".to_string());
     }
 

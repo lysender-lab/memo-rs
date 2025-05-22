@@ -3,31 +3,35 @@ use argon2::{
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
 
-use crate::{Error, Result};
+use crate::{
+    Result,
+    error::{HashPasswordSnafu, InvalidPasswordSnafu, VerifyPasswordHashSnafu},
+};
 
 pub fn hash_password(password: &str) -> Result<String> {
     let pwd = password.as_bytes();
     let salt = SaltString::generate(&mut OsRng);
     let gon = Argon2::default();
-    let Ok(hash) = gon.hash_password(pwd, &salt) else {
-        return Err(Error::HashPasswordError(
-            "Unable to generate password hash".to_string(),
-        ));
-    };
-
-    Ok(hash.to_string())
+    match gon.hash_password(pwd, &salt) {
+        Ok(hash) => Ok(hash.to_string()),
+        Err(e) => HashPasswordSnafu {
+            msg: format!("Error hashing password: {}", e),
+        }
+        .fail(),
+    }
 }
 
 pub fn verify_password(password: &str, hash: &str) -> Result<()> {
     let Ok(parsed_hash) = PasswordHash::new(&hash) else {
-        return Err(Error::VerifyPasswordHashError(
-            "Invalid password hash".to_string(),
-        ));
+        return VerifyPasswordHashSnafu {
+            msg: "Invalid password hash".to_string(),
+        }
+        .fail();
     };
     let gone = Argon2::default();
     match gone.verify_password(password.as_bytes(), &parsed_hash) {
         Ok(_) => Ok(()),
-        Err(_) => Err(Error::InvalidPassword),
+        Err(_) => InvalidPasswordSnafu {}.fail(),
     }
 }
 

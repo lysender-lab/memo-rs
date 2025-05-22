@@ -1,12 +1,10 @@
-# memo-rs: Make Memories
+# memo-api: Make Memories
 
-`memo-api` is a simple file storage service.
+`memo-api` is a simple file storage service and is the backend service for `memo-website`.
 
 It is designed for personal use and not indended for large number of concurrent users.
 The goal of the service is to provide an economical way to store and retrieve
 files in the cloud.
-
-See [memo-rs](https://github.com/lysender/memo-rs) to deploy a frontend for this service.
 
 Uses cases:
 - Store personal files and documents
@@ -38,6 +36,7 @@ Uses cases:
   - Content type
   - Size
   - Image dimension for each version
+  - Date picture is taken
 
 ## Google Cloud Service Account
 
@@ -52,10 +51,9 @@ Create a Google Cloud Service Account with the following roles:
 Clients are the tenants or customers of the service.
 
 Each client has access to the following resources:
-- teams
 - users
 - buckets
-- directories
+- dirs
 - files
 
 All clients are managed via the CLI only.
@@ -101,12 +99,31 @@ Usename is unique globally although it is namespaced by client_id.
 
 ### Roles
 
+- SystemAdmin
 - FilesAdmin
 - FilesEditor
 - FilesViewer
 
 ### Permissions
 
+- clients.create
+- clients.edit
+- clients.delete
+- clients.list
+- clients.view
+- clients.manage
+- buckets.create
+- buckets.edit
+- buckets.delete
+- buckets.list
+- buckets.view
+- buckets.manage
+- users.create
+- users.edit
+- users.delete
+- users.list
+- users.view
+- users.manage
 - dirs.create
 - dirs.edit
 - dirs.delete
@@ -121,6 +138,26 @@ Usename is unique globally although it is namespaced by client_id.
 - files.manage
 
 ### Roles to Permissions Mapping
+
+SystemAdmin:
+- clients.create
+- clients.edit
+- clients.delete
+- clients.list
+- clients.view
+- clients.manage
+- buckets.create
+- buckets.edit
+- buckets.delete
+- buckets.list
+- buckets.view
+- buckets.manage
+- users.create
+- users.edit
+- users.delete
+- users.list
+- users.view
+- users.manage
 
 FilesAdmin:
 - dirs.create
@@ -199,24 +236,43 @@ File:
 - created_at
 - updated_at
 
-## API Endpoints
+## API Endpoints for regular users
 
 ```
 GET /v1/auth/token
 GET /v1/buckets
-POST /v1/buckets
-GET /v1/buckets/:bucket_id
-PATCH /v1/buckets/:bucket_id
-DELETE /v1/buckets/:bucket_id
-GET /v1/buckets/:bucket_id/dirs?page=1&per_page=10&keyword=
-POST /v1/buckets/:bucket_id/dirs
-GET /v1/buckets/:bucket_id/dirs/:dir_id
-PATCH /v1/buckets/:bucket_id/dirs/:dir_id
-DELETE /v1/buckets/:bucket_id/dirs/:dir_id
-GET /v1/buckets/:bucket_id/dirs/:dir_id/files?page=1&per_page=10&keyword=
-POST /v1/buckets/:bucket_id/dirs/:dir_id/files
-GET /v1/buckets/:bucket_id/dirs/:dir_id/files/:file_id
-DELETE /v1/buckets/:bucket_id/dirs/:dir_id/files/:file_id
+GET /v1/buckets/{bucket_id}
+PATCH /v1/buckets/{bucket_id}
+DELETE /v1/buckets/{bucket_id}
+GET /v1/buckets/{bucket_id}/dirs?page=1&per_page=10&keyword=
+POST /v1/buckets/{bucket_id}/dirs
+GET /v1/buckets/{bucket_id}/dirs/{dir_id}
+PATCH /v1/buckets/{bucket_id}/dirs/{dir_id}
+DELETE /v1/buckets/{bucket_id}/dirs/{dir_id}
+GET /v1/buckets/{bucket_id}/dirs/{dir_id}/files?page=1&per_page=10&keyword=
+POST /v1/buckets/{bucket_id}/dirs/{dir_id}/files
+GET /v1/buckets/{bucket_id}/dirs/{dir_id}/files/{file_id}
+DELETE /v1/buckets/{bucket_id}/dirs/{dir_id}/files/{file_id}
+```
+
+## System Admin Endpoints
+
+```
+GET /v1/clients
+POST /v1/clients
+GET /v1/clients/{client_id}
+PATCH /v1/clients/{client_id}
+DELETE /v1/clients/{client_id}
+GET /v1/clients/{client_id}/users
+POST /v1/clients/{client_id}/users
+GET /v1/clients/{client_id}/users/{user_id}
+PATCH /v1/clients/{client_id}/users/{user_id}
+DELETE /v1/clients/{client_id}/users/{user_id}
+GET /v1/clients/{client_id}/buckets
+POST /v1/clients/{client_id}/buckets
+GET /v1/clients/{client_id}/buckets/{bucket_id}
+PATCH /v1/clients/{client_id}/buckets/{bucket_id}
+DELETE /v1/clients/{client_id}/buckets/{bucket_id}
 ```
 
 ## Database client setup
@@ -254,6 +310,13 @@ it as a simple systemd service.
 
 ### Setup systemd
 
+File: `/data/scripts/memo-rs/run-api.sh`
+
+```bash
+#!/bin/sh
+/data/www/html/sites/memo-rs/target/release/api -c /data/www/html/sites/memo-rs/api/config.toml server
+```
+
 Edit systemd service file:
 
 ```
@@ -264,22 +327,14 @@ File: `/etc/systemd/system/memo-api.service`
 
 ```
 [Unit]
-Description=memo-api Personal file storage API
+Description=memo-api Make memories
 
 [Service]
 User=www-data
 Group=www-data
 
-
-Environment="DATABASE_URL=sqlite:///path/to/db.sqlite3"
-Environment="UPLOAD_DIR=/path/to/upload_dir"
-Environment="JWT_SECRET=value"
-Environment="PORT=11001"
-Environment="GOOGLE_PROJECT_ID=value"
-Environment="GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json"
-
 WorkingDirectory=/data/www/html/sites/memo-rs/api/
-ExecStart=/data/www/html/sites/memo-rs/target/release/memo-api
+ExecStart=/data/scripts/memo-rs/run-api.sh
 Restart=on-failure
 RestartSec=5s
 

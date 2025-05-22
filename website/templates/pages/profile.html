@@ -1,0 +1,49 @@
+{% extends "layout/base.html" %}
+
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li class="is-active">
+                    <a href="/profile" aria-current="page">Profile</a>
+                </li>
+            </ul>
+        </nav>
+
+        <h1 class="title">My Account Information</h1>
+
+        <div id="edit-profile-container">
+            {% include "widgets/edit_profile_controls.html" %}
+        </div>
+
+        <div class="box mt-5">
+            <h1 class="title is-4 has-text-weight-bold">User</h1>
+
+            <div class="columns is-variable is-6">
+              <div class="column is-one-third">
+                <p class="has-text-grey-dark"><strong>Username:</strong></p>
+                <p>{{user.username}}</p>
+              </div>
+
+              <div id="user-status-w" class="column is-one-third">
+                <p class="has-text-grey-dark"><strong>Status:</strong></p>
+                {% if user.status == "active" %}
+                    <p><span class="tag is-success">Active</span></p>
+                {% else %}
+                    <p><span class="tag">Inactive</span></p>
+                {% endif %}
+              </div>
+
+              <div id="user-roles-w" class="column is-one-third">
+                <p class="has-text-grey-dark"><strong>Roles:</strong></p>
+                {% for role in user.roles %}
+                    <p><span class="tag is-dark">{{ role }}</span></p>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+    </div>
+</section>
+{% endblock %}

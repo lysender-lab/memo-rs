@@ -6,11 +6,10 @@
         <nav class="breadcrumb" aria-label="breadcrumbs">
             <ul>
                 <li><a href="/">Home</a></li>
-                <li>
-                    <a href="/albums/{{ album.id }}">{{ album.label }}</a>
-                </li>
+                <li><a href="/buckets/{{ bucket.id }}">{{ bucket.name }}</a></li>
+                <li><a href="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}">{{ dir.label }}</a></li>
                 <li class="is-active">
-                    <a href="/albums/{{ album.id }}/upload" aria-current="page">
+                    <a href="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/upload" aria-current="page">
                         Upload
                     </a>
                 </li>
@@ -19,7 +18,7 @@
 
         <h1 class="title">Upload Photos</h1>
 
-        <form method="post" action="/albums/{{ album.id }}/upload" id="upload-photos-form">
+        <form method="post" action="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/upload" id="upload-photos-form">
             <div id="photos-input-w">
                 <div class="columns">
                     <div class="column is-half">
@@ -51,7 +50,7 @@
                                 </div>
 
                                 <div class="is-boxed">
-                                    <a class="button mr-2" href="/albums/{{ album.id }}">
+                                    <a class="button mr-2" href="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}">
                                         <span class="icon is-small">
                                             <i class="fas fa-arrow-left"></i>
                                         </span>
@@ -104,13 +103,13 @@
                 </div>
 
                 <div id="upload-more-w" class="is-hidden is-boxed mb-5">
-                    <a class="button mr-2" href="/albums/{{ album.id }}">
+                    <a class="button mr-2" href="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}">
                         <span class="icon is-small">
                             <i class="fas fa-arrow-left"></i>
                         </span>
                         <span>Back</span>
                     </a>
-                    <a class="button is-primary" href="/albums/{{ album.id }}/upload">
+                    <a class="button is-primary" href="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/upload">
                         <span class="icon is-small">
                             <i class="fas fa-plus"></i>
                         </span>

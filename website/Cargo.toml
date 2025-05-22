@@ -7,7 +7,6 @@ edition = "2024"
 
 [dependencies]
 askama.workspace = true
-askama_axum.workspace = true
 axum.workspace = true
 axum-extra.workspace = true
 chrono.workspace = true
@@ -18,6 +17,7 @@ multer.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+snafu.workspace = true
 tokio.workspace = true
 toml.workspace = true
 tower.workspace = true

@@ -1,0 +1,95 @@
+{% match error_message %}
+    {% when Some with (msg) %}
+        <div class="panel-block">
+            <div class="error-message mb-5 tag is-danger">
+                <p>{{ msg }}</p>
+            </div>
+        </div>
+    {% when None %}
+{% endmatch %}
+
+{% if can_create %}
+<a class="panel-block has-text-primary" href="/buckets/{{ bucket.id }}/new_dir">
+    <span class="panel-icon">
+        <i class="fas fa-plus has-text-primary" aria-hidden="true"></i>
+    </span>
+    {% if bucket.images_only %}
+    Create new album
+    {% else %}
+    Create new directory
+    {% endif %}
+</a>
+{% endif %}
+
+{% for dir in dirs %}
+    <a class="panel-block" href="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}">
+        <span class="panel-icon">
+            <i class="fas fa-book" aria-hidden="true"></i>
+        </span>
+        {{ dir.label }}
+    </a>
+{% endfor %}
+
+{% match pagination %}
+    {% when Some with (pg) %}
+    <nav class="pagination p-3" role="navigation" aria-label="pagination">
+        {% match pg.prev %}
+            {% when Some with (prev) %}
+            <a
+                href="/{{ prev.url }}"
+                hx-push-url="/{{ prev.url }}"
+                hx-get="/albums/listing{{ prev.url }}"
+                hx-target=".album-items"
+                class="pagination-previous"
+            >
+                Previous
+            </a>
+            {% when None %}
+        {% endmatch %}
+
+        {% match pg.next %}
+            {% when Some with (next) %}
+            <a
+                href="/{{ next.url }}"
+                hx-push-url="{{ next.url }}"
+                hx-get="/albums/listing{{ next.url }}"
+                hx-target=".album-items"
+                class="pagination-previous"
+            >
+                Next page
+            </a>
+            {% when None %}
+        {% endmatch %}
+
+        <ul class="pagination-list">
+        {% for item in pg.items %}
+            {% match item %}
+                {% when Some with (link) %}
+                <li>
+                    <a
+                        href="/{{ link.url }}"
+                        hx-push-url="/{{ link.url }}"
+                        hx-get="/buckets/{{ bucket.id }}/search_dirs{{ link.url }}"
+                        hx-target=".album-items"
+                        {% if link.active %}
+                        class="pagination-link is-current"
+                        aria-label="Page {{ link.page }}"
+                        aria-current="page"
+                        {% else %}
+                        class="pagination-link"
+                        aria-label="Goto page {{ link.page }}"
+                        {% endif %}
+                    >
+                        {{ link.page }}
+                    </a>
+                </li>
+                {% when None %}
+                <li>
+                    <span class="pagination-ellipsis">&hellip;</span>
+                </li>
+            {% endmatch %}
+        {% endfor %}
+        </ul>
+    </nav>
+    {% when None %}
+{% endmatch %}

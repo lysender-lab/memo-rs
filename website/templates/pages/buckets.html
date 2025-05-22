@@ -1,0 +1,78 @@
+{% extends "layout/base.html" %}
+
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/clients">Clients</a></li>
+                <li><a href="/clients/{{ client.id }}">{{ client.name }}</a></li>
+                <li class="is-active">
+                    <a href="/clients/{{ client.id }}/buckets" aria-current="page">
+                        <span>Buckets</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+
+        <h1 class="title">Bucket Management</h1>
+
+        <div class="is-flex is-justify-content-space-between mb-5">
+            <div>
+                <a class="button" href="/clients/{{ client.id }}">
+                    <span class="icon is-small">
+                        <i class="fas fa-arrow-left"></i>
+                    </span>
+                    <span>Back</span>
+                </a>
+            </div>
+
+            <div>
+                <a class="button is-primary" href="/clients/{{ client.id }}/buckets/new">
+                    <span class="icon is-small">
+                        <i class="fas fa-plus"></i>
+                    </span>
+                    <span>New Bucket</span>
+                </a>
+            </div>
+        </div>
+
+        {% if buckets.len() > 0 %}
+        <div class="box">
+            <table class="table is-striped is-hoverable is-fullwidth">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Content Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for bucket in buckets %}
+                <tr>
+                    <td><a href="/clients/{{ client.id }}/buckets/{{ bucket.id }}">{{ bucket.name }}</a></td>
+                    <td>
+                        {% if bucket.images_only %}
+                        <span class="tag is-primary">Images</span>
+                        {% else %}
+                        <span class="tag is-dark">Files</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="message is-info">
+            <div class="message-header">
+                <p>No buckets</p>
+            </div>
+            <div class="message-body">
+                There are no buckets yet for this client.
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

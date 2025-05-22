@@ -4,10 +4,12 @@
     method="post"
     action="/login"
 >
+    <h1 class="title is-4 has-text-weight-bold">Login to Memories</h1>
+
     {% match error_message %}
         {% when Some with (msg) %}
-            <div class="error-message mb-5 tag is-danger">
-                <p>{{ msg }}</p>
+            <div class="mb-5 notification is-danger">
+                {{ msg }}
             </div>
         {% when None %}
     {% endmatch %}

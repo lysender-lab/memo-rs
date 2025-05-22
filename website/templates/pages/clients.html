@@ -1,0 +1,38 @@
+{% extends "layout/base.html" %}
+
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li class="is-active">
+                    <a href="/clients" aria-current="page">
+                        <span>Clients</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+
+        <div class="albums-container">
+            <nav class="albums panel is-dark">
+                <p class="panel-heading">
+                   Clients
+                </p>
+                <div
+                    class="album-items"
+                    hx-get="/clients/listing"
+                    hx-trigger="load"
+                >
+                    <span class="panel-block is-skeleton">&nbsp;</span>
+                    <span class="panel-block is-skeleton">&nbsp;</span>
+                    <span class="panel-block is-skeleton">&nbsp;</span>
+                    <span class="panel-block is-skeleton">&nbsp;</span>
+                    <span class="panel-block is-skeleton">&nbsp;</span>
+                    <span class="panel-block is-skeleton">&nbsp;</span>
+                </div>
+            </nav>
+        </div>
+    </div>
+</section>
+{% endblock %}

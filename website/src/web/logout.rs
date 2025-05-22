@@ -10,5 +10,5 @@ pub async fn logout_handler(cookies: Cookies) -> impl IntoResponse {
         .status(200)
         .header("HX-Redirect", "/login")
         .body("Log in".to_string())
-        .unwrap()
+        .expect("Response builder must succeed")
 }

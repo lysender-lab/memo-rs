@@ -1,0 +1,52 @@
+{% extends "layout/base.html" %}
+
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/clients">Clients</a></li>
+                <li class="is-active">
+                    <a href="/clients/{{ client.id }}" aria-current="page">
+                        <span id="breadcrumb-album-label">{{ client.name }}</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+
+        <h1 class="title" id="album-title">
+            {{ client.name }}
+        </h1>
+
+        <div id="edit-client-container">
+            {% include "widgets/edit_client_controls.html" %}
+        </div>
+
+        <div class="box mt-5">
+            <h1 class="title is-4 has-text-weight-bold">Client</h1>
+
+            <div class="columns is-variable is-6">
+              <div class="column is-one-third">
+                <p class="has-text-grey-dark"><strong>Name:</strong></p>
+                <p id="dyn-client-name">{{client.name}}</p>
+              </div>
+
+              <div class="column is-one-third">
+                <p class="has-text-grey-dark"><strong>Status:</strong></p>
+                {% if client.status == "active" %}
+                    <p id="dyn-client-status"><span class="tag is-success">Active</span></p>
+                {% else %}
+                    <p id="dync-client-status"><span class="tag">Inactive</span></p>
+                {% endif %}
+              </div>
+
+              <div class="column is-one-third">
+                <p class="has-text-grey-dark"><strong>Default Bucket:</strong></p>
+                <p>bucket-name</p>
+              </div>
+            </div>
+          </div>
+    </div>
+</section>
+{% endblock %}

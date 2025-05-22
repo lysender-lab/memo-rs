@@ -1,0 +1,90 @@
+{%- import "../elements/select.html" as scope -%}
+
+<form method="post" action="{{ action }}" hx-post="{{ action }}">
+    <div class="card">
+        <div class="card-content">
+            <h1 class="title is-4 has-text-weight-bold">User</h1>
+
+            {% match error_message %}
+                {% when Some with (msg) %}
+                    <div class="mb-5 notification is-danger">
+                        {{ msg }}
+                    </div>
+                {% when None %}
+            {% endmatch %}
+
+            <!-- Username -->
+            <div class="field">
+              <label class="label">Username</label>
+              <div class="control">
+                    <input
+                        class="input"
+                        type="text"
+                        placeholder="Enter username"
+                        name="username"
+                        value="{{ payload.username }}"
+                        minlength="1"
+                        maxlength="60"
+                        required
+                    >
+              </div>
+            </div>
+
+            <!-- Password -->
+            <div class="field">
+              <label class="label">Password</label>
+              <div class="control">
+                    <input
+                        class="input"
+                        type="password"
+                        placeholder="Enter password"
+                        name="password"
+                        minlength="8"
+                        maxlength="60"
+                        required
+                    >
+              </div>
+            </div>
+
+            <!-- Repeat Password -->
+            <div class="field">
+              <label class="label">Repeat Password</label>
+              <div class="control">
+                    <input
+                        class="input"
+                        type="password"
+                        placeholder="Repeat password"
+                        name="confirm_password"
+                        minlength="8"
+                        maxlength="60"
+                        required
+                    >
+              </div>
+            </div>
+
+            <!-- Roles -->
+            <div class="field">
+              <label class="label">Role</label>
+              <div class="control">
+                <div class="select is-fullwidth">
+                    {% call scope::h_select("role", payload.role, "Select a role", "", role_options ) %}
+                </div>
+              </div>
+            </div>
+
+            <hr />
+
+            <!-- Submit -->
+            <div class="field is-grouped">
+              <div class="control">
+                <input type="hidden" name="token" value="{{ payload.token }}" />
+                <button class="button is-link" type="submit" name="submit">Create User</button>
+              </div>
+              <div class="control">
+                <a class="button is-light" href="/clients/{{ client.id }}/users">Cancel</a>
+              </div>
+            </div>
+        </div>
+    </div>
+</form>
+

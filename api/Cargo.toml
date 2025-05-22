@@ -4,12 +4,13 @@ version = "0.2.0"
 edition = "2024"
 
 [dependencies]
+async-trait.workspace = true
 argon2.workspace = true
 axum.workspace = true
+axum-test.workspace = true
 chrono.workspace = true
 clap.workspace = true
 deadpool-diesel.workspace = true
-derive_more.workspace = true
 diesel.workspace = true
 google-cloud-storage.workspace = true
 image.workspace = true
@@ -20,6 +21,8 @@ multer.workspace = true
 rpassword.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+snafu.workspace = true
+text_io.workspace = true
 tokio.workspace = true
 toml.workspace = true
 tower.workspace = true

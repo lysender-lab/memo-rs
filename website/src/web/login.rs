@@ -7,20 +7,23 @@ use axum::{
     http::Response,
     response::{IntoResponse, Redirect},
 };
+use snafu::ResultExt;
 use tower_cookies::{Cookie, Cookies, cookie::time::Duration};
 use validator::Validate;
 
 use crate::{
-    Error,
+    Error, Result,
+    error::{ResponseBuilderSnafu, TemplateSnafu},
     models::{LoginFormPayload, TemplateData},
-    services::{AuthPayload, authenticate, validate_catpcha},
+    services::{
+        auth::{AuthPayload, authenticate},
+        captcha::validate_catpcha,
+    },
 };
-use crate::{
-    models::{Actor, Pref},
-    run::AppState,
-};
+use crate::{error::ErrorInfo, models::Pref, run::AppState};
+use memo::actor::Actor;
 
-use super::{AUTH_TOKEN_COOKIE, ErrorInfo};
+use super::AUTH_TOKEN_COOKIE;
 
 #[derive(Template)]
 #[template(path = "pages/login.html")]
@@ -30,11 +33,11 @@ struct LoginTemplate {
     error_message: Option<String>,
 }
 
-#[axum::debug_handler]
 pub async fn login_handler(
     State(state): State<AppState>,
     Query(query): Query<HashMap<String, String>>,
-) -> impl IntoResponse {
+) -> Result<Response<Body>> {
+    // Errors are handled via redirect with query params
     let pref = Pref::new();
     let actor: Option<Actor> = None;
     let mut t = TemplateData::new(&state, actor, &pref);
@@ -55,7 +58,7 @@ pub async fn login_handler(
         error_message,
     };
 
-    Response::builder()
+    Ok(Response::builder()
         .status(200)
         .header("Surrogate-Control", "no-store")
         .header(
@@ -64,11 +67,10 @@ pub async fn login_handler(
         )
         .header("Pragma", "no-cache")
         .header("Expires", 0)
-        .body(tpl.render().unwrap())
-        .unwrap()
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)?)
 }
 
-#[axum::debug_handler]
 pub async fn post_login_handler(
     cookies: Cookies,
     State(state): State<AppState>,
@@ -90,7 +92,7 @@ pub async fn post_login_handler(
         if errors.contains(&"captcha".to_string()) {
             error_message = "Click the I'm not a robot checkbox.".to_string();
         }
-        return handle_error(Error::ValidationError(error_message));
+        return handle_error(Error::Validation { msg: error_message });
     }
 
     // Validate captcha
@@ -130,7 +132,7 @@ pub async fn post_login_handler(
 }
 
 fn handle_error(error: Error) -> Response<Body> {
-    let error_info: ErrorInfo = error.into();
+    let error_info = ErrorInfo::from(&error);
 
     let url = format!("/login?error={}", error_info.message);
     Redirect::to(url.as_str()).into_response()

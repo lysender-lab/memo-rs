@@ -1,25 +1,27 @@
 use clap::Parser;
 use config::CliArgs;
 use run::run_command;
+use snafu::ErrorCompat;
 use std::process;
 
 mod auth;
-mod buckets;
-mod clients;
+mod bucket;
+mod client;
+mod command;
 mod config;
 mod db;
-mod dirs;
-mod files;
+mod dir;
+mod error;
+mod file;
 mod health;
-mod roles;
 mod run;
 mod schema;
+mod state;
 mod storage;
-mod users;
 mod web;
 
 // Re-export error types for convenience
-pub use memo::{Error, Result};
+pub use error::{Error, Result};
 
 #[tokio::main]
 async fn main() {
@@ -31,7 +33,10 @@ async fn main() {
     let args = CliArgs::parse();
 
     if let Err(e) = run_command(args).await {
-        eprintln!("Application error: {e}");
+        eprintln!("Application error: {}", e);
+        if let Some(bt) = ErrorCompat::backtrace(&e) {
+            println!("{}", bt);
+        }
         process::exit(1);
     }
 }

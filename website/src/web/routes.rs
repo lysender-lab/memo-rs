@@ -1,26 +1,55 @@
-use axum::extract::DefaultBodyLimit;
+use axum::extract::{DefaultBodyLimit, State};
 use axum::handler::HandlerWithoutStateExt;
-use axum::response::IntoResponse;
+use axum::http::HeaderMap;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, get_service, post};
-use axum::{Router, middleware};
+use axum::{Extension, Router, middleware};
 use reqwest::StatusCode;
 use std::path::PathBuf;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::services::{ServeDir, ServeFile};
+use tracing::error;
 
+use crate::ctx::Ctx;
+use crate::error::ErrorInfo;
+use crate::models::Pref;
 use crate::run::AppState;
-use crate::web::{
-    error_handler, index_handler, login_handler, logout_handler, new_album_handler,
-    photo_listing_handler, photos_page_handler, post_login_handler, post_new_album_handler,
-};
+use crate::web::{error_handler, index_handler, login_handler, logout_handler, post_login_handler};
 
-use super::{
-    album_listing_handler, album_listing_middleware, album_middleware,
-    confirm_delete_photo_handler, dark_theme_handler, delete_album_handler,
-    edit_album_controls_handler, edit_album_handler, exec_delete_photo_handler,
-    light_theme_handler, photo_middleware, post_edit_album_handler, pre_delete_photo_handler,
-    pref_middleware, require_auth_middleware, upload_handler, upload_page_handler,
+use super::buckets::{
+    bucket_controls_handler, bucket_page_handler, buckets_handler, delete_bucket_handler,
+    new_bucket_handler, post_delete_bucket_handler, post_new_bucket_handler,
 };
+use super::clients::{
+    client_page_handler, clients_handler, clients_listing_handler, delete_client_handler,
+    edit_client_controls_handler, edit_client_handler, new_client_handler,
+    post_delete_client_handler, post_edit_client_handler, post_new_client_handler,
+};
+use super::dirs::{
+    dir_page_handler, edit_dir_controls_handler, edit_dir_handler, get_delete_dir_handler,
+    new_dir_handler, post_delete_dir_handler, post_edit_dir_handler, post_new_dir_handler,
+    search_dirs_handler,
+};
+use super::files::{
+    confirm_delete_photo_handler, exec_delete_photo_handler, photo_listing_v2_handler,
+    pre_delete_photo_handler, upload_handler, upload_page_handler,
+};
+use super::middleware::{
+    auth_middleware, bucket_middleware, client_middleware, dir_middleware, file_middleware,
+    my_bucket_middleware, pref_middleware, require_auth_middleware, user_middleware,
+};
+use super::my_bucket::my_bucket_page_handler;
+use super::profile::{
+    change_user_password_handler, post_change_password_handler, profile_controls_handler,
+    profile_page_handler,
+};
+use super::users::{
+    delete_user_handler, new_user_handler, post_delete_user_handler, post_new_user_handler,
+    post_reset_password_handler, post_update_user_role_handler, post_update_user_status_handler,
+    reset_user_password_handler, update_user_role_handler, update_user_status_handler,
+    user_controls_handler, user_page_handler, users_handler,
+};
+use super::{dark_theme_handler, handle_error, light_theme_handler};
 
 pub fn all_routes(state: AppState, frontend_dir: &PathBuf) -> Router {
     Router::new()
@@ -59,50 +88,157 @@ pub fn private_routes(state: AppState) -> Router {
         .route("/", get(index_handler))
         .route("/prefs/theme/light", post(light_theme_handler))
         .route("/prefs/theme/dark", post(dark_theme_handler))
-        .nest("/albums", album_routes(state.clone()))
+        .route("/profile", get(profile_page_handler))
+        .route("/profile/profile_controls", get(profile_controls_handler))
+        .route(
+            "/profile/change_password",
+            get(change_user_password_handler).post(post_change_password_handler),
+        )
+        .nest("/clients", client_routes(state.clone()))
+        .nest("/buckets/{bucket_id}", my_bucket_routes(state.clone()))
+        .layer(middleware::map_response_with_state(
+            state.clone(),
+            response_mapper,
+        ))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_auth_middleware,
+        ))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
         ))
         .route_layer(middleware::from_fn(pref_middleware))
         .with_state(state)
 }
 
-fn album_routes(state: AppState) -> Router<AppState> {
+fn client_routes(state: AppState) -> Router<AppState> {
     Router::new()
-        .route("/listing", get(album_listing_handler))
-        .route("/new", get(new_album_handler).post(post_new_album_handler))
-        .nest("/{album_id}", album_inner_routes(state.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            album_listing_middleware,
-        ))
+        .route("/", get(clients_handler))
+        .route("/listing", get(clients_listing_handler))
+        .route(
+            "/new",
+            get(new_client_handler).post(post_new_client_handler),
+        )
+        .nest("/{client_id}", client_inner_routes(state.clone()))
         .with_state(state)
 }
 
-fn album_inner_routes(state: AppState) -> Router<AppState> {
+fn client_inner_routes(state: AppState) -> Router<AppState> {
     Router::new()
-        .route("/", get(photos_page_handler))
-        .route("/edit-controls", get(edit_album_controls_handler))
+        .route("/", get(client_page_handler))
+        .route("/edit_controls", get(edit_client_controls_handler))
         .route(
             "/edit",
-            get(edit_album_handler).post(post_edit_album_handler),
+            get(edit_client_handler).post(post_edit_client_handler),
         )
         .route(
             "/delete",
-            get(delete_album_handler).post(delete_album_handler),
+            get(delete_client_handler).post(post_delete_client_handler),
         )
-        .route("/photo-grid", get(photo_listing_handler))
-        .nest("/upload", upload_route(state.clone()))
-        .nest("/photos/{photo_id}", photo_routes(state.clone()))
+        .nest("/users", users_routes(state.clone()))
+        .nest("/buckets", buckets_routes(state.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            album_middleware,
+            client_middleware,
         ))
         .with_state(state)
 }
 
-fn upload_route(state: AppState) -> Router<AppState> {
+fn users_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(users_handler))
+        .route("/new", get(new_user_handler).post(post_new_user_handler))
+        .nest("/{user_id}", user_inner_routes(state.clone()))
+        .with_state(state)
+}
+
+fn user_inner_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(user_page_handler))
+        .route("/edit_controls", get(user_controls_handler))
+        .route(
+            "/update_status",
+            get(update_user_status_handler).post(post_update_user_status_handler),
+        )
+        .route(
+            "/update_role",
+            get(update_user_role_handler).post(post_update_user_role_handler),
+        )
+        .route(
+            "/reset_password",
+            get(reset_user_password_handler).post(post_reset_password_handler),
+        )
+        .route(
+            "/delete",
+            get(delete_user_handler).post(post_delete_user_handler),
+        )
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            user_middleware,
+        ))
+        .with_state(state)
+}
+
+fn buckets_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(buckets_handler))
+        .route(
+            "/new",
+            get(new_bucket_handler).post(post_new_bucket_handler),
+        )
+        .nest("/{bucket_id}", bucket_inner_routes(state.clone()))
+        .with_state(state)
+}
+
+fn bucket_inner_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(bucket_page_handler))
+        .route("/edit_controls", get(bucket_controls_handler))
+        .route(
+            "/delete",
+            get(delete_bucket_handler).post(post_delete_bucket_handler),
+        )
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            bucket_middleware,
+        ))
+        .with_state(state)
+}
+
+fn my_bucket_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(my_bucket_page_handler))
+        .route("/search_dirs", get(search_dirs_handler))
+        .route("/new_dir", get(new_dir_handler).post(post_new_dir_handler))
+        .nest("/dirs/{dir_id}", my_dir_inner_routes(state.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            my_bucket_middleware,
+        ))
+        .with_state(state)
+}
+
+fn my_dir_inner_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(dir_page_handler))
+        .route("/edit_controls", get(edit_dir_controls_handler))
+        .route("/edit", get(edit_dir_handler).post(post_edit_dir_handler))
+        .route(
+            "/delete",
+            get(get_delete_dir_handler).post(post_delete_dir_handler),
+        )
+        .route("/photo_grid", get(photo_listing_v2_handler))
+        .nest("/upload", my_upload_route(state.clone()))
+        .nest("/photos/{file_id}", my_photo_routes(state.clone()))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            dir_middleware,
+        ))
+        .with_state(state)
+}
+
+fn my_upload_route(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(upload_page_handler).post(upload_handler))
         .layer(DefaultBodyLimit::max(8000000))
@@ -110,16 +246,16 @@ fn upload_route(state: AppState) -> Router<AppState> {
         .with_state(state)
 }
 
-fn photo_routes(state: AppState) -> Router<AppState> {
+fn my_photo_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route(
             "/delete",
             get(confirm_delete_photo_handler).post(exec_delete_photo_handler),
         )
-        .route("/delete-controls", get(pre_delete_photo_handler))
+        .route("/delete_controls", get(pre_delete_photo_handler))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            photo_middleware,
+            file_middleware,
         ))
         .with_state(state)
 }
@@ -128,5 +264,38 @@ pub fn public_routes(state: AppState) -> Router {
     Router::new()
         .route("/login", get(login_handler).post(post_login_handler))
         .route("/logout", post(logout_handler))
+        .layer(middleware::map_response_with_state(
+            state.clone(),
+            response_mapper,
+        ))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ))
+        .route_layer(middleware::from_fn(pref_middleware))
         .with_state(state)
+}
+
+async fn response_mapper(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<Ctx>,
+    Extension(pref): Extension<Pref>,
+    headers: HeaderMap,
+    res: Response,
+) -> Response {
+    let error = res.extensions().get::<ErrorInfo>();
+    if let Some(e) = error {
+        if e.status_code.is_server_error() {
+            // Build the error response
+            error!("{}", e.message);
+            if let Some(bt) = &e.backtrace {
+                error!("{}", bt);
+            }
+        }
+
+        let full_page = headers.get("HX-Request").is_none();
+        let actor = ctx.actor().map(|t| t.clone());
+        return handle_error(&state, actor, &pref, e.clone(), full_page);
+    }
+    res
 }
