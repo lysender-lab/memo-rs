@@ -1,4 +1,3 @@
-use memo::bucket::BucketDto;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
@@ -51,19 +50,6 @@ pub struct UpdateDirFormData {
 #[derive(Clone, Serialize)]
 pub struct UpdateDirData {
     pub label: String,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-pub struct NewBucketFormData {
-    pub name: String,
-    pub images_only: Option<String>,
-    pub token: String,
-}
-
-#[derive(Clone, Serialize)]
-pub struct NewBucketData {
-    pub name: String,
-    pub images_only: bool,
 }
 
 pub async fn list_dirs(
@@ -191,91 +177,61 @@ pub async fn get_dir(
     Ok(dir)
 }
 
-pub async fn create_bucket(
+pub async fn update_dir(
     config: &Config,
     token: &str,
     client_id: &str,
-    form: &NewBucketFormData,
-) -> Result<BucketDto> {
+    bucket_id: &str,
+    dir_id: &str,
+    form: &UpdateDirFormData,
+) -> Result<Dir> {
     let csrf_result = verify_csrf_token(&form.token, &config.jwt_secret)?;
-    ensure!(csrf_result == "new_bucket", CsrfTokenSnafu);
+    ensure!(csrf_result == dir_id, CsrfTokenSnafu);
 
-    let url = format!("{}/clients/{}/buckets", &config.api_url, client_id);
-
-    let data = NewBucketData {
-        name: form.name.clone(),
-        images_only: match form.images_only {
-            Some(_) => true,
-            None => false,
-        },
+    let url = format!(
+        "{}/clients/{}/buckets/{}/dirs/{}",
+        &config.api_url, client_id, bucket_id, dir_id
+    );
+    let data = UpdateDirData {
+        label: form.label.clone(),
     };
-
     let response = Client::new()
-        .post(url)
+        .patch(url)
         .bearer_auth(token)
         .json(&data)
         .send()
         .await
         .context(HttpClientSnafu {
-            msg: "Unable to create bucket. Try again later.".to_string(),
+            msg: "Unable to update dir. Try again later.",
         })?;
 
     if !response.status().is_success() {
-        return Err(handle_response_error(response, "buckets", Error::BucketNotFound).await);
+        return Err(handle_response_error(response, "dirs", Error::AlbumNotFound).await);
     }
 
-    let bucket = response
-        .json::<BucketDto>()
+    let dir = response
+        .json::<Dir>()
         .await
         .context(HttpResponseParseSnafu {
-            msg: "Unable to parse bucket information.",
+            msg: "Unable to parse dir information.",
         })?;
 
-    Ok(bucket)
+    Ok(dir)
 }
 
-pub async fn get_bucket(
-    api_url: &str,
-    token: &str,
-    client_id: &str,
-    bucket_id: &str,
-) -> Result<BucketDto> {
-    let url = format!("{}/clients/{}/buckets/{}", api_url, client_id, bucket_id);
-    let response = Client::new()
-        .get(url)
-        .bearer_auth(token)
-        .send()
-        .await
-        .context(HttpClientSnafu {
-            msg: "Unable to get bucket. Try again later.",
-        })?;
-
-    if !response.status().is_success() {
-        return Err(handle_response_error(response, "buckets", Error::BucketNotFound).await);
-    }
-
-    let user = response
-        .json::<BucketDto>()
-        .await
-        .context(HttpResponseParseSnafu {
-            msg: "Unable to parse bucket.",
-        })?;
-
-    Ok(user)
-}
-
-pub async fn delete_bucket(
+pub async fn delete_dir(
     config: &Config,
     token: &str,
     client_id: &str,
     bucket_id: &str,
+    dir_id: &str,
     csrf_token: &str,
 ) -> Result<()> {
     let csrf_result = verify_csrf_token(&csrf_token, &config.jwt_secret)?;
-    ensure!(csrf_result == bucket_id, CsrfTokenSnafu);
+    ensure!(csrf_result == dir_id, CsrfTokenSnafu);
     let url = format!(
-        "{}/clients/{}/buckets/{}",
-        &config.api_url, client_id, bucket_id
+        "{}/clients/{}/buckets/{}/dirs/{}",
+        &config.api_url, client_id, bucket_id, dir_id
     );
     let response = Client::new()
         .delete(url)
@@ -283,11 +239,11 @@ pub async fn delete_bucket(
         .send()
         .await
         .context(HttpClientSnafu {
-            msg: "Unable to delete bucket. Try again later.".to_string(),
+            msg: "Unable to delete dir. Try again later.".to_string(),
         })?;
 
     if !response.status().is_success() {
-        return Err(handle_response_error(response, "buckets", Error::BucketNotFound).await);
+        return Err(handle_response_error(response, "dirs", Error::AlbumNotFound).await);
     }
 
     Ok(())

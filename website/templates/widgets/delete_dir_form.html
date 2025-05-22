@@ -1,0 +1,51 @@
+<form
+    method="post"
+    action="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/delete"
+    hx-post="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/delete"
+    hx-target="#edit-dir-container"
+>
+    <div class="columns">
+        <div class="column is-half">
+
+            {% match error_message %}
+                {% when Some with (msg) %}
+                <div class="mb-5">
+                    <article class="message is-danger">
+                        <div class="message-header">
+                            <p>Unable to delete dir</p>
+                        </div>
+                        <div class="message-body">
+                            {{ msg }}
+                        </div>
+                    </article>
+                </div>
+                {% when None %}
+            {% endmatch %}
+
+            <article class="message is-warning">
+                <div class="message-header">
+                    <p>Warning</p>
+                </div>
+                <div class="message-body">
+                    <p>Are you sure you want to delete the dir <strong>{{ dir.label }}</strong>?</p>
+
+                    <div class="mt-5 field is-grouped">
+                        <div class="control">
+                            <input type="hidden" name="token" value="{{ payload.token }}" />
+                            <button class="button is-danger" type="submit" name="submit">Delete</button>
+                        </div>
+                        <div class="control">
+                            <button
+                                class="button is-link is-light"
+                                hx-get="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/edit_controls"
+                                hx-target="#edit-dir-container"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </article>
+        </div>
+    </div>
+</form>

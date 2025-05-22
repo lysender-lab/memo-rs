@@ -28,7 +28,11 @@ use super::clients::{
     edit_client_controls_handler, edit_client_handler, new_client_handler,
     post_delete_client_handler, post_edit_client_handler, post_new_client_handler,
 };
-use super::dirs::{new_dir_handler, post_new_dir_handler, search_dirs_handler};
+use super::dirs::{
+    dir_page_handler, edit_dir_controls_handler, edit_dir_handler, get_delete_dir_handler,
+    new_dir_handler, post_delete_dir_handler, post_edit_dir_handler, post_new_dir_handler,
+    search_dirs_handler,
+};
 use super::middleware::{
     album_listing_middleware, album_middleware, auth_middleware, bucket_middleware,
     client_middleware, dir_middleware, my_bucket_middleware, photo_middleware, pref_middleware,
@@ -87,7 +91,7 @@ pub fn private_routes(state: AppState) -> Router {
         .route("/prefs/theme/dark", post(dark_theme_handler))
         .nest("/albums", album_routes(state.clone()))
         .nest("/clients", client_routes(state.clone()))
-        .nest("/buckets", my_bucket_routes(state.clone()))
+        .nest("/buckets/{bucket_id}", my_bucket_routes(state.clone()))
         .layer(middleware::map_response_with_state(
             state.clone(),
             response_mapper,
@@ -256,16 +260,10 @@ fn bucket_inner_routes(state: AppState) -> Router<AppState> {
 
 fn my_bucket_routes(state: AppState) -> Router<AppState> {
     Router::new()
-        .nest("/{bucket_id}", my_bucket_inner_routes(state.clone()))
-        .with_state(state)
-}
-
-fn my_bucket_inner_routes(state: AppState) -> Router<AppState> {
-    Router::new()
         .route("/", get(my_bucket_page_handler))
         .route("/search_dirs", get(search_dirs_handler))
         .route("/new_dir", get(new_dir_handler).post(post_new_dir_handler))
-        .nest("/dirs/{dir_id}", dir_inner_routes(state.clone()))
+        .nest("/dirs/{dir_id}", my_dir_inner_routes(state.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             my_bucket_middleware,
@@ -273,19 +271,16 @@ fn my_bucket_inner_routes(state: AppState) -> Router<AppState> {
         .with_state(state)
 }
 
-fn dir_inner_routes(state: AppState) -> Router<AppState> {
+fn my_dir_inner_routes(state: AppState) -> Router<AppState> {
     Router::new()
-        .route("/", get(photos_page_handler))
-        .route("/edit-controls", get(edit_album_controls_handler))
-        .route(
-            "/edit",
-            get(edit_album_handler).post(post_edit_album_handler),
-        )
+        .route("/", get(dir_page_handler))
+        .route("/edit_controls", get(edit_dir_controls_handler))
+        .route("/edit", get(edit_dir_handler).post(post_edit_dir_handler))
         .route(
             "/delete",
-            get(get_delete_album_handler).post(post_delete_album_handler),
+            get(get_delete_dir_handler).post(post_delete_dir_handler),
         )
-        .route("/photo-grid", get(photo_listing_handler))
+        .route("/photo_grid", get(photo_listing_handler))
         .nest("/upload", upload_route(state.clone()))
         .nest("/photos/{photo_id}", photo_routes(state.clone()))
         .route_layer(middleware::from_fn_with_state(

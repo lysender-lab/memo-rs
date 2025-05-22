@@ -8,7 +8,10 @@ use urlencoding::encode;
 
 use crate::models::PaginationLinks;
 use crate::models::tokens::TokenFormData;
-use crate::services::dirs::{Dir, NewDirFormData, SearchDirsParams, create_dir, list_dirs};
+use crate::services::dirs::{
+    Dir, NewDirFormData, SearchDirsParams, UpdateDirFormData, create_dir, delete_dir, list_dirs,
+    update_dir,
+};
 use crate::{
     Error, Result,
     ctx::Ctx,
@@ -181,7 +184,7 @@ pub async fn post_new_dir_handler(
 }
 
 #[derive(Template)]
-#[template(path = "pages/photos.html")]
+#[template(path = "pages/dir.html")]
 struct DirTemplate {
     t: TemplateData,
     bucket: BucketDto,
@@ -189,8 +192,8 @@ struct DirTemplate {
     updated: bool,
     can_edit: bool,
     can_delete: bool,
-    can_add_photos: bool,
-    can_delete_photos: bool,
+    can_add_files: bool,
+    can_delete_files: bool,
 }
 
 pub async fn dir_page_handler(
@@ -215,14 +218,266 @@ pub async fn dir_page_handler(
         updated: false,
         can_edit: enforce_policy(actor, Resource::Album, Action::Update).is_ok(),
         can_delete: enforce_policy(actor, Resource::Album, Action::Delete).is_ok(),
-        can_add_photos: enforce_policy(actor, Resource::Photo, Action::Create).is_ok(),
-        can_delete_photos: enforce_policy(actor, Resource::Photo, Action::Delete).is_ok(),
+        can_add_files: enforce_policy(actor, Resource::Photo, Action::Create).is_ok(),
+        can_delete_files: enforce_policy(actor, Resource::Photo, Action::Delete).is_ok(),
     };
 
     Ok(Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
         .context(ResponseBuilderSnafu)?)
+}
+
+#[derive(Template)]
+#[template(path = "widgets/edit_dir_controls.html")]
+struct EditDirControlsTemplate {
+    bucket: BucketDto,
+    dir: Dir,
+    updated: bool,
+    can_edit: bool,
+    can_delete: bool,
+    can_add_files: bool,
+    can_delete_files: bool,
+}
+
+/// Simply re-renders the edit and delete dir controls
+pub async fn edit_dir_controls_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(bucket): Extension<BucketDto>,
+    Extension(dir): Extension<Dir>,
+) -> Result<Response<Body>> {
+    let actor = ctx.actor().expect("actor is required");
+    let tpl = EditDirControlsTemplate {
+        bucket,
+        dir,
+        updated: false,
+        can_edit: enforce_policy(actor, Resource::Album, Action::Update).is_ok(),
+        can_delete: enforce_policy(actor, Resource::Album, Action::Delete).is_ok(),
+        can_add_files: enforce_policy(actor, Resource::Photo, Action::Create).is_ok(),
+        can_delete_files: enforce_policy(actor, Resource::Photo, Action::Delete).is_ok(),
+    };
+
+    Ok(Response::builder()
+        .status(200)
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)?)
+}
+
+#[derive(Template)]
+#[template(path = "widgets/edit_dir_form.html")]
+struct EditDirFormTemplate {
+    payload: UpdateDirFormData,
+    bucket: BucketDto,
+    dir: Dir,
+    error_message: Option<String>,
+    updated: bool,
+}
+
+/// Renders the edit album form
+pub async fn edit_dir_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(bucket): Extension<BucketDto>,
+    Extension(dir): Extension<Dir>,
+    State(state): State<AppState>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::Album, Action::Update)?;
+
+    let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
+
+    let label = dir.label.clone();
+    let tpl = EditDirFormTemplate {
+        bucket,
+        dir,
+        payload: UpdateDirFormData { label, token },
+        error_message: None,
+        updated: false,
+    };
+
+    Ok(Response::builder()
+        .status(200)
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)?)
+}
+
+/// Handles the edit album submission
+pub async fn post_edit_dir_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(bucket): Extension<BucketDto>,
+    Extension(dir): Extension<Dir>,
+    State(state): State<AppState>,
+    payload: Form<UpdateDirFormData>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let cid = bucket.client_id.clone();
+    let bid = bucket.id.clone();
+    let dir_id = dir.id.clone();
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::Album, Action::Update)?;
+
+    let token = create_csrf_token(&dir_id, &config.jwt_secret)?;
+
+    let mut tpl = EditDirFormTemplate {
+        bucket: bucket.clone(),
+        dir: dir.clone(),
+        payload: UpdateDirFormData {
+            label: "".to_string(),
+            token,
+        },
+        error_message: None,
+        updated: false,
+    };
+
+    tpl.payload.label = payload.label.clone();
+
+    let token = ctx.token().expect("token is required");
+    let result = update_dir(&config, token, &cid, &bid, &dir_id, &payload).await;
+    match result {
+        Ok(updated_dir) => {
+            tpl.dir = updated_dir;
+            tpl.updated = true;
+
+            // Render the controls again with an out-of-bound swap for title
+            let tpl = EditDirControlsTemplate {
+                bucket,
+                dir,
+                updated: true,
+                can_edit: enforce_policy(actor, Resource::Album, Action::Update).is_ok(),
+                can_delete: enforce_policy(actor, Resource::Album, Action::Delete).is_ok(),
+                can_add_files: enforce_policy(actor, Resource::Photo, Action::Create).is_ok(),
+                can_delete_files: enforce_policy(actor, Resource::Photo, Action::Delete).is_ok(),
+            };
+            Ok(Response::builder()
+                .status(200)
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
+        }
+        Err(err) => {
+            let status;
+            match err {
+                Error::Validation { msg } => {
+                    status = 400;
+                    tpl.error_message = Some(msg);
+                }
+                Error::LoginRequired => {
+                    status = 401;
+                    tpl.error_message = Some("Login required.".to_string());
+                }
+                any_err => {
+                    status = 500;
+                    tpl.error_message = Some(any_err.to_string());
+                }
+            }
+
+            Ok(Response::builder()
+                .status(status)
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
+        }
+    }
+}
+
+#[derive(Template)]
+#[template(path = "widgets/delete_dir_form.html")]
+struct DeleteDirTemplate {
+    bucket: BucketDto,
+    dir: Dir,
+    payload: TokenFormData,
+    error_message: Option<String>,
+}
+
+pub async fn get_delete_dir_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(bucket): Extension<BucketDto>,
+    Extension(dir): Extension<Dir>,
+    State(state): State<AppState>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::Album, Action::Delete)?;
+    let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
+
+    let tpl = DeleteDirTemplate {
+        bucket,
+        dir,
+        payload: TokenFormData { token },
+        error_message: None,
+    };
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)?)
+}
+
+/// Deletes album then redirect or show error
+pub async fn post_delete_dir_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(bucket): Extension<BucketDto>,
+    Extension(dir): Extension<Dir>,
+    State(state): State<AppState>,
+    payload: Form<TokenFormData>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::Album, Action::Delete)?;
+
+    let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
+
+    let auth_token = ctx.token().expect("token is required");
+
+    let result = delete_dir(
+        &config,
+        auth_token,
+        &bucket.client_id,
+        &bucket.id,
+        &dir.id,
+        &payload.token,
+    )
+    .await;
+
+    match result {
+        Ok(_) => {
+            let bid = bucket.id.clone();
+
+            // Render same form but trigger a redirect to home
+            let tpl = DeleteDirTemplate {
+                bucket,
+                dir,
+                payload: TokenFormData {
+                    token: "".to_string(),
+                },
+                error_message: None,
+            };
+            Ok(Response::builder()
+                .status(200)
+                .header("HX-Redirect", format!("/buckets/{}", &bid))
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
+        }
+        Err(err) => {
+            let error_info = ErrorInfo::from(&err);
+            let error_message = Some(error_info.message);
+
+            // Just render the form on first load or on error
+            let tpl = DeleteDirTemplate {
+                bucket,
+                dir,
+                payload: TokenFormData { token },
+                error_message,
+            };
+
+            Ok(Response::builder()
+                .status(error_info.status_code)
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
+        }
+    }
 }
 
 fn build_response(tpl: SearchDirsTemplate) -> Result<Response<Body>> {
