@@ -14,10 +14,7 @@ use crate::ctx::Ctx;
 use crate::error::ErrorInfo;
 use crate::models::Pref;
 use crate::run::AppState;
-use crate::web::{
-    error_handler, index_handler, login_handler, logout_handler, new_album_handler,
-    photo_listing_handler, photos_page_handler, post_login_handler, post_new_album_handler,
-};
+use crate::web::{error_handler, index_handler, login_handler, logout_handler, post_login_handler};
 
 use super::buckets::{
     bucket_controls_handler, bucket_page_handler, buckets_handler, delete_bucket_handler,
@@ -33,10 +30,10 @@ use super::dirs::{
     new_dir_handler, post_delete_dir_handler, post_edit_dir_handler, post_new_dir_handler,
     search_dirs_handler,
 };
+use super::files::photo_listing_v2_handler;
 use super::middleware::{
-    album_listing_middleware, album_middleware, auth_middleware, bucket_middleware,
-    client_middleware, dir_middleware, my_bucket_middleware, photo_middleware, pref_middleware,
-    require_auth_middleware, user_middleware,
+    auth_middleware, bucket_middleware, client_middleware, dir_middleware, my_bucket_middleware,
+    photo_middleware, pref_middleware, require_auth_middleware, user_middleware,
 };
 use super::my_bucket::my_bucket_page_handler;
 use super::users::{
@@ -46,10 +43,8 @@ use super::users::{
     user_controls_handler, user_page_handler, users_handler,
 };
 use super::{
-    album_listing_handler, confirm_delete_photo_handler, dark_theme_handler,
-    edit_album_controls_handler, edit_album_handler, exec_delete_photo_handler,
-    get_delete_album_handler, handle_error, light_theme_handler, post_delete_album_handler,
-    post_edit_album_handler, pre_delete_photo_handler, upload_handler, upload_page_handler,
+    confirm_delete_photo_handler, dark_theme_handler, exec_delete_photo_handler, handle_error,
+    light_theme_handler, pre_delete_photo_handler, upload_handler, upload_page_handler,
 };
 
 pub fn all_routes(state: AppState, frontend_dir: &PathBuf) -> Router {
@@ -89,7 +84,6 @@ pub fn private_routes(state: AppState) -> Router {
         .route("/", get(index_handler))
         .route("/prefs/theme/light", post(light_theme_handler))
         .route("/prefs/theme/dark", post(dark_theme_handler))
-        .nest("/albums", album_routes(state.clone()))
         .nest("/clients", client_routes(state.clone()))
         .nest("/buckets/{bucket_id}", my_bucket_routes(state.clone()))
         .layer(middleware::map_response_with_state(
@@ -108,39 +102,27 @@ pub fn private_routes(state: AppState) -> Router {
         .with_state(state)
 }
 
-fn album_routes(state: AppState) -> Router<AppState> {
-    Router::new()
-        .route("/listing", get(album_listing_handler))
-        .route("/new", get(new_album_handler).post(post_new_album_handler))
-        .nest("/{album_id}", album_inner_routes(state.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            album_listing_middleware,
-        ))
-        .with_state(state)
-}
-
-fn album_inner_routes(state: AppState) -> Router<AppState> {
-    Router::new()
-        .route("/", get(photos_page_handler))
-        .route("/edit-controls", get(edit_album_controls_handler))
-        .route(
-            "/edit",
-            get(edit_album_handler).post(post_edit_album_handler),
-        )
-        .route(
-            "/delete",
-            get(get_delete_album_handler).post(post_delete_album_handler),
-        )
-        .route("/photo-grid", get(photo_listing_handler))
-        .nest("/upload", upload_route(state.clone()))
-        .nest("/photos/{photo_id}", photo_routes(state.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            album_middleware,
-        ))
-        .with_state(state)
-}
+// fn album_inner_routes(state: AppState) -> Router<AppState> {
+//     Router::new()
+//         .route("/", get(photos_page_handler))
+//         .route("/edit-controls", get(edit_album_controls_handler))
+//         .route(
+//             "/edit",
+//             get(edit_album_handler).post(post_edit_album_handler),
+//         )
+//         .route(
+//             "/delete",
+//             get(get_delete_album_handler).post(post_delete_album_handler),
+//         )
+//         .route("/photo-grid", get(photo_listing_handler))
+//         .nest("/upload", upload_route(state.clone()))
+//         .nest("/photos/{photo_id}", photo_routes(state.clone()))
+//         .route_layer(middleware::from_fn_with_state(
+//             state.clone(),
+//             album_middleware,
+//         ))
+//         .with_state(state)
+// }
 
 fn upload_route(state: AppState) -> Router<AppState> {
     Router::new()
@@ -280,7 +262,7 @@ fn my_dir_inner_routes(state: AppState) -> Router<AppState> {
             "/delete",
             get(get_delete_dir_handler).post(post_delete_dir_handler),
         )
-        .route("/photo_grid", get(photo_listing_handler))
+        .route("/photo_grid", get(photo_listing_v2_handler))
         .nest("/upload", upload_route(state.clone()))
         .nest("/photos/{photo_id}", photo_routes(state.clone()))
         .route_layer(middleware::from_fn_with_state(

@@ -1,4 +1,3 @@
-pub mod albums;
 pub mod buckets;
 pub mod clients;
 pub mod dirs;
@@ -18,7 +17,6 @@ pub mod users;
 pub const AUTH_TOKEN_COOKIE: &str = "auth_token";
 pub const THEME_COOKIE: &str = "theme";
 
-pub use albums::*;
 pub use error::*;
 pub use index::*;
 pub use login::*;

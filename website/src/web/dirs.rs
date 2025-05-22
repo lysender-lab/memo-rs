@@ -61,9 +61,21 @@ pub async fn search_dirs_handler(
             }
             tpl.dirs = dirs.data;
             tpl.pagination = Some(PaginationLinks::new(&dirs.meta, "", &keyword_param));
-            build_response(tpl)
+
+            Ok(Response::builder()
+                .status(200)
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
         }
-        Err(err) => build_error_response(tpl, err),
+        Err(err) => {
+            let error_info = ErrorInfo::from(&err);
+            tpl.error_message = Some(error_info.message);
+
+            Ok(Response::builder()
+                .status(error_info.status_code)
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
+        }
     }
 }
 
@@ -247,6 +259,8 @@ pub async fn edit_dir_controls_handler(
     Extension(dir): Extension<Dir>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
+    let _ = enforce_policy(actor, Resource::Album, Action::Update)?;
+
     let tpl = EditDirControlsTemplate {
         bucket,
         dir,
@@ -337,13 +351,10 @@ pub async fn post_edit_dir_handler(
     let result = update_dir(&config, token, &cid, &bid, &dir_id, &payload).await;
     match result {
         Ok(updated_dir) => {
-            tpl.dir = updated_dir;
-            tpl.updated = true;
-
             // Render the controls again with an out-of-bound swap for title
             let tpl = EditDirControlsTemplate {
                 bucket,
-                dir,
+                dir: updated_dir,
                 updated: true,
                 can_edit: enforce_policy(actor, Resource::Album, Action::Update).is_ok(),
                 can_delete: enforce_policy(actor, Resource::Album, Action::Delete).is_ok(),
@@ -478,21 +489,4 @@ pub async fn post_delete_dir_handler(
                 .context(ResponseBuilderSnafu)?)
         }
     }
-}
-
-fn build_response(tpl: SearchDirsTemplate) -> Result<Response<Body>> {
-    Ok(Response::builder()
-        .status(200)
-        .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
-}
-
-fn build_error_response(mut tpl: SearchDirsTemplate, error: Error) -> Result<Response<Body>> {
-    let error_info = ErrorInfo::from(&error);
-    tpl.error_message = Some(error_info.message);
-
-    Ok(Response::builder()
-        .status(error_info.status_code)
-        .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
 }

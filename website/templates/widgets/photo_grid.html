@@ -12,9 +12,9 @@
 {% if photo.id == last_item %}
     {% match next_page %}
         {% when Some with (page) %}
-            hx-get="/albums/{{ album.id }}/photo-grid?page={{ page }}"
-            hx-trigger="revealed"
-            hx-swap="afterend"
+        hx-get="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/photo_grid?page={{ page }}"
+        hx-trigger="revealed"
+        hx-swap="afterend"
         {% when None %}
     {% endmatch %}
 {% endif %}
@@ -23,7 +23,7 @@
         <div class="photo-pre-delete is-flex is-justify-content-end">
             <button
                 class="button is-small"
-                hx-get="/albums/{{ photo.dir_id }}/photos/{{ photo.id }}/delete"
+                hx-get="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/files/{{ photo.id }}/delete"
                 hx-target="closest .photo-item-controls"
                 hx-swap="innerHTML"
             >
@@ -56,17 +56,17 @@
     {% when Some with (page_meta) %}
         {% if page_meta.total_records > 0 %}
             {% if page_meta.page == page_meta.total_pages as i32 %}
-                <span id="photos-count-w" hx-swap-oob="true">
-                    <span class="current-count">{{ page_meta.total_records }}</span>
-                    of
-                    <span class="total-records">{{ page_meta.total_records }}</span>
-                </span>
+            <span id="photos-count-w" hx-swap-oob="true">
+                <span class="current-count">{{ page_meta.total_records }}</span>
+                of
+                <span class="total-records">{{ page_meta.total_records }}</span>
+            </span>
             {% else %}
-                <span id="photos-count-w" hx-swap-oob="true">
-                    <span class="current-count">{{ page_meta.page * page_meta.per_page }}</span>
-                    of
-                    <span class="total-records">{{ page_meta.total_records }}</span>
-                </span>
+            <span id="photos-count-w" hx-swap-oob="true">
+                <span class="current-count">{{ page_meta.page * page_meta.per_page }}</span>
+                of
+                <span class="total-records">{{ page_meta.total_records }}</span>
+            </span>
             {% endif %}
         {% endif %}
     {% when None %}
