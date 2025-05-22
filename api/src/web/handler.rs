@@ -384,7 +384,7 @@ pub async fn create_user_handler(
         msg: "Invalid request payload",
     })?;
 
-    let user = state.db.users.create(&client.id, &data).await?;
+    let user = state.db.users.create(&client.id, &data, false).await?;
     let dto: UserDto = user.into();
 
     Ok(JsonResponse::with_status(

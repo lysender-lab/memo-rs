@@ -134,7 +134,7 @@ pub async fn change_current_password(
 pub trait UserRepoable: Send + Sync {
     async fn list(&self, client_id: &str) -> Result<Vec<User>>;
 
-    async fn create(&self, client_id: &str, data: &NewUser) -> Result<User>;
+    async fn create(&self, client_id: &str, data: &NewUser, is_setup: bool) -> Result<User>;
 
     async fn get(&self, id: &str) -> Result<Option<User>>;
 
@@ -185,7 +185,7 @@ impl UserRepoable for UserRepo {
         Ok(items)
     }
 
-    async fn create(&self, client_id: &str, data: &NewUser) -> Result<User> {
+    async fn create(&self, client_id: &str, data: &NewUser, is_setup: bool) -> Result<User> {
         let errors = data.validate();
         ensure!(
             errors.is_ok(),
@@ -213,12 +213,14 @@ impl UserRepoable for UserRepo {
         let roles = to_roles(roles).context(InvalidRolesSnafu)?;
 
         // Should not allow creating a system admin
-        ensure!(
-            !roles.contains(&Role::SystemAdmin),
-            ValidationSnafu {
-                msg: "Creating a system admin not allowed".to_string(),
-            }
-        );
+        if !is_setup {
+            ensure!(
+                !roles.contains(&Role::SystemAdmin),
+                ValidationSnafu {
+                    msg: "Creating a system admin not allowed".to_string(),
+                }
+            );
+        }
 
         let data_copy = data.clone();
         let today = chrono::Utc::now().timestamp();
@@ -510,7 +512,7 @@ impl UserRepoable for UserTestRepo {
         Ok(filtered)
     }
 
-    async fn create(&self, _client_id: &str, _data: &NewUser) -> Result<User> {
+    async fn create(&self, _client_id: &str, _data: &NewUser, _is_setup: bool) -> Result<User> {
         Err("Not supported".into())
     }
 

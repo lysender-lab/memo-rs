@@ -51,7 +51,7 @@ pub async fn run_setup(config: &Config) -> Result<()> {
         return Ok(());
     }
 
-    let user = state.db.users.create(&client_id, &new_user).await?;
+    let user = state.db.users.create(&client_id, &new_user, true).await?;
     println!(
         "{{ id = {}, username = {} status = {} }}",
         user.id, user.username, user.status
