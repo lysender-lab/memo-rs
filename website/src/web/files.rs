@@ -1,20 +1,17 @@
 use askama::Template;
+use axum::Form;
 use axum::body::Bytes;
 use axum::extract::Query;
 use axum::http::HeaderMap;
 use axum::{Extension, body::Body, extract::State, response::Response};
 use memo::bucket::BucketDto;
 use memo::pagination::PaginatedMeta;
-use memo::role::Permission;
 use snafu::ResultExt;
-use urlencoding::encode;
 
 use crate::models::tokens::TokenFormData;
-use crate::models::{ListFilesParams, ListPhotosParams, PaginationLinks, Photo, UploadParams};
-use crate::services::buckets::{NewBucketFormData, create_bucket, delete_bucket};
-use crate::services::dirs::{Dir, NewDirFormData, SearchDirsParams, create_dir, list_dirs};
-use crate::services::files::list_files;
-use crate::services::photos::{list_photos, upload_photo};
+use crate::models::{ListFilesParams, Photo, UploadParams};
+use crate::services::dirs::Dir;
+use crate::services::files::{delete_photo, list_files, upload_photo};
 use crate::{
     Error, Result,
     ctx::Ctx,
@@ -194,5 +191,146 @@ pub async fn upload_handler(
                 .context(ResponseBuilderSnafu)?)
         }
         Err(err) => Ok(handle_error_message(&err)),
+    }
+}
+
+#[derive(Template)]
+#[template(path = "widgets/pre_delete_photo_form.html")]
+struct PreDeletePhotoTemplate {
+    bucket: BucketDto,
+    dir: Dir,
+    photo: Photo,
+}
+
+#[derive(Template)]
+#[template(path = "widgets/confirm_delete_photo_form.html")]
+struct ConfirmDeletePhotoTemplate {
+    bucket: BucketDto,
+    dir: Dir,
+    photo: Photo,
+    payload: TokenFormData,
+    error_message: Option<String>,
+}
+
+/// Shows pre-delete form controls
+pub async fn pre_delete_photo_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(bucket): Extension<BucketDto>,
+    Extension(dir): Extension<Dir>,
+    Extension(photo): Extension<Photo>,
+) -> Result<Response<Body>> {
+    let actor = ctx.actor().expect("actor is required");
+
+    if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Delete) {
+        return Ok(handle_error_message(&err));
+    }
+
+    // Just render the form on first load or on error
+    let tpl = PreDeletePhotoTemplate { bucket, dir, photo };
+
+    Ok(Response::builder()
+        .status(200)
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)?)
+}
+
+/// Shows delete/cancel form controls
+pub async fn confirm_delete_photo_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(bucket): Extension<BucketDto>,
+    Extension(dir): Extension<Dir>,
+    Extension(photo): Extension<Photo>,
+    State(state): State<AppState>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+
+    if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Delete) {
+        return Ok(handle_error_message(&err));
+    }
+
+    let Ok(token) = create_csrf_token(&photo.id, &config.jwt_secret) else {
+        let error = Error::Whatever {
+            msg: "Failed to initialize delete photo form.".to_string(),
+        };
+        return Ok(handle_error_message(&error));
+    };
+
+    // Just render the form on first load or on error
+    let tpl = ConfirmDeletePhotoTemplate {
+        bucket,
+        dir,
+        photo,
+        payload: TokenFormData { token },
+        error_message: None,
+    };
+
+    Ok(Response::builder()
+        .status(200)
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)?)
+}
+
+pub async fn exec_delete_photo_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(bucket): Extension<BucketDto>,
+    Extension(dir): Extension<Dir>,
+    Extension(photo): Extension<Photo>,
+    State(state): State<AppState>,
+    payload: Form<TokenFormData>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+    let cid = bucket.client_id.clone();
+    let bid = bucket.id.clone();
+    let dir_id = dir.id.clone();
+
+    if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Delete) {
+        return Ok(handle_error_message(&err));
+    }
+
+    let Ok(token) = create_csrf_token(&photo.id, &config.jwt_secret) else {
+        return Ok(handle_error_message(&Error::Whatever {
+            msg: "Failed to initialize delete photo form.".to_string(),
+        }));
+    };
+
+    let auth_token = ctx.token().expect("token is required");
+    let result = delete_photo(
+        &config,
+        auth_token,
+        &cid,
+        &bid,
+        &dir_id,
+        &photo.id,
+        &payload.token,
+    )
+    .await;
+    match result {
+        Ok(_) => {
+            return Ok(Response::builder()
+                .status(204)
+                .header("HX-Trigger", "PhotoDeletedEvent")
+                .body(Body::from("".to_string()))
+                .context(ResponseBuilderSnafu)?);
+        }
+        Err(err) => {
+            let error_info = ErrorInfo::from(&err);
+
+            // Re-render the form with a new token
+            // We may need to render an error message somewhere in the page
+            let tpl = ConfirmDeletePhotoTemplate {
+                bucket,
+                dir,
+                photo,
+                payload: TokenFormData { token },
+                error_message: Some(error_info.message),
+            };
+
+            Ok(Response::builder()
+                .status(error_info.status_code)
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
+        }
     }
 }

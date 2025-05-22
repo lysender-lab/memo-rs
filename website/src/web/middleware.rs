@@ -6,23 +6,22 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use memo::bucket::BucketDto;
-use snafu::{OptionExt, ensure};
+use snafu::ensure;
 
 use crate::{
     Error, Result,
     ctx::{Ctx, CtxValue},
-    error::{ErrorInfo, ForbiddenSnafu, WhateverSnafu},
+    error::{ErrorInfo, ForbiddenSnafu},
     models::{
-        AlbumParams, BucketParams, ClientParams, MyBucketParams, MyDirParams, PhotoParams, Pref,
-        UserParams,
+        BucketParams, ClientParams, MyBucketParams, MyDirParams, MyFileParams, Pref, UserParams,
     },
     run::AppState,
     services::{
         auth::authenticate_token,
         buckets::get_bucket,
         clients::get_client,
-        dirs::get_dir,
-        photos::{get_album, get_photo},
+        dirs::{Dir, get_dir},
+        files::get_photo,
         users::get_user,
     },
     web::{Action, Resource, enforce_policy, handle_error},
@@ -88,47 +87,6 @@ pub async fn require_auth_middleware(
     Ok(next.run(req).await)
 }
 
-pub async fn album_listing_middleware(
-    Extension(ctx): Extension<Ctx>,
-    req: Request,
-    next: Next,
-) -> Result<Response> {
-    let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::Album, Action::Read)?;
-
-    Ok(next.run(req).await)
-}
-
-pub async fn album_middleware(
-    State(state): State<AppState>,
-    Extension(ctx): Extension<Ctx>,
-    Path(params): Path<AlbumParams>,
-    mut req: Request,
-    next: Next,
-) -> Result<Response> {
-    let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::Photo, Action::Read)?;
-
-    let default_bucket_id = actor.default_bucket_id.clone();
-    let bucket_id = default_bucket_id.context(WhateverSnafu {
-        msg: "No default bucket.",
-    })?;
-
-    let album_id = params.album_id.expect("album_id is required");
-    let token = ctx.token().expect("token is required");
-    let album = get_album(
-        &state.config.api_url,
-        token,
-        &actor.client_id,
-        &bucket_id,
-        &album_id,
-    )
-    .await?;
-
-    req.extensions_mut().insert(album);
-    Ok(next.run(req).await)
-}
-
 pub async fn dir_middleware(
     Extension(ctx): Extension<Ctx>,
     Extension(bucket): Extension<BucketDto>,
@@ -154,33 +112,27 @@ pub async fn dir_middleware(
     Ok(next.run(req).await)
 }
 
-pub async fn photo_middleware(
+pub async fn file_middleware(
     State(state): State<AppState>,
     Extension(ctx): Extension<Ctx>,
-    Path(params): Path<PhotoParams>,
+    Extension(bucket): Extension<BucketDto>,
+    Extension(dir): Extension<Dir>,
+    Path(params): Path<MyFileParams>,
     mut req: Request,
     next: Next,
 ) -> Result<Response> {
     let actor = ctx.actor().expect("actor is required");
     let _ = enforce_policy(actor, Resource::Photo, Action::Read)?;
 
-    let album_id = params.album_id.expect("album_id is required");
-    let photo_id = params.photo_id.expect("photo_id is required");
-
-    let default_bucket_id = actor.default_bucket_id.clone();
-    let bucket_id = default_bucket_id.context(WhateverSnafu {
-        msg: "No default bucket.",
-    })?;
-
     let token = ctx.token().expect("token is required");
     let config = state.config.clone();
     let photo = get_photo(
         &config.api_url,
         token,
-        &actor.client_id,
-        &bucket_id,
-        &album_id,
-        &photo_id,
+        &bucket.client_id,
+        &bucket.id,
+        &dir.id,
+        &params.file_id,
     )
     .await?;
 

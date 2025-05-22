@@ -30,10 +30,13 @@ use super::dirs::{
     new_dir_handler, post_delete_dir_handler, post_edit_dir_handler, post_new_dir_handler,
     search_dirs_handler,
 };
-use super::files::{photo_listing_v2_handler, upload_handler, upload_page_handler};
+use super::files::{
+    confirm_delete_photo_handler, exec_delete_photo_handler, photo_listing_v2_handler,
+    pre_delete_photo_handler, upload_handler, upload_page_handler,
+};
 use super::middleware::{
-    auth_middleware, bucket_middleware, client_middleware, dir_middleware, my_bucket_middleware,
-    photo_middleware, pref_middleware, require_auth_middleware, user_middleware,
+    auth_middleware, bucket_middleware, client_middleware, dir_middleware, file_middleware,
+    my_bucket_middleware, pref_middleware, require_auth_middleware, user_middleware,
 };
 use super::my_bucket::my_bucket_page_handler;
 use super::users::{
@@ -98,50 +101,6 @@ pub fn private_routes(state: AppState) -> Router {
         .route_layer(middleware::from_fn(pref_middleware))
         .with_state(state)
 }
-
-// fn album_inner_routes(state: AppState) -> Router<AppState> {
-//     Router::new()
-//         .route("/", get(photos_page_handler))
-//         .route("/edit-controls", get(edit_album_controls_handler))
-//         .route(
-//             "/edit",
-//             get(edit_album_handler).post(post_edit_album_handler),
-//         )
-//         .route(
-//             "/delete",
-//             get(get_delete_album_handler).post(post_delete_album_handler),
-//         )
-//         .route("/photo-grid", get(photo_listing_handler))
-//         .nest("/upload", upload_route(state.clone()))
-//         .nest("/photos/{photo_id}", photo_routes(state.clone()))
-//         .route_layer(middleware::from_fn_with_state(
-//             state.clone(),
-//             album_middleware,
-//         ))
-//         .with_state(state)
-// }
-
-fn upload_route(state: AppState) -> Router<AppState> {
-    Router::new()
-        .route("/", get(upload_page_handler).post(upload_handler))
-        .layer(DefaultBodyLimit::max(8000000))
-        .layer(RequestBodyLimitLayer::new(8000000))
-        .with_state(state)
-}
-
-// fn photo_routes(state: AppState) -> Router<AppState> {
-//     Router::new()
-//         .route(
-//             "/delete",
-//             get(confirm_delete_photo_handler).post(exec_delete_photo_handler),
-//         )
-//         .route("/delete-controls", get(pre_delete_photo_handler))
-//         .route_layer(middleware::from_fn_with_state(
-//             state.clone(),
-//             photo_middleware,
-//         ))
-//         .with_state(state)
-// }
 
 fn client_routes(state: AppState) -> Router<AppState> {
     Router::new()
@@ -260,11 +219,33 @@ fn my_dir_inner_routes(state: AppState) -> Router<AppState> {
             get(get_delete_dir_handler).post(post_delete_dir_handler),
         )
         .route("/photo_grid", get(photo_listing_v2_handler))
-        .nest("/upload", upload_route(state.clone()))
-        //.nest("/photos/{photo_id}", photo_routes(state.clone()))
+        .nest("/upload", my_upload_route(state.clone()))
+        .nest("/photos/{file_id}", my_photo_routes(state.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             dir_middleware,
+        ))
+        .with_state(state)
+}
+
+fn my_upload_route(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(upload_page_handler).post(upload_handler))
+        .layer(DefaultBodyLimit::max(8000000))
+        .layer(RequestBodyLimitLayer::new(8000000))
+        .with_state(state)
+}
+
+fn my_photo_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/delete",
+            get(confirm_delete_photo_handler).post(exec_delete_photo_handler),
+        )
+        .route("/delete_controls", get(pre_delete_photo_handler))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            file_middleware,
         ))
         .with_state(state)
 }

@@ -32,6 +32,13 @@ pub struct MyDirParams {
 }
 
 #[derive(Deserialize)]
+pub struct MyFileParams {
+    pub bucket_id: String,
+    pub dir_id: String,
+    pub file_id: String,
+}
+
+#[derive(Deserialize)]
 pub struct AlbumParams {
     pub album_id: Option<String>,
 }
