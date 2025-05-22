@@ -39,6 +39,10 @@ use super::middleware::{
     my_bucket_middleware, pref_middleware, require_auth_middleware, user_middleware,
 };
 use super::my_bucket::my_bucket_page_handler;
+use super::profile::{
+    change_user_password_handler, post_change_password_handler, profile_controls_handler,
+    profile_page_handler,
+};
 use super::users::{
     delete_user_handler, new_user_handler, post_delete_user_handler, post_new_user_handler,
     post_reset_password_handler, post_update_user_role_handler, post_update_user_status_handler,
@@ -84,6 +88,12 @@ pub fn private_routes(state: AppState) -> Router {
         .route("/", get(index_handler))
         .route("/prefs/theme/light", post(light_theme_handler))
         .route("/prefs/theme/dark", post(dark_theme_handler))
+        .route("/profile", get(profile_page_handler))
+        .route("/profile/profile_controls", get(profile_controls_handler))
+        .route(
+            "/profile/change_password",
+            get(change_user_password_handler).post(post_change_password_handler),
+        )
         .nest("/clients", client_routes(state.clone()))
         .nest("/buckets/{bucket_id}", my_bucket_routes(state.clone()))
         .layer(middleware::map_response_with_state(

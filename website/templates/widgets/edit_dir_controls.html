@@ -1,16 +1,25 @@
 <div class="is-flex is-justify-content-space-between">
     {% if can_add_files %}
     <div>
-        <a href="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/upload" class="button is-primary">
-            <span class="icon is-small">
-                <i class="fas fa-plus"></i>
-            </span>
-            {% if bucket.images_only %}
-            <span>Add Photos</span>
-            {% else %}
-            <span>Add Files</span>
-            {% endif %}
-        </a>
+        <div class="buttons">
+            <a class="button" href="/buckets/{{ bucket.id }}">
+                <span class="icon is-small">
+                    <i class="fas fa-arrow-left"></i>
+                </span>
+                <span>Back</span>
+            </a>
+
+            <a href="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/upload" class="button is-primary">
+                <span class="icon is-small">
+                    <i class="fas fa-plus"></i>
+                </span>
+                {% if bucket.images_only %}
+                <span>Add Photos</span>
+                {% else %}
+                <span>Add Files</span>
+                {% endif %}
+            </a>
+        </div>
     </div>
     {% endif %}
 

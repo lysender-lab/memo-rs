@@ -61,6 +61,20 @@ pub struct ResetPasswordData {
     pub password: String,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ChangePasswordFormData {
+    pub token: String,
+    pub current_password: String,
+    pub new_password: String,
+    pub confirm_new_password: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ChangePasswordData {
+    pub current_password: String,
+    pub new_password: String,
+}
+
 pub async fn list_users(api_url: &str, token: &str, client_id: &str) -> Result<Vec<UserDto>> {
     let url = format!("{}/clients/{}/users", api_url, client_id);
 
@@ -285,7 +299,7 @@ pub async fn reset_user_password(
         .send()
         .await
         .context(HttpClientSnafu {
-            msg: "Unable to update user. Try again later.",
+            msg: "Unable to update user password. Try again later.",
         })?;
 
     if !response.status().is_success() {
@@ -300,6 +314,46 @@ pub async fn reset_user_password(
         })?;
 
     Ok(user)
+}
+
+pub async fn change_user_password(
+    config: &Config,
+    token: &str,
+    user_id: &str,
+    form: &ChangePasswordFormData,
+) -> Result<()> {
+    let csrf_result = verify_csrf_token(&form.token, &config.jwt_secret)?;
+    ensure!(&csrf_result == user_id, CsrfTokenSnafu);
+
+    ensure!(
+        &form.new_password == &form.confirm_new_password,
+        ValidationSnafu {
+            msg: "Passwords must match."
+        }
+    );
+
+    let url = format!("{}/user/change_password", &config.api_url);
+
+    let data = ChangePasswordData {
+        current_password: form.current_password.clone(),
+        new_password: form.new_password.clone(),
+    };
+
+    let response = Client::new()
+        .post(url)
+        .bearer_auth(token)
+        .json(&data)
+        .send()
+        .await
+        .context(HttpClientSnafu {
+            msg: "Unable to update user password. Try again later.",
+        })?;
+
+    if !response.status().is_success() {
+        return Err(handle_response_error(response, "users", Error::UserNotFound).await);
+    }
+
+    Ok(())
 }
 
 pub async fn delete_user(

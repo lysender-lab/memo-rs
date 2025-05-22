@@ -10,6 +10,7 @@ pub mod middleware;
 pub mod my_bucket;
 pub mod policies;
 pub mod pref;
+pub mod profile;
 pub mod routes;
 pub mod users;
 
