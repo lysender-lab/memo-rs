@@ -4,7 +4,6 @@ pub mod captcha;
 pub mod clients;
 pub mod dirs;
 pub mod files;
-pub mod photos;
 pub mod token;
 pub mod users;
 
