@@ -284,7 +284,6 @@ struct EditDirFormTemplate {
     bucket: BucketDto,
     dir: Dir,
     error_message: Option<String>,
-    updated: bool,
 }
 
 /// Renders the edit album form
@@ -307,7 +306,6 @@ pub async fn edit_dir_handler(
         dir,
         payload: UpdateDirFormData { label, token },
         error_message: None,
-        updated: false,
     };
 
     Ok(Response::builder()
@@ -342,7 +340,6 @@ pub async fn post_edit_dir_handler(
             token,
         },
         error_message: None,
-        updated: false,
     };
 
     tpl.payload.label = payload.label.clone();

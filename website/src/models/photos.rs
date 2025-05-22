@@ -1,52 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Deserialize)]
-pub struct Album {
-    pub id: String,
-
-    #[allow(dead_code)]
-    pub bucket_id: String,
-
-    #[allow(dead_code)]
-    pub name: String,
-
-    pub label: String,
-
-    #[allow(dead_code)]
-    pub file_count: i64,
-
-    #[allow(dead_code)]
-    pub created_at: i64,
-
-    #[allow(dead_code)]
-    pub updated_at: i64,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-pub struct NewAlbumForm {
-    pub name: String,
-    pub label: String,
-    pub token: String,
-}
-
-#[derive(Clone, Serialize)]
-pub struct NewAlbum {
-    pub name: String,
-    pub label: String,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-pub struct UpdateAlbumForm {
-    pub label: String,
-    pub token: String,
-}
-
-#[derive(Clone, Serialize)]
-pub struct UpdateAlbum {
-    pub label: String,
-}
-
-#[derive(Clone, Deserialize)]
 pub struct FileObject {
     pub id: String,
     pub dir_id: String,

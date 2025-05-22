@@ -1,15 +1,11 @@
 use axum::body::Bytes;
 use axum::http::HeaderMap;
-use memo::file::FileDto;
 use reqwest::Client;
 use snafu::{ResultExt, ensure};
 
 use crate::config::Config;
 use crate::error::{CsrfTokenSnafu, HttpClientSnafu, HttpResponseParseSnafu};
-use crate::models::{
-    Album, FileObject, ListAlbumsParams, ListFilesParams, ListPhotosParams, NewAlbum, NewAlbumForm,
-    Photo, UpdateAlbum, UpdateAlbumForm,
-};
+use crate::models::{FileObject, ListFilesParams, Photo};
 use crate::services::handle_response_error;
 use crate::services::token::verify_csrf_token;
 use crate::{Error, Result};

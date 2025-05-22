@@ -4,7 +4,7 @@ use axum::{Extension, body::Body, extract::State, response::Response};
 use memo::bucket::BucketDto;
 use snafu::ResultExt;
 
-use crate::models::ListAlbumsParams;
+use crate::models::ListDirsParams;
 use crate::{
     Result,
     ctx::Ctx,
@@ -26,7 +26,7 @@ pub async fn my_bucket_page_handler(
     Extension(pref): Extension<Pref>,
     Extension(bucket): Extension<BucketDto>,
     State(state): State<AppState>,
-    Query(query): Query<ListAlbumsParams>,
+    Query(query): Query<ListDirsParams>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
