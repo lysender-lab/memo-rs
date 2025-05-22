@@ -15,7 +15,7 @@
         <input type="hidden" name="token" value="{{ payload.token }}" />
         <button
             class="button is-small mr-2"
-            hx-get="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/photos/{{ photo.id }}/delete-controls"
+            hx-get="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/photos/{{ photo.id }}/delete_controls"
             hx-target="closest .photo-item-controls"
             hx-swap="innnerHTML"
         >
