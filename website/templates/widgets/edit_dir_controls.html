@@ -32,7 +32,7 @@
         <div class="dropdown-trigger">
             <button
                 id="btn-dir-menu-trigger"
-                class="button"
+                :class="edit_photos ? 'button is-info' : 'button'"
                 aria-haspopup="true"
                 aria-controls="dropdown-menu"
                 @click="open = !open"
@@ -46,7 +46,7 @@
             <div class="dropdown-content">
                 {% if can_delete_files %}
                 <a
-                    class="dropdown-item"
+                    :class="edit_photos ? 'dropdown-item is-active' : 'dropdown-item'"
                     id="menu-edit-photos"
                     @click="open = !open; edit_photos = !edit_photos"
                 >
