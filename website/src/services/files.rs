@@ -1,15 +1,125 @@
 use axum::body::Bytes;
 use axum::http::HeaderMap;
+use memo::file::{ImgDimension, ImgVersion, ImgVersionDto};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 
 use crate::config::Config;
 use crate::error::{CsrfTokenSnafu, HttpClientSnafu, HttpResponseParseSnafu};
-use crate::models::{FileObject, ListFilesParams, Photo};
+use crate::models::ListFilesParams;
 use crate::services::handle_response_error;
 use crate::services::token::verify_csrf_token;
 use crate::{Error, Result};
 use memo::pagination::Paginated;
+
+#[derive(Clone, Deserialize)]
+pub struct FileObject {
+    pub id: String,
+    pub dir_id: String,
+    pub name: String,
+    pub filename: String,
+    pub content_type: String,
+    pub size: i64,
+
+    // Only available on non-image files
+    #[allow(dead_code)]
+    pub url: Option<String>,
+
+    pub is_image: bool,
+
+    // Only available for image files, main url is in orig version
+    pub img_versions: Option<Vec<ImgVersionDto>>,
+
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct Photo {
+    pub id: String,
+    pub dir_id: String,
+    pub name: String,
+    pub filename: String,
+    pub content_type: String,
+    pub size: i64,
+    pub orig: PhotoVersionDto,
+    pub preview: PhotoVersionDto,
+    pub thumb: PhotoVersionDto,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct PhotoVersionDto {
+    pub version: ImgVersion,
+    pub dimension: ImgDimension,
+    pub url: String,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct UploadResult {
+    pub error_message: Option<String>,
+    pub photo: Option<Photo>,
+    pub next_token: String,
+}
+
+impl TryFrom<FileObject> for Photo {
+    type Error = String;
+
+    fn try_from(file: FileObject) -> core::result::Result<Self, Self::Error> {
+        if !file.is_image {
+            return Err("File is not an image".into());
+        }
+
+        let Some(versions) = file.img_versions else {
+            return Err("Missing image versions".into());
+        };
+
+        let versions: Vec<PhotoVersionDto> = versions
+            .into_iter()
+            .filter_map(|v| match v.url {
+                None => None,
+                Some(url) => Some(PhotoVersionDto {
+                    version: v
+                        .version
+                        .to_string()
+                        .as_str()
+                        .try_into()
+                        .expect("Photo version must be valid"),
+                    dimension: v.dimension,
+                    url,
+                }),
+            })
+            .collect();
+
+        let orig = versions.iter().find(|v| v.version == ImgVersion::Original);
+        let mut preview = versions.iter().find(|v| v.version == ImgVersion::Preview);
+        let thumb = versions.iter().find(|v| v.version == ImgVersion::Thumbnail);
+
+        if preview.is_none() && orig.is_some() {
+            preview = orig.clone();
+        }
+
+        if orig.is_none() || preview.is_none() || thumb.is_none() {
+            return Err("Missing image versions".into());
+        }
+
+        Ok(Photo {
+            id: file.id,
+            dir_id: file.dir_id,
+            name: file.name,
+            filename: file.filename,
+            content_type: file.content_type,
+            size: file.size,
+            orig: orig.expect("orig version must be present").clone(),
+            preview: preview.expect("preview version must be present").clone(),
+            thumb: thumb.expect("thumb version must be present").clone(),
+            created_at: file.created_at,
+            updated_at: file.updated_at,
+        })
+    }
+}
 
 pub async fn list_files(
     api_url: &str,
