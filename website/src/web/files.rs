@@ -1,5 +1,7 @@
 use askama::Template;
+use axum::body::Bytes;
 use axum::extract::Query;
+use axum::http::HeaderMap;
 use axum::{Extension, body::Body, extract::State, response::Response};
 use memo::bucket::BucketDto;
 use memo::pagination::PaginatedMeta;
@@ -8,11 +10,11 @@ use snafu::ResultExt;
 use urlencoding::encode;
 
 use crate::models::tokens::TokenFormData;
-use crate::models::{ListFilesParams, ListPhotosParams, PaginationLinks, Photo};
+use crate::models::{ListFilesParams, ListPhotosParams, PaginationLinks, Photo, UploadParams};
 use crate::services::buckets::{NewBucketFormData, create_bucket, delete_bucket};
 use crate::services::dirs::{Dir, NewDirFormData, SearchDirsParams, create_dir, list_dirs};
 use crate::services::files::list_files;
-use crate::services::photos::list_photos;
+use crate::services::photos::{list_photos, upload_photo};
 use crate::{
     Error, Result,
     ctx::Ctx,
@@ -22,6 +24,8 @@ use crate::{
     services::token::create_csrf_token,
     web::{Action, Resource, enforce_policy},
 };
+
+use super::handle_error_message;
 
 #[derive(Template)]
 #[template(path = "widgets/photo_grid.html")]
@@ -95,5 +99,100 @@ pub async fn photo_listing_v2_handler(
                 .body(Body::from(tpl.render().context(TemplateSnafu)?))
                 .context(ResponseBuilderSnafu)?)
         }
+    }
+}
+
+#[derive(Template)]
+#[template(path = "pages/upload_photos.html")]
+struct UploadPageTemplate {
+    t: TemplateData,
+    bucket: BucketDto,
+    dir: Dir,
+    token: String,
+}
+
+#[derive(Template)]
+#[template(path = "widgets/photo_grid_item.html")]
+struct UploadedPhotoTemplate {
+    theme: String,
+    photo: Photo,
+}
+
+pub async fn upload_page_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(pref): Extension<Pref>,
+    Extension(bucket): Extension<BucketDto>,
+    Extension(dir): Extension<Dir>,
+    State(state): State<AppState>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+
+    let actor = ctx.actor().expect("actor is required");
+    let _ = enforce_policy(actor, Resource::Photo, Action::Create)?;
+
+    let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
+    let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
+
+    t.title = format!("Photos - {} - Upload Photos", &dir.label);
+    t.scripts = vec![config.assets.upload_js.clone()];
+
+    let tpl = UploadPageTemplate {
+        t,
+        bucket,
+        dir,
+        token,
+    };
+
+    Ok(Response::builder()
+        .status(200)
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)?)
+}
+
+pub async fn upload_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(pref): Extension<Pref>,
+    Extension(bucket): Extension<BucketDto>,
+    Extension(dir): Extension<Dir>,
+    State(state): State<AppState>,
+    Query(query): Query<UploadParams>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+    let _ = enforce_policy(actor, Resource::Photo, Action::Create)?;
+
+    let cid = bucket.client_id.clone();
+    let bid = bucket.id.clone();
+
+    let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
+
+    let auth_token = ctx.token().expect("token is required");
+    let result = upload_photo(
+        &config,
+        auth_token,
+        &cid,
+        &bid,
+        &dir.id,
+        &headers,
+        query.token,
+        body,
+    )
+    .await;
+
+    match result {
+        Ok(photo) => {
+            let tpl = UploadedPhotoTemplate {
+                photo,
+                theme: pref.theme,
+            };
+            Ok(Response::builder()
+                .status(201)
+                .header("X-Next-Token", token)
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
+        }
+        Err(err) => Ok(handle_error_message(&err)),
     }
 }

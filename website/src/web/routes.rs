@@ -30,7 +30,7 @@ use super::dirs::{
     new_dir_handler, post_delete_dir_handler, post_edit_dir_handler, post_new_dir_handler,
     search_dirs_handler,
 };
-use super::files::photo_listing_v2_handler;
+use super::files::{photo_listing_v2_handler, upload_handler, upload_page_handler};
 use super::middleware::{
     auth_middleware, bucket_middleware, client_middleware, dir_middleware, my_bucket_middleware,
     photo_middleware, pref_middleware, require_auth_middleware, user_middleware,
@@ -42,10 +42,7 @@ use super::users::{
     reset_user_password_handler, update_user_role_handler, update_user_status_handler,
     user_controls_handler, user_page_handler, users_handler,
 };
-use super::{
-    confirm_delete_photo_handler, dark_theme_handler, exec_delete_photo_handler, handle_error,
-    light_theme_handler, pre_delete_photo_handler, upload_handler, upload_page_handler,
-};
+use super::{dark_theme_handler, handle_error, light_theme_handler};
 
 pub fn all_routes(state: AppState, frontend_dir: &PathBuf) -> Router {
     Router::new()
@@ -132,19 +129,19 @@ fn upload_route(state: AppState) -> Router<AppState> {
         .with_state(state)
 }
 
-fn photo_routes(state: AppState) -> Router<AppState> {
-    Router::new()
-        .route(
-            "/delete",
-            get(confirm_delete_photo_handler).post(exec_delete_photo_handler),
-        )
-        .route("/delete-controls", get(pre_delete_photo_handler))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            photo_middleware,
-        ))
-        .with_state(state)
-}
+// fn photo_routes(state: AppState) -> Router<AppState> {
+//     Router::new()
+//         .route(
+//             "/delete",
+//             get(confirm_delete_photo_handler).post(exec_delete_photo_handler),
+//         )
+//         .route("/delete-controls", get(pre_delete_photo_handler))
+//         .route_layer(middleware::from_fn_with_state(
+//             state.clone(),
+//             photo_middleware,
+//         ))
+//         .with_state(state)
+// }
 
 fn client_routes(state: AppState) -> Router<AppState> {
     Router::new()
@@ -264,7 +261,7 @@ fn my_dir_inner_routes(state: AppState) -> Router<AppState> {
         )
         .route("/photo_grid", get(photo_listing_v2_handler))
         .nest("/upload", upload_route(state.clone()))
-        .nest("/photos/{photo_id}", photo_routes(state.clone()))
+        //.nest("/photos/{photo_id}", photo_routes(state.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             dir_middleware,
