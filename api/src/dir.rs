@@ -13,6 +13,7 @@ use crate::error::{
 };
 use crate::schema::dirs::{self, dsl};
 use crate::state::AppState;
+use memo::dir::DirDto;
 use memo::pagination::Paginated;
 use memo::utils::generate_id;
 use memo::validators::flatten_errors;
@@ -28,6 +29,36 @@ pub struct Dir {
     pub file_count: i32,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+/// Convert DirDto to Dir
+impl From<DirDto> for Dir {
+    fn from(dto: DirDto) -> Self {
+        Self {
+            id: dto.id,
+            bucket_id: dto.bucket_id,
+            name: dto.name,
+            label: dto.label,
+            file_count: dto.file_count,
+            created_at: dto.created_at,
+            updated_at: dto.updated_at,
+        }
+    }
+}
+
+/// Convert Dir to DirDto
+impl From<Dir> for DirDto {
+    fn from(dir: Dir) -> Self {
+        Self {
+            id: dir.id,
+            bucket_id: dir.bucket_id,
+            name: dir.name,
+            label: dir.label,
+            file_count: dir.file_count,
+            created_at: dir.created_at,
+            updated_at: dir.updated_at,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Validate)]
@@ -382,16 +413,6 @@ impl DirRepoable for DirRepo {
 
     async fn delete(&self, id: &str) -> Result<()> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-
-        // TODO: Validate at service call level
-        // Do not delete if there are still files inside
-        // let file_count = count_dir_files(db_pool, id).await?;
-        // ensure!(
-        //     file_count == 0,
-        //     ValidationSnafu {
-        //         msg: "Cannot delete directory with files inside".to_string(),
-        //     }
-        // );
 
         let dir_id = id.to_string();
         let delete_res = db

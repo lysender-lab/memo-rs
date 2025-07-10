@@ -17,7 +17,6 @@ mod health;
 mod run;
 mod schema;
 mod state;
-mod storage;
 mod web;
 
 // Re-export error types for convenience

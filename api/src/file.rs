@@ -9,6 +9,7 @@ use exif::{In, Tag};
 use image::DynamicImage;
 use image::ImageReader;
 use image::imageops;
+use memo::dir::DirDto;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use std::fs::File;
@@ -17,27 +18,22 @@ use tracing::error;
 use validator::Validate;
 
 use crate::Result;
-use crate::dir::Dir;
 use crate::error::{
-    DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, ExifInfoSnafu, UploadFileSnafu, ValidationSnafu,
+    DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, ExifInfoSnafu, StorageSnafu, UploadFileSnafu,
+    ValidationSnafu,
 };
 
 use crate::schema::files::{self, dsl};
 use crate::state::AppState;
 use memo::bucket::BucketDto;
-use memo::file::{FileDto, ImgDimension, ImgVersion, ImgVersionDto};
+use memo::file::{
+    ALLOWED_IMAGE_TYPES, FileDto, ImgDimension, ImgVersion, ImgVersionDto, MAX_DIMENSION,
+    MAX_PREVIEW_DIMENSION, MAX_THUMB_DIMENSION, ORIGINAL_PATH,
+};
 use memo::pagination::Paginated;
 use memo::utils::generate_id;
 use memo::utils::truncate_string;
 use memo::validators::flatten_errors;
-
-pub const ORIGINAL_PATH: &str = "orig";
-pub const ALLOWED_IMAGE_TYPES: [&str; 4] = ["image/jpeg", "image/pjpeg", "image/png", "image/gif"];
-
-/// Maximum image dimension before creating a preview version
-pub const MAX_DIMENSION: u32 = 1000;
-pub const MAX_PREVIEW_DIMENSION: u32 = 2000;
-pub const MAX_THUMB_DIMENSION: u32 = 200;
 
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
 #[diesel(table_name = crate::schema::files)]
@@ -166,7 +162,7 @@ const MAX_FILES: i32 = 1000;
 pub async fn create_file(
     state: AppState,
     bucket: &BucketDto,
-    dir: &Dir,
+    dir: &DirDto,
     data: &FilePayload,
 ) -> Result<FileObject> {
     let mut file_dto = init_file(dir, data)?;
@@ -237,6 +233,7 @@ pub async fn create_file(
         .storage_client
         .upload_object(bucket, dir, &data.upload_dir, &file_dto)
         .await
+        .context(StorageSnafu)
     {
         cleanup(data, Some(&file_dto));
         return Err(upload_err);
@@ -267,7 +264,7 @@ pub async fn create_file(
 
 #[async_trait]
 pub trait FileRepoable: Send + Sync {
-    async fn list(&self, dir: &Dir, params: &ListFilesParams) -> Result<Paginated<FileObject>>;
+    async fn list(&self, dir: &DirDto, params: &ListFilesParams) -> Result<Paginated<FileObject>>;
 
     async fn create(&self, file_dto: FileDto) -> Result<FileObject>;
 
@@ -320,7 +317,7 @@ impl FileRepo {
 
 #[async_trait]
 impl FileRepoable for FileRepo {
-    async fn list(&self, dir: &Dir, params: &ListFilesParams) -> Result<Paginated<FileObject>> {
+    async fn list(&self, dir: &DirDto, params: &ListFilesParams) -> Result<Paginated<FileObject>> {
         let errors = params.validate();
         ensure!(
             errors.is_ok(),
@@ -533,7 +530,7 @@ fn cleanup_temp_uploads(data: &FilePayload, file: Option<&FileDto>) -> Result<()
     Ok(())
 }
 
-fn init_file(dir: &Dir, data: &FilePayload) -> Result<FileDto> {
+fn init_file(dir: &DirDto, data: &FilePayload) -> Result<FileDto> {
     let mut is_image = false;
     let content_type = get_content_type(&data.path)?;
     if content_type.starts_with("image/") {
@@ -782,7 +779,11 @@ pub struct FileTestRepo {}
 #[cfg(test)]
 #[async_trait]
 impl FileRepoable for FileTestRepo {
-    async fn list(&self, _dir: &Dir, _params: &ListFilesParams) -> Result<Paginated<FileObject>> {
+    async fn list(
+        &self,
+        _dir: &DirDto,
+        _params: &ListFilesParams,
+    ) -> Result<Paginated<FileObject>> {
         Ok(Paginated::new(vec![], 1, 10, 0))
     }
 

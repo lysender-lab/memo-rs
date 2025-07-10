@@ -115,7 +115,6 @@ dependencies = [
  "clap",
  "deadpool-diesel",
  "diesel",
- "google-cloud-storage",
  "image",
  "infer",
  "jsonwebtoken",
@@ -126,6 +125,7 @@ dependencies = [
  "serde",
  "serde_json",
  "snafu",
+ "storage",
  "text_io",
  "tokio",
  "toml",
@@ -1585,9 +1585,9 @@ dependencies = [
 
 [[package]]
 name = "image"
-version = "0.25.5"
+version = "0.25.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd6f44aed642f18953a158afeb30206f4d50da59fbc66ecb53c66488de73563b"
+checksum = "db35664ce6b9810857a38a906215e75a9c879f0696556a39f59c62829710251a"
 dependencies = [
  "bytemuck",
  "byteorder-lite",
@@ -2888,6 +2888,17 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
+
+[[package]]
+name = "storage"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "google-cloud-storage",
+ "memo",
+ "snafu",
+ "tokio",
+]
 
 [[package]]
 name = "strsim"

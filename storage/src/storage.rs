@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use google_cloud_storage::client::google_cloud_auth::credentials::CredentialsFile;
@@ -12,10 +13,10 @@ use google_cloud_storage::http::objects::upload::{Media, UploadObjectRequest, Up
 use google_cloud_storage::sign::SignedURLOptions;
 
 use crate::Result;
-use crate::dir::Dir;
 use crate::error::{GoogleSnafu, ValidationSnafu};
-use crate::file::ORIGINAL_PATH;
 use memo::bucket::BucketDto;
+use memo::dir::DirDto;
+use memo::file::ORIGINAL_PATH;
 use memo::file::{FileDto, ImgVersionDto};
 
 #[async_trait]
@@ -25,7 +26,7 @@ pub trait CloudStorable: Send + Sync {
     async fn upload_object(
         &self,
         bucket: &BucketDto,
-        dir: &Dir,
+        dir: &DirDto,
         source_dir: &PathBuf,
         file: &FileDto,
     ) -> Result<()>;
@@ -53,19 +54,25 @@ pub trait CloudStorable: Send + Sync {
 }
 
 pub struct StorageClient {
-    client: Client,
+    client: Arc<Client>,
 }
 
 impl StorageClient {
     pub async fn new(key_file: &str) -> Result<Self> {
         let client = create_storage_client(key_file).await?;
-        Ok(Self { client })
+        Ok(Self {
+            client: Arc::new(client),
+        })
+    }
+
+    pub fn get_client(&self) -> Arc<Client> {
+        self.client.clone()
     }
 
     async fn upload_regular_object(
         &self,
         bucket: &BucketDto,
-        dir: &Dir,
+        dir: &DirDto,
         source_dir: &PathBuf,
         file: &FileDto,
     ) -> Result<()> {
@@ -111,7 +118,7 @@ impl StorageClient {
     async fn upload_image_object(
         &self,
         bucket: &BucketDto,
-        dir: &Dir,
+        dir: &DirDto,
         source_dir: &PathBuf,
         file: &FileDto,
     ) -> Result<()> {
@@ -129,7 +136,7 @@ impl StorageClient {
     async fn upload_image_version(
         &self,
         bucket: &BucketDto,
-        dir: &Dir,
+        dir: &DirDto,
         source_dir: &PathBuf,
         file: &FileDto,
         version: &ImgVersionDto,
@@ -198,64 +205,6 @@ impl StorageClient {
             },
         }
     }
-
-    async fn format_file_single(
-        &self,
-        bucket_name: &str,
-        dir_name: &str,
-        mut file: FileDto,
-    ) -> Result<FileDto> {
-        if file.is_image {
-            if let Some(versions) = &file.img_versions {
-                let mut updated_versions: Vec<ImgVersionDto> = Vec::with_capacity(versions.len());
-                for version in versions.iter() {
-                    let url = self
-                        .generate_url(
-                            bucket_name,
-                            &format!(
-                                "{}/{}/{}",
-                                dir_name,
-                                version.version.to_string(),
-                                file.filename
-                            ),
-                        )
-                        .await?;
-                    let mut version_copy = version.clone();
-                    version_copy.url = Some(url);
-                    updated_versions.push(version_copy);
-                }
-                if updated_versions.len() > 0 {
-                    file.img_versions = Some(updated_versions);
-                }
-            }
-        } else {
-            let url = self
-                .generate_url(
-                    bucket_name,
-                    &format!("{}/{}/{}", dir_name, ORIGINAL_PATH, file.filename),
-                )
-                .await?;
-            file.url = Some(url);
-        }
-
-        Ok(file)
-    }
-
-    async fn generate_url(&self, bucket_name: &str, file_path: &str) -> Result<String> {
-        let expires = Duration::from_secs(3600 * 12);
-        let mut options = SignedURLOptions::default();
-        options.expires = expires;
-
-        let res = self
-            .client
-            .signed_url(bucket_name, file_path, None, None, options)
-            .await;
-
-        match res {
-            Ok(url) => Ok(url),
-            Err(_) => Err("Failed to sign object URL.".into()),
-        }
-    }
 }
 
 #[async_trait]
@@ -301,7 +250,7 @@ impl CloudStorable for StorageClient {
     async fn upload_object(
         &self,
         bucket: &BucketDto,
-        dir: &Dir,
+        dir: &DirDto,
         source_dir: &PathBuf,
         file: &FileDto,
     ) -> Result<()> {
@@ -350,11 +299,27 @@ impl CloudStorable for StorageClient {
         dir_name: &str,
         files: Vec<FileDto>,
     ) -> Result<Vec<FileDto>> {
-        // Can't send format_file to async task, will just loop it for now
-        let mut updated_files = Vec::with_capacity(files.len());
-        for file in files.into_iter() {
-            let formatted_file = self.format_file(bucket_name, dir_name, file).await?;
-            updated_files.push(formatted_file);
+        let client = self.get_client();
+
+        let mut tasks = Vec::with_capacity(files.len());
+        for file in files.iter() {
+            let client_copy = client.clone();
+            let file_copy = file.clone();
+            let bname = bucket_name.to_string();
+            let dir_name_copy = dir_name.to_string();
+
+            tasks.push(tokio::spawn(async move {
+                format_file_single(client_copy, &bname, &dir_name_copy, file_copy).await
+            }));
+        }
+
+        let mut updated_files: Vec<FileDto> = Vec::with_capacity(files.len());
+        for task in tasks {
+            let Ok(res) = task.await else {
+                return Err("Unable to extract data from spanwed task.".into());
+            };
+            let file = res?;
+            updated_files.push(file);
         }
 
         Ok(updated_files)
@@ -366,7 +331,7 @@ impl CloudStorable for StorageClient {
         dir_name: &str,
         file: FileDto,
     ) -> Result<FileDto> {
-        self.format_file_single(bucket_name, dir_name, file).await
+        format_file_single(self.get_client(), bucket_name, dir_name, file).await
     }
 }
 
@@ -403,17 +368,92 @@ pub async fn test_list_hmac_keys(client: &Client, project_id: &str) -> Result<()
     }
 }
 
-#[cfg(test)]
+async fn generate_signed_url(
+    client: &Client,
+    bucket_name: &str,
+    file_path: &str,
+) -> Result<String> {
+    let expires = Duration::from_secs(3600 * 12);
+    let mut options = SignedURLOptions::default();
+    options.expires = expires;
+
+    let res = client
+        .signed_url(bucket_name, file_path, None, None, options)
+        .await;
+
+    match res {
+        Ok(url) => Ok(url),
+        Err(_) => Err("Failed to sign object URL.".into()),
+    }
+}
+
+async fn format_file_single(
+    client: Arc<Client>,
+    bucket_name: &str,
+    dir_name: &str,
+    mut file: FileDto,
+) -> Result<FileDto> {
+    if file.is_image {
+        if let Some(versions) = &file.img_versions {
+            if versions.len() > 0 {
+                let mut tasks = Vec::with_capacity(versions.len());
+
+                for version in versions.iter() {
+                    let client_copy = client.clone();
+                    let bname = bucket_name.to_string();
+                    let file_path = format!(
+                        "{}/{}/{}",
+                        dir_name,
+                        version.version.to_string(),
+                        file.filename
+                    );
+
+                    tasks.push(tokio::spawn(async move {
+                        generate_signed_url(&client_copy, &bname, &file_path).await
+                    }));
+                }
+
+                let mut updated_versions: Vec<ImgVersionDto> = Vec::with_capacity(versions.len());
+                for (k, task) in tasks.into_iter().enumerate() {
+                    let Ok(res) = task.await else {
+                        return Err("Unable to extract data from spanwed task.".into());
+                    };
+                    let url = res?;
+                    let mut version = versions[k].clone();
+                    version.url = Some(url);
+
+                    updated_versions.push(version);
+                }
+
+                if updated_versions.len() > 0 {
+                    file.img_versions = Some(updated_versions);
+                }
+            }
+        }
+    } else {
+        let url = generate_signed_url(
+            &client,
+            bucket_name,
+            &format!("{}/{}/{}", dir_name, ORIGINAL_PATH, file.filename),
+        )
+        .await?;
+        file.url = Some(url);
+    }
+
+    Ok(file)
+}
+
+#[cfg(feature = "test")]
 pub struct StorageTestClient {}
 
-#[cfg(test)]
+#[cfg(feature = "test")]
 impl StorageTestClient {
     pub fn new() -> Self {
         Self {}
     }
 }
 
-#[cfg(test)]
+#[cfg(feature = "test")]
 #[async_trait]
 impl CloudStorable for StorageTestClient {
     async fn read_bucket(&self, name: &str) -> Result<String> {
@@ -423,7 +463,7 @@ impl CloudStorable for StorageTestClient {
     async fn upload_object(
         &self,
         _bucket: &BucketDto,
-        _dir: &Dir,
+        _dir: &DirDto,
         _source_dir: &PathBuf,
         _file: &FileDto,
     ) -> Result<()> {
