@@ -2897,6 +2897,7 @@ dependencies = [
  "google-cloud-storage",
  "memo",
  "snafu",
+ "tokio",
 ]
 
 [[package]]
