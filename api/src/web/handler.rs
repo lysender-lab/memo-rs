@@ -21,7 +21,7 @@ use crate::{
     client::{
         ClientDefaultBucket, NewClient, UpdateClient, create_client, delete_client, update_client,
     },
-    dir::{Dir, ListDirsParams, NewDir, UpdateDir, delete_dir},
+    dir::{ListDirsParams, NewDir, UpdateDir, delete_dir},
     error::{
         CreateFileSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, MissingUploadFileSnafu,
         Result, StorageSnafu, UploadDirSnafu, WhateverSnafu,
@@ -594,14 +594,14 @@ pub async fn create_dir_handler(
     ))
 }
 
-pub async fn get_dir_handler(Extension(dir): Extension<Dir>) -> Result<JsonResponse> {
+pub async fn get_dir_handler(Extension(dir): Extension<DirDto>) -> Result<JsonResponse> {
     Ok(JsonResponse::new(serde_json::to_string(&dir).unwrap()))
 }
 
 pub async fn update_dir_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
-    Extension(dir): Extension<Dir>,
+    Extension(dir): Extension<DirDto>,
     payload: CoreResult<Json<UpdateDir>, JsonRejection>,
 ) -> Result<JsonResponse> {
     let permissions = vec![Permission::DirsEdit];
@@ -775,7 +775,7 @@ pub async fn create_file_handler(
 pub async fn get_file_handler(
     State(state): State<AppState>,
     Extension(bucket): Extension<BucketDto>,
-    Extension(dir): Extension<Dir>,
+    Extension(dir): Extension<DirDto>,
     Extension(file): Extension<FileObject>,
 ) -> Result<JsonResponse> {
     let storage_client = state.storage_client.clone();
@@ -792,7 +792,7 @@ pub async fn delete_file_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
     Extension(bucket): Extension<BucketDto>,
-    Extension(dir): Extension<Dir>,
+    Extension(dir): Extension<DirDto>,
     Extension(file): Extension<FileObject>,
 ) -> Result<JsonResponse> {
     let permissions = vec![Permission::FilesDelete];

@@ -115,7 +115,6 @@ dependencies = [
  "clap",
  "deadpool-diesel",
  "diesel",
- "google-cloud-storage",
  "image",
  "infer",
  "jsonwebtoken",

@@ -12,7 +12,6 @@ chrono.workspace = true
 clap.workspace = true
 deadpool-diesel.workspace = true
 diesel.workspace = true
-google-cloud-storage.workspace = true
 image.workspace = true
 infer.workspace = true
 jsonwebtoken.workspace = true
