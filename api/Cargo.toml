@@ -31,3 +31,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 validator.workspace = true
 memo = { path = "../memo" }
+storage = { path = "../storage" }
+
+[dev-dependencies]
+storage = { path = "../storage", features = ["test"]}

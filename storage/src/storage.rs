@@ -12,10 +12,10 @@ use google_cloud_storage::http::objects::upload::{Media, UploadObjectRequest, Up
 use google_cloud_storage::sign::SignedURLOptions;
 
 use crate::Result;
-use crate::dir::Dir;
 use crate::error::{GoogleSnafu, ValidationSnafu};
-use crate::file::ORIGINAL_PATH;
 use memo::bucket::BucketDto;
+use memo::dir::DirDto;
+use memo::file::ORIGINAL_PATH;
 use memo::file::{FileDto, ImgVersionDto};
 
 #[async_trait]
@@ -25,7 +25,7 @@ pub trait CloudStorable: Send + Sync {
     async fn upload_object(
         &self,
         bucket: &BucketDto,
-        dir: &Dir,
+        dir: &DirDto,
         source_dir: &PathBuf,
         file: &FileDto,
     ) -> Result<()>;
@@ -65,7 +65,7 @@ impl StorageClient {
     async fn upload_regular_object(
         &self,
         bucket: &BucketDto,
-        dir: &Dir,
+        dir: &DirDto,
         source_dir: &PathBuf,
         file: &FileDto,
     ) -> Result<()> {
@@ -111,7 +111,7 @@ impl StorageClient {
     async fn upload_image_object(
         &self,
         bucket: &BucketDto,
-        dir: &Dir,
+        dir: &DirDto,
         source_dir: &PathBuf,
         file: &FileDto,
     ) -> Result<()> {
@@ -129,7 +129,7 @@ impl StorageClient {
     async fn upload_image_version(
         &self,
         bucket: &BucketDto,
-        dir: &Dir,
+        dir: &DirDto,
         source_dir: &PathBuf,
         file: &FileDto,
         version: &ImgVersionDto,
@@ -301,7 +301,7 @@ impl CloudStorable for StorageClient {
     async fn upload_object(
         &self,
         bucket: &BucketDto,
-        dir: &Dir,
+        dir: &DirDto,
         source_dir: &PathBuf,
         file: &FileDto,
     ) -> Result<()> {
@@ -403,17 +403,17 @@ pub async fn test_list_hmac_keys(client: &Client, project_id: &str) -> Result<()
     }
 }
 
-#[cfg(test)]
+#[cfg(feature = "test")]
 pub struct StorageTestClient {}
 
-#[cfg(test)]
+#[cfg(feature = "test")]
 impl StorageTestClient {
     pub fn new() -> Self {
         Self {}
     }
 }
 
-#[cfg(test)]
+#[cfg(feature = "test")]
 #[async_trait]
 impl CloudStorable for StorageTestClient {
     async fn read_bucket(&self, name: &str) -> Result<String> {
@@ -423,7 +423,7 @@ impl CloudStorable for StorageTestClient {
     async fn upload_object(
         &self,
         _bucket: &BucketDto,
-        _dir: &Dir,
+        _dir: &DirDto,
         _source_dir: &PathBuf,
         _file: &FileDto,
     ) -> Result<()> {

@@ -10,7 +10,8 @@ use validator::Validate;
 
 use crate::Result;
 use crate::error::{
-    DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, MaxBucketsReachedSnafu, ValidationSnafu,
+    DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, MaxBucketsReachedSnafu, StorageSnafu,
+    ValidationSnafu,
 };
 use crate::schema::buckets::{self, dsl};
 use crate::state::AppState;
@@ -104,7 +105,11 @@ pub async fn create_bucket(
     );
 
     // Validate against the cloud storage
-    let _ = state.storage_client.read_bucket(&data.name).await?;
+    let _ = state
+        .storage_client
+        .read_bucket(&data.name)
+        .await
+        .context(StorageSnafu)?;
 
     state.db.buckets.create(client_id, data).await
 }

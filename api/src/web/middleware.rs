@@ -18,7 +18,7 @@ use crate::{
     state::AppState,
     web::params::Params,
 };
-use memo::{actor::Actor, role::Permission, user::UserDto, utils::valid_id};
+use memo::{actor::Actor, dir::DirDto, role::Permission, user::UserDto, utils::valid_id};
 
 use super::params::{ClientParams, UserParams};
 
@@ -227,15 +227,17 @@ pub async fn dir_middleware(
         msg: "Directory not found",
     })?;
 
+    let dto: DirDto = dir.into();
+
     ensure!(
-        &dir.bucket_id == &params.bucket_id,
+        &dto.bucket_id == &params.bucket_id,
         NotFoundSnafu {
             msg: "Directory not found"
         }
     );
 
     // Forward to the next middleware/handler passing the directory information
-    request.extensions_mut().insert(dir);
+    request.extensions_mut().insert(dto);
     let response = next.run(request).await;
     Ok(response)
 }

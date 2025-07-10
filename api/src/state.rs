@@ -1,12 +1,14 @@
 use axum::extract::FromRef;
+use snafu::ResultExt;
 use std::sync::Arc;
 
 use crate::{
     Result,
     config::Config,
     db::{DbMapper, create_db_mapper},
-    storage::{CloudStorable, StorageClient},
+    error::StorageSnafu,
 };
+use storage::{CloudStorable, StorageClient};
 
 #[derive(Clone, FromRef)]
 pub struct AppState {
@@ -16,8 +18,12 @@ pub struct AppState {
 }
 
 pub async fn create_app_state(config: &Config) -> Result<AppState> {
-    let storage_client = StorageClient::new(config.cloud.credentials.as_str()).await?;
+    let storage_client = StorageClient::new(config.cloud.credentials.as_str())
+        .await
+        .context(StorageSnafu)?;
+
     let db = create_db_mapper(config.db.url.as_str());
+
     Ok(AppState {
         config: config.clone(),
         storage_client: Arc::new(storage_client),
@@ -31,7 +37,7 @@ pub fn create_test_app_state() -> AppState {
 
     use crate::config::{CloudConfig, DbConfig, ServerConfig};
     use crate::db::create_test_db_mapper;
-    use crate::storage::StorageTestClient;
+    use storage::StorageTestClient;
 
     let config = Config {
         jwt_secret: "0196d1dbbfd87819b9183f14ac3ed485".to_string(),

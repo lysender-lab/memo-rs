@@ -22,3 +22,6 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 validator.workspace = true
 memo = { path = "../memo" }
+
+[features]
+test = []

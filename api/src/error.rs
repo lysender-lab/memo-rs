@@ -164,6 +164,12 @@ pub enum Error {
         backtrace: Backtrace,
     },
 
+    #[snafu(display("Storage error: {}", source))]
+    Storage {
+        source: storage::Error,
+        backtrace: Backtrace,
+    },
+
     #[snafu(display("{}", msg))]
     Whatever { msg: String },
 }
