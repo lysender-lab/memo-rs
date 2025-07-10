@@ -47,12 +47,6 @@ pub enum Error {
         backtrace: Backtrace,
     },
 
-    #[snafu(display("Exif error: {}", source))]
-    ExifInfo {
-        source: exif::Error,
-        backtrace: Backtrace,
-    },
-
     #[snafu(display("{}", msg))]
     Whatever { msg: String },
 }
