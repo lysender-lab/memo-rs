@@ -4,7 +4,7 @@ use validator::Validate;
 use crate::Result;
 use crate::error::{DbSnafu, MaxBucketsReachedSnafu, StorageSnafu, ValidationSnafu};
 use crate::state::AppState;
-use db::bucket::{MAX_BUCKETS_PER_CLIENT, NewBucket};
+use db::bucket::{MAX_BUCKETS_PER_CLIENT, NewBucket, UpdateBucket};
 use memo::{bucket::BucketDto, validators::flatten_errors};
 
 pub async fn create_bucket(
@@ -61,6 +61,18 @@ pub async fn create_bucket(
         .create(client_id, data)
         .await
         .context(DbSnafu)
+}
+
+pub async fn update_bucket(state: &AppState, id: &str, data: &UpdateBucket) -> Result<bool> {
+    let valid_res = data.validate();
+    ensure!(
+        valid_res.is_ok(),
+        ValidationSnafu {
+            msg: flatten_errors(&valid_res.unwrap_err()),
+        }
+    );
+
+    state.db.buckets.update(id, data).await.context(DbSnafu)
 }
 
 pub async fn delete_bucket(state: &AppState, id: &str) -> Result<()> {

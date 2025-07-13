@@ -170,6 +170,7 @@ struct BucketPageTemplate {
     t: TemplateData,
     client: ClientDto,
     bucket: BucketDto,
+    can_edit: bool,
     can_delete: bool,
 }
 
@@ -189,6 +190,7 @@ pub async fn bucket_page_handler(
         t,
         client,
         bucket,
+        can_edit: actor.has_permissions(&vec![Permission::BucketsEdit]),
         can_delete: actor.has_permissions(&vec![Permission::BucketsDelete]),
     };
 
@@ -236,7 +238,6 @@ pub async fn bucket_controls_handler(
 #[template(path = "widgets/edit_bucket_form.html")]
 struct EditBucketFormTemplate {
     payload: UpdateBucketFormData,
-    client: ClientDto,
     bucket: BucketDto,
     error_message: Option<String>,
 }
@@ -244,7 +245,6 @@ struct EditBucketFormTemplate {
 /// Renders the edit bucket form
 pub async fn edit_bucket_handler(
     Extension(ctx): Extension<Ctx>,
-    Extension(client): Extension<ClientDto>,
     Extension(bucket): Extension<BucketDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
@@ -257,7 +257,6 @@ pub async fn edit_bucket_handler(
 
     let label = bucket.label.clone();
     let tpl = EditBucketFormTemplate {
-        client,
         bucket,
         payload: UpdateBucketFormData { label, token },
         error_message: None,
@@ -287,7 +286,6 @@ pub async fn post_edit_bucket_handler(
     let token = create_csrf_token(&bid, &config.jwt_secret)?;
 
     let mut tpl = EditBucketFormTemplate {
-        client: client.clone(),
         bucket: bucket.clone(),
         payload: UpdateBucketFormData {
             label: "".to_string(),

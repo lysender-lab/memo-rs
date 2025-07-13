@@ -17,7 +17,7 @@ use crate::{
             update_user_status,
         },
     },
-    bucket::{create_bucket, delete_bucket},
+    bucket::{create_bucket, delete_bucket, update_bucket},
     client::{create_client, delete_client, update_client},
     dir::{create_dir, delete_dir, update_dir},
     error::{
@@ -29,7 +29,7 @@ use crate::{
     state::AppState,
     web::{params::Params, response::JsonResponse},
 };
-use db::bucket::NewBucket;
+use db::bucket::{NewBucket, UpdateBucket};
 use db::client::{ClientDefaultBucket, NewClient, UpdateClient};
 use db::dir::{ListDirsParams, NewDir, UpdateDir};
 use db::file::{FileObject, FilePayload, ListFilesParams};
@@ -311,6 +311,41 @@ pub async fn list_buckets_handler(
 
 pub async fn get_bucket_handler(Extension(bucket): Extension<BucketDto>) -> Result<JsonResponse> {
     Ok(JsonResponse::new(serde_json::to_string(&bucket).unwrap()))
+}
+
+pub async fn update_bucket_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(bucket): Extension<BucketDto>,
+    payload: CoreResult<Json<UpdateBucket>, JsonRejection>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::BucketsEdit];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
+
+    let updated = update_bucket(&state, &bucket.id, &data).await?;
+    let updated_bucket = match updated {
+        true => {
+            let mut b = bucket.clone();
+            if let Some(label) = &data.label {
+                b.label = label.clone();
+            }
+            b
+        }
+        false => bucket,
+    };
+
+    Ok(JsonResponse::new(
+        serde_json::to_string(&updated_bucket).unwrap(),
+    ))
 }
 
 pub async fn delete_bucket_handler(

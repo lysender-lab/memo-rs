@@ -24,7 +24,7 @@ use super::{
         require_auth_middleware, user_middleware,
     },
 };
-use crate::state::AppState;
+use crate::{state::AppState, web::handler::update_bucket_handler};
 
 pub fn all_routes(state: AppState) -> Router {
     Router::new()
@@ -126,7 +126,12 @@ fn client_buckets_routes(state: AppState) -> Router<AppState> {
 
 fn inner_bucket_routes(state: AppState) -> Router<AppState> {
     Router::new()
-        .route("/", get(get_bucket_handler).delete(delete_bucket_handler))
+        .route(
+            "/",
+            get(get_bucket_handler)
+                .patch(update_bucket_handler)
+                .delete(delete_bucket_handler),
+        )
         .nest("/dirs", dir_routes(state.clone()))
         .layer(middleware::from_fn_with_state(
             state.clone(),

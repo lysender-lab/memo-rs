@@ -153,7 +153,7 @@ pub async fn update_bucket(
     form: &UpdateBucketFormData,
 ) -> Result<BucketDto> {
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
-    ensure!(csrf_result == "new_bucket", CsrfTokenSnafu);
+    ensure!(csrf_result == id, CsrfTokenSnafu);
 
     let url = format!(
         "{}/clients/{}/buckets/{}",
@@ -166,7 +166,7 @@ pub async fn update_bucket(
 
     let response = state
         .client
-        .post(url)
+        .patch(url)
         .bearer_auth(token)
         .json(&data)
         .send()
