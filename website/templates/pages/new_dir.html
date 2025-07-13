@@ -6,7 +6,7 @@
         <nav class="breadcrumb" aria-label="breadcrumbs">
             <ul>
                 <li><a href="/">Home</a></li>
-                <li><a href="/buckets/{{ bucket.id }}">{{ bucket.name }}</a></li>
+                <li><a href="/buckets/{{ bucket.id }}">{{ bucket.label }}</a></li>
                 <li class="is-active">
                     <a href="/buckets/{{ bucket.id }}/new_dir" aria-current="page">
                         {% if bucket.images_only %}
