@@ -29,8 +29,10 @@ tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 validator.workspace = true
+db = { path = "../db" }
 memo = { path = "../memo" }
 storage = { path = "../storage" }
 
 [dev-dependencies]
+db = { path = "../db", features = ["test"]}
 storage = { path = "../storage", features = ["test"]}
