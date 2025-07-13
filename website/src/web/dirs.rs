@@ -3,13 +3,14 @@ use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::{Extension, Form, body::Body, extract::State, response::Response};
 use memo::bucket::BucketDto;
+use memo::dir::DirDto;
 use snafu::ResultExt;
 use urlencoding::encode;
 
 use crate::models::PaginationLinks;
 use crate::models::tokens::TokenFormData;
 use crate::services::dirs::{
-    Dir, NewDirFormData, SearchDirsParams, UpdateDirFormData, create_dir, delete_dir, list_dirs,
+    NewDirFormData, SearchDirsParams, UpdateDirFormData, create_dir, delete_dir, list_dirs,
     update_dir,
 };
 use crate::{
@@ -26,7 +27,7 @@ use crate::{
 #[template(path = "widgets/search_dirs.html")]
 struct SearchDirsTemplate {
     bucket: BucketDto,
-    dirs: Vec<Dir>,
+    dirs: Vec<DirDto>,
     pagination: Option<PaginationLinks>,
     can_create: bool,
     error_message: Option<String>,
@@ -200,7 +201,7 @@ pub async fn post_new_dir_handler(
 struct DirTemplate {
     t: TemplateData,
     bucket: BucketDto,
-    dir: Dir,
+    dir: DirDto,
     updated: bool,
     can_edit: bool,
     can_delete: bool,
@@ -212,7 +213,7 @@ pub async fn dir_page_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(pref): Extension<Pref>,
     Extension(bucket): Extension<BucketDto>,
-    Extension(dir): Extension<Dir>,
+    Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
@@ -244,7 +245,7 @@ pub async fn dir_page_handler(
 #[template(path = "widgets/edit_dir_controls.html")]
 struct EditDirControlsTemplate {
     bucket: BucketDto,
-    dir: Dir,
+    dir: DirDto,
     updated: bool,
     can_edit: bool,
     can_delete: bool,
@@ -256,7 +257,7 @@ struct EditDirControlsTemplate {
 pub async fn edit_dir_controls_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(bucket): Extension<BucketDto>,
-    Extension(dir): Extension<Dir>,
+    Extension(dir): Extension<DirDto>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
     let _ = enforce_policy(actor, Resource::Album, Action::Update)?;
@@ -282,7 +283,7 @@ pub async fn edit_dir_controls_handler(
 struct EditDirFormTemplate {
     payload: UpdateDirFormData,
     bucket: BucketDto,
-    dir: Dir,
+    dir: DirDto,
     error_message: Option<String>,
 }
 
@@ -290,7 +291,7 @@ struct EditDirFormTemplate {
 pub async fn edit_dir_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(bucket): Extension<BucketDto>,
-    Extension(dir): Extension<Dir>,
+    Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
@@ -318,7 +319,7 @@ pub async fn edit_dir_handler(
 pub async fn post_edit_dir_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(bucket): Extension<BucketDto>,
-    Extension(dir): Extension<Dir>,
+    Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
     payload: Form<UpdateDirFormData>,
 ) -> Result<Response<Body>> {
@@ -392,7 +393,7 @@ pub async fn post_edit_dir_handler(
 #[template(path = "widgets/delete_dir_form.html")]
 struct DeleteDirTemplate {
     bucket: BucketDto,
-    dir: Dir,
+    dir: DirDto,
     payload: TokenFormData,
     error_message: Option<String>,
 }
@@ -400,7 +401,7 @@ struct DeleteDirTemplate {
 pub async fn get_delete_dir_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(bucket): Extension<BucketDto>,
-    Extension(dir): Extension<Dir>,
+    Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
@@ -426,7 +427,7 @@ pub async fn get_delete_dir_handler(
 pub async fn post_delete_dir_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(bucket): Extension<BucketDto>,
-    Extension(dir): Extension<Dir>,
+    Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
     payload: Form<TokenFormData>,
 ) -> Result<Response<Body>> {

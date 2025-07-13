@@ -5,12 +5,12 @@ use axum::extract::Query;
 use axum::http::HeaderMap;
 use axum::{Extension, body::Body, extract::State, response::Response};
 use memo::bucket::BucketDto;
+use memo::dir::DirDto;
 use memo::pagination::PaginatedMeta;
 use snafu::ResultExt;
 
 use crate::models::tokens::TokenFormData;
 use crate::models::{ListFilesParams, UploadParams};
-use crate::services::dirs::Dir;
 use crate::services::files::{Photo, delete_photo, list_files, upload_photo};
 use crate::{
     Error, Result,
@@ -29,7 +29,7 @@ use super::handle_error_message;
 struct PhotoGridTemnplate {
     theme: String,
     bucket: BucketDto,
-    dir: Dir,
+    dir: DirDto,
     photos: Vec<Photo>,
     meta: Option<PaginatedMeta>,
     error_message: Option<String>,
@@ -41,7 +41,7 @@ pub async fn photo_listing_v2_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(pref): Extension<Pref>,
     Extension(bucket): Extension<BucketDto>,
-    Extension(dir): Extension<Dir>,
+    Extension(dir): Extension<DirDto>,
     Query(query): Query<ListFilesParams>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
@@ -102,7 +102,7 @@ pub async fn photo_listing_v2_handler(
 struct UploadPageTemplate {
     t: TemplateData,
     bucket: BucketDto,
-    dir: Dir,
+    dir: DirDto,
     token: String,
 }
 
@@ -117,7 +117,7 @@ pub async fn upload_page_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(pref): Extension<Pref>,
     Extension(bucket): Extension<BucketDto>,
-    Extension(dir): Extension<Dir>,
+    Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
@@ -148,7 +148,7 @@ pub async fn upload_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(pref): Extension<Pref>,
     Extension(bucket): Extension<BucketDto>,
-    Extension(dir): Extension<Dir>,
+    Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
     Query(query): Query<UploadParams>,
     headers: HeaderMap,
@@ -196,7 +196,7 @@ pub async fn upload_handler(
 #[template(path = "widgets/pre_delete_photo_form.html")]
 struct PreDeletePhotoTemplate {
     bucket: BucketDto,
-    dir: Dir,
+    dir: DirDto,
     photo: Photo,
 }
 
@@ -204,7 +204,7 @@ struct PreDeletePhotoTemplate {
 #[template(path = "widgets/confirm_delete_photo_form.html")]
 struct ConfirmDeletePhotoTemplate {
     bucket: BucketDto,
-    dir: Dir,
+    dir: DirDto,
     photo: Photo,
     payload: TokenFormData,
     error_message: Option<String>,
@@ -214,7 +214,7 @@ struct ConfirmDeletePhotoTemplate {
 pub async fn pre_delete_photo_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(bucket): Extension<BucketDto>,
-    Extension(dir): Extension<Dir>,
+    Extension(dir): Extension<DirDto>,
     Extension(photo): Extension<Photo>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
@@ -236,7 +236,7 @@ pub async fn pre_delete_photo_handler(
 pub async fn confirm_delete_photo_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(bucket): Extension<BucketDto>,
-    Extension(dir): Extension<Dir>,
+    Extension(dir): Extension<DirDto>,
     Extension(photo): Extension<Photo>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
@@ -272,7 +272,7 @@ pub async fn confirm_delete_photo_handler(
 pub async fn exec_delete_photo_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(bucket): Extension<BucketDto>,
-    Extension(dir): Extension<Dir>,
+    Extension(dir): Extension<DirDto>,
     Extension(photo): Extension<Photo>,
     State(state): State<AppState>,
     payload: Form<TokenFormData>,

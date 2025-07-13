@@ -1,3 +1,4 @@
+use memo::dir::DirDto;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 
@@ -8,17 +9,6 @@ use crate::{Error, Result};
 use memo::pagination::Paginated;
 
 use super::handle_response_error;
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Dir {
-    pub id: String,
-    pub bucket_id: String,
-    pub name: String,
-    pub label: String,
-    pub file_count: i32,
-    pub created_at: i64,
-    pub updated_at: i64,
-}
 
 #[derive(Deserialize)]
 pub struct SearchDirsParams {
@@ -57,7 +47,7 @@ pub async fn list_dirs(
     client_id: &str,
     bucket_id: &str,
     params: &SearchDirsParams,
-) -> Result<Paginated<Dir>> {
+) -> Result<Paginated<DirDto>> {
     let url = format!(
         "{}/clients/{}/buckets/{}/dirs",
         &state.config.api_url, client_id, bucket_id
@@ -91,7 +81,7 @@ pub async fn list_dirs(
     }
 
     let dirs = response
-        .json::<Paginated<Dir>>()
+        .json::<Paginated<DirDto>>()
         .await
         .context(HttpResponseParseSnafu {
             msg: "Unable to parse dirs.".to_string(),
@@ -106,7 +96,7 @@ pub async fn create_dir(
     client_id: &str,
     bucket_id: &str,
     form: NewDirFormData,
-) -> Result<Dir> {
+) -> Result<DirDto> {
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(csrf_result == "new_dir", CsrfTokenSnafu);
 
@@ -135,7 +125,7 @@ pub async fn create_dir(
     }
 
     let dir = response
-        .json::<Dir>()
+        .json::<DirDto>()
         .await
         .context(HttpResponseParseSnafu {
             msg: "Unable to parse dir information.",
@@ -150,7 +140,7 @@ pub async fn get_dir(
     client_id: &str,
     bucket_id: &str,
     dir_id: &str,
-) -> Result<Dir> {
+) -> Result<DirDto> {
     let url = format!(
         "{}/clients/{}/buckets/{}/dirs/{}",
         &state.config.api_url, client_id, bucket_id, dir_id
@@ -170,7 +160,7 @@ pub async fn get_dir(
     }
 
     let dir = response
-        .json::<Dir>()
+        .json::<DirDto>()
         .await
         .context(HttpResponseParseSnafu {
             msg: "Unable to parse dir.",
@@ -186,7 +176,7 @@ pub async fn update_dir(
     bucket_id: &str,
     dir_id: &str,
     form: &UpdateDirFormData,
-) -> Result<Dir> {
+) -> Result<DirDto> {
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(csrf_result == dir_id, CsrfTokenSnafu);
 
@@ -213,7 +203,7 @@ pub async fn update_dir(
     }
 
     let dir = response
-        .json::<Dir>()
+        .json::<DirDto>()
         .await
         .context(HttpResponseParseSnafu {
             msg: "Unable to parse dir information.",

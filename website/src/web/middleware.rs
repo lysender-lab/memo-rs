@@ -5,7 +5,7 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::CookieJar;
-use memo::bucket::BucketDto;
+use memo::{bucket::BucketDto, dir::DirDto};
 use snafu::ensure;
 
 use crate::{
@@ -17,12 +17,8 @@ use crate::{
     },
     run::AppState,
     services::{
-        auth::authenticate_token,
-        buckets::get_bucket,
-        clients::get_client,
-        dirs::{Dir, get_dir},
-        files::get_photo,
-        users::get_user,
+        auth::authenticate_token, buckets::get_bucket, clients::get_client, dirs::get_dir,
+        files::get_photo, users::get_user,
     },
     web::{Action, Resource, enforce_policy, handle_error},
 };
@@ -108,7 +104,7 @@ pub async fn file_middleware(
     State(state): State<AppState>,
     Extension(ctx): Extension<Ctx>,
     Extension(bucket): Extension<BucketDto>,
-    Extension(dir): Extension<Dir>,
+    Extension(dir): Extension<DirDto>,
     Path(params): Path<MyFileParams>,
     mut req: Request,
     next: Next,

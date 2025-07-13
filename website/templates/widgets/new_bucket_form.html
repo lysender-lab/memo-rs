@@ -27,6 +27,23 @@
                         placeholder="Bucket Name"
                         required
                         minlength="1"
+                        maxlength="50"
+                    >
+                </div>
+            </div>
+
+            <div class="field">
+                <label class="label">Label</label>
+                <div class="control">
+                    <input
+                        class="input"
+                        type="text"
+                        id="create-bucket-label"
+                        name="label"
+                        value="{{ payload.label }}"
+                        placeholder="Bucket Label"
+                        required
+                        minlength="1"
                         maxlength="60"
                     >
                 </div>

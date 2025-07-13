@@ -5,8 +5,12 @@ use memo::client::ClientDto;
 use memo::role::Permission;
 use snafu::ResultExt;
 
+use crate::Error;
 use crate::models::tokens::TokenFormData;
-use crate::services::buckets::{NewBucketFormData, create_bucket, delete_bucket, list_buckets};
+use crate::services::buckets::{
+    NewBucketFormData, UpdateBucketFormData, create_bucket, delete_bucket, list_buckets,
+    update_bucket,
+};
 use crate::{
     Result,
     ctx::Ctx,
@@ -86,6 +90,7 @@ pub async fn new_bucket_handler(
         client,
         payload: NewBucketFormData {
             name: "".to_string(),
+            label: "".to_string(),
             images_only: None,
             token,
         },
@@ -116,6 +121,7 @@ pub async fn post_new_bucket_handler(
         client,
         payload: NewBucketFormData {
             name: "".to_string(),
+            label: "".to_string(),
             images_only: None,
             token,
         },
@@ -124,6 +130,7 @@ pub async fn post_new_bucket_handler(
 
     let bucket = NewBucketFormData {
         name: payload.name.clone(),
+        label: payload.label.clone(),
         images_only: payload.images_only.clone(),
         token: payload.token.clone(),
     };
@@ -196,6 +203,8 @@ pub async fn bucket_page_handler(
 struct BucketControlsTemplate {
     client: ClientDto,
     bucket: BucketDto,
+    updated: bool,
+    can_edit: bool,
     can_delete: bool,
 }
 
@@ -211,6 +220,8 @@ pub async fn bucket_controls_handler(
     let tpl = BucketControlsTemplate {
         client,
         bucket,
+        updated: false,
+        can_edit: actor.has_permissions(&vec![Permission::BucketsEdit]),
         can_delete: actor.has_permissions(&vec![Permission::BucketsDelete]),
     };
 
@@ -219,6 +230,114 @@ pub async fn bucket_controls_handler(
         .header("Content-Type", "text/html")
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
         .context(ResponseBuilderSnafu)?)
+}
+
+#[derive(Template)]
+#[template(path = "widgets/edit_bucket_form.html")]
+struct EditBucketFormTemplate {
+    payload: UpdateBucketFormData,
+    client: ClientDto,
+    bucket: BucketDto,
+    error_message: Option<String>,
+}
+
+/// Renders the edit bucket form
+pub async fn edit_bucket_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(client): Extension<ClientDto>,
+    Extension(bucket): Extension<BucketDto>,
+    State(state): State<AppState>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::Bucket, Action::Update)?;
+
+    let token = create_csrf_token(&bucket.id, &config.jwt_secret)?;
+
+    let label = bucket.label.clone();
+    let tpl = EditBucketFormTemplate {
+        client,
+        bucket,
+        payload: UpdateBucketFormData { label, token },
+        error_message: None,
+    };
+
+    Ok(Response::builder()
+        .status(200)
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)?)
+}
+
+/// Handles the edit album submission
+pub async fn post_edit_bucket_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(client): Extension<ClientDto>,
+    Extension(bucket): Extension<BucketDto>,
+    State(state): State<AppState>,
+    payload: Form<UpdateBucketFormData>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let cid = bucket.client_id.clone();
+    let bid = bucket.id.clone();
+    let actor = ctx.actor().expect("actor is required");
+
+    let _ = enforce_policy(actor, Resource::Bucket, Action::Update)?;
+
+    let token = create_csrf_token(&bid, &config.jwt_secret)?;
+
+    let mut tpl = EditBucketFormTemplate {
+        client: client.clone(),
+        bucket: bucket.clone(),
+        payload: UpdateBucketFormData {
+            label: "".to_string(),
+            token,
+        },
+        error_message: None,
+    };
+
+    tpl.payload.label = payload.label.clone();
+
+    let token = ctx.token().expect("token is required");
+    let result = update_bucket(&state, token, &cid, &bid, &payload).await;
+    match result {
+        Ok(updated_bucket) => {
+            // Render the controls again with an out-of-bound swap for title
+            let tpl = BucketControlsTemplate {
+                client,
+                bucket: updated_bucket,
+                updated: true,
+                can_edit: enforce_policy(actor, Resource::Bucket, Action::Update).is_ok(),
+                can_delete: enforce_policy(actor, Resource::Bucket, Action::Delete).is_ok(),
+            };
+            Ok(Response::builder()
+                .status(200)
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
+        }
+        Err(err) => {
+            let status;
+            match err {
+                Error::Validation { msg } => {
+                    status = 400;
+                    tpl.error_message = Some(msg);
+                }
+                Error::LoginRequired => {
+                    status = 401;
+                    tpl.error_message = Some("Login required.".to_string());
+                }
+                any_err => {
+                    status = 500;
+                    tpl.error_message = Some(any_err.to_string());
+                }
+            }
+
+            Ok(Response::builder()
+                .status(status)
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
+        }
+    }
 }
 
 #[derive(Template)]

@@ -1,6 +1,6 @@
 use axum::body::Bytes;
 use axum::http::HeaderMap;
-use memo::file::{ImgDimension, ImgVersion, ImgVersionDto};
+use memo::file::{FileDto, ImgDimension, ImgVersion};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 
@@ -11,28 +11,6 @@ use crate::services::handle_response_error;
 use crate::services::token::verify_csrf_token;
 use crate::{Error, Result};
 use memo::pagination::Paginated;
-
-#[derive(Clone, Deserialize)]
-pub struct FileObject {
-    pub id: String,
-    pub dir_id: String,
-    pub name: String,
-    pub filename: String,
-    pub content_type: String,
-    pub size: i64,
-
-    // Only available on non-image files
-    #[allow(dead_code)]
-    pub url: Option<String>,
-
-    pub is_image: bool,
-
-    // Only available for image files, main url is in orig version
-    pub img_versions: Option<Vec<ImgVersionDto>>,
-
-    pub created_at: i64,
-    pub updated_at: i64,
-}
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Photo {
@@ -63,10 +41,10 @@ pub struct UploadResult {
     pub next_token: String,
 }
 
-impl TryFrom<FileObject> for Photo {
+impl TryFrom<FileDto> for Photo {
     type Error = String;
 
-    fn try_from(file: FileObject) -> core::result::Result<Self, Self::Error> {
+    fn try_from(file: FileDto) -> core::result::Result<Self, Self::Error> {
         if !file.is_image {
             return Err("File is not an image".into());
         }
@@ -154,13 +132,12 @@ pub async fn list_files(
         return Err(handle_response_error(response, "files", Error::AlbumNotFound).await);
     }
 
-    let listing =
-        response
-            .json::<Paginated<FileObject>>()
-            .await
-            .context(HttpResponseParseSnafu {
-                msg: "Unable to parse files.".to_string(),
-            })?;
+    let listing = response
+        .json::<Paginated<FileDto>>()
+        .await
+        .context(HttpResponseParseSnafu {
+            msg: "Unable to parse files.".to_string(),
+        })?;
 
     let items: Vec<Photo> = listing
         .data
@@ -197,7 +174,7 @@ pub async fn get_photo(
         })?;
 
     let file = response
-        .json::<FileObject>()
+        .json::<FileDto>()
         .await
         .context(HttpResponseParseSnafu {
             msg: "Unable to parse photo.".to_string(),
@@ -249,7 +226,7 @@ pub async fn upload_photo(
     }
 
     let file = response
-        .json::<FileObject>()
+        .json::<FileDto>()
         .await
         .context(HttpResponseParseSnafu {
             msg: "Unable to parse photo information.".to_string(),
