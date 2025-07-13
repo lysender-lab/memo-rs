@@ -20,6 +20,7 @@ pub struct Bucket {
     pub id: String,
     pub client_id: String,
     pub name: String,
+    pub label: String,
     pub images_only: i32,
     pub created_at: i64,
 }
@@ -29,6 +30,9 @@ pub struct NewBucket {
     #[validate(length(min = 1, max = 50))]
     #[validate(custom(function = "memo::validators::sluggable"))]
     pub name: String,
+
+    #[validate(length(min = 1, max = 60))]
+    pub label: String,
 
     pub images_only: bool,
 }
@@ -51,6 +55,7 @@ impl From<BucketDto> for Bucket {
             id: dto.id,
             client_id: dto.client_id,
             name: dto.name,
+            label: dto.label,
             images_only: if dto.images_only { 1 } else { 0 },
             created_at: dto.created_at,
         }
@@ -63,6 +68,7 @@ impl From<Bucket> for BucketDto {
             id: bucket.id,
             client_id: bucket.client_id,
             name: bucket.name,
+            label: bucket.label,
             images_only: bucket.images_only == 1,
             created_at: bucket.created_at,
         }
@@ -131,6 +137,7 @@ impl BucketStore for BucketRepo {
             id: generate_id(),
             client_id: client_id.to_string(),
             name: data_copy.name,
+            label: data_copy.label,
             images_only: if data_copy.images_only { 1 } else { 0 },
             created_at: today,
         };
@@ -268,8 +275,9 @@ pub fn create_test_bucket() -> BucketDto {
 
     BucketDto {
         id: TEST_BUCKET_ID.to_string(),
-        name: "test-bucket".to_string(),
         client_id: TEST_CLIENT_ID.to_string(),
+        name: "test-bucket".to_string(),
+        label: "test-bucket".to_string(),
         images_only: true,
         created_at: today,
     }
@@ -330,18 +338,21 @@ mod tests {
     fn test_new_bucket() {
         let data = NewBucket {
             name: "hello-world".to_string(),
+            label: "Hello World".to_string(),
             images_only: false,
         };
         assert!(data.validate().is_ok());
 
         let data = NewBucket {
             name: "hello_world".to_string(),
+            label: "Hello World".to_string(),
             images_only: false,
         };
         assert!(data.validate().is_err());
 
         let data = NewBucket {
             name: "".to_string(),
+            label: "".to_string(),
             images_only: false,
         };
         assert!(data.validate().is_err());

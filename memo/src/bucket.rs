@@ -5,6 +5,7 @@ pub struct BucketDto {
     pub id: String,
     pub client_id: String,
     pub name: String,
+    pub label: String,
     pub images_only: bool,
     pub created_at: i64,
 }
