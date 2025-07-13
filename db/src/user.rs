@@ -94,7 +94,7 @@ pub const MAX_USERS_PER_CLIENT: i32 = 50;
 pub trait UserStore: Send + Sync {
     async fn list(&self, client_id: &str) -> Result<Vec<UserDto>>;
 
-    async fn create(&self, client_id: &str, data: &NewUser, is_setup: bool) -> Result<UserDto>;
+    async fn create(&self, client_id: &str, data: &NewUser) -> Result<UserDto>;
 
     async fn get(&self, id: &str) -> Result<Option<UserDto>>;
 
@@ -149,7 +149,7 @@ impl UserStore for UserRepo {
         Ok(items)
     }
 
-    async fn create(&self, client_id: &str, data: &NewUser, is_setup: bool) -> Result<UserDto> {
+    async fn create(&self, client_id: &str, data: &NewUser) -> Result<UserDto> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let data_copy = data.clone();
@@ -421,7 +421,7 @@ impl UserStore for UserTestRepo {
         Ok(filtered)
     }
 
-    async fn create(&self, _client_id: &str, _data: &NewUser, _is_setup: bool) -> Result<UserDto> {
+    async fn create(&self, _client_id: &str, _data: &NewUser) -> Result<UserDto> {
         Err("Not supported".into())
     }
 

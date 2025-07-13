@@ -107,15 +107,12 @@ checksum = "dcfed56ad506cb2c684a14971b8861fdc3baaaae314b9e5f9bb532cbe3ba7a4f"
 name = "api"
 version = "0.2.0"
 dependencies = [
- "argon2",
  "async-trait",
  "axum",
  "axum-test",
  "chrono",
  "clap",
  "db",
- "deadpool-diesel",
- "diesel",
  "image",
  "infer",
  "jsonwebtoken",

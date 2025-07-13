@@ -5,13 +5,10 @@ edition = "2024"
 
 [dependencies]
 async-trait.workspace = true
-argon2.workspace = true
 axum.workspace = true
 axum-test.workspace = true
 chrono.workspace = true
 clap.workspace = true
-deadpool-diesel.workspace = true
-diesel.workspace = true
 image.workspace = true
 infer.workspace = true
 jsonwebtoken.workspace = true

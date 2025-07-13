@@ -71,7 +71,7 @@ pub async fn create_user(
     state
         .db
         .users
-        .create(client_id, data, is_setup)
+        .create(client_id, data)
         .await
         .context(DbSnafu)
 }

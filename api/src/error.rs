@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use axum::extract::rejection::JsonRejection;
 use axum::response::IntoResponse;
 use axum::{body::Body, http::StatusCode, response::Response};
-use deadpool_diesel::{InteractError, PoolError};
 use memo::role::{InvalidPermissionsError, InvalidRolesError};
 use serde::{Deserialize, Serialize};
 use snafu::{Backtrace, ErrorCompat, Snafu};
@@ -33,25 +32,6 @@ pub enum Error {
 
     #[snafu(display("Config error: {}", msg))]
     Config { msg: String },
-
-    #[snafu(display("Error getting db connection: {}", source))]
-    DbPool {
-        source: PoolError,
-        backtrace: Backtrace,
-    },
-
-    #[snafu(display("Error using the db connection: {}", source))]
-    DbInteract {
-        source: InteractError,
-        backtrace: Backtrace,
-    },
-
-    #[snafu(display("Error querying {}: {}", table, source))]
-    DbQuery {
-        table: String,
-        source: diesel::result::Error,
-        backtrace: Backtrace,
-    },
 
     #[snafu(display("{}", source))]
     Db {

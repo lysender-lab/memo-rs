@@ -14,7 +14,6 @@ mod error;
 mod file;
 mod health;
 mod run;
-mod schema;
 mod state;
 mod web;
 

@@ -8,9 +8,7 @@ use snafu::{ResultExt, ensure};
 use validator::Validate;
 
 use crate::Result;
-use crate::error::{
-    DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, MaxDirsReachedSnafu, ValidationSnafu,
-};
+use crate::error::{DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, ValidationSnafu};
 use crate::schema::dirs::{self, dsl};
 use memo::dir::DirDto;
 use memo::pagination::Paginated;
