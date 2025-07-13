@@ -1,4 +1,4 @@
-use reqwest::{Client, StatusCode};
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::collections::HashMap;
@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use crate::{
     Error, Result,
     error::{HttpClientSnafu, HttpResponseParseSnafu},
+    run::AppState,
 };
 use memo::actor::Actor;
 
@@ -20,13 +21,14 @@ pub struct AuthResponse {
     pub token: String,
 }
 
-pub async fn authenticate(api_url: &str, data: AuthPayload) -> Result<AuthResponse> {
+pub async fn authenticate(state: &AppState, data: AuthPayload) -> Result<AuthResponse> {
     let mut body = HashMap::new();
     body.insert("username", data.username);
     body.insert("password", data.password);
 
-    let url = format!("{}/auth/token", api_url);
-    let response = Client::new()
+    let url = format!("{}/auth/token", &state.config.api_url);
+    let response = state
+        .client
         .post(url.as_str())
         .json(&body)
         .send()
@@ -51,9 +53,10 @@ pub async fn authenticate(api_url: &str, data: AuthPayload) -> Result<AuthRespon
     }
 }
 
-pub async fn authenticate_token(api_url: &str, token: &str) -> Result<Actor> {
-    let url = format!("{}/user/authz", api_url);
-    let response = Client::new()
+pub async fn authenticate_token(state: &AppState, token: &str) -> Result<Actor> {
+    let url = format!("{}/user/authz", &state.config.api_url);
+    let response = state
+        .client
         .get(url.as_str())
         .header("Authorization", format!("Bearer {}", token))
         .send()

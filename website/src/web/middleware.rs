@@ -37,7 +37,6 @@ pub async fn auth_middleware(
     mut req: Request,
     next: Next,
 ) -> Response {
-    let config = state.config.clone();
     let token = cookies
         .get(AUTH_TOKEN_COOKIE)
         .map(|c| c.value().to_string());
@@ -49,7 +48,7 @@ pub async fn auth_middleware(
 
     if let Some(token) = token {
         // Validate token
-        let result = authenticate_token(&config.api_url, &token).await;
+        let result = authenticate_token(&state, &token).await;
 
         let _ = match result {
             Ok(actor) => {
@@ -99,14 +98,7 @@ pub async fn dir_middleware(
     let _ = enforce_policy(actor, Resource::Album, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
-    let dir = get_dir(
-        &state.config.api_url,
-        token,
-        &bucket.client_id,
-        &bucket.id,
-        &params.dir_id,
-    )
-    .await?;
+    let dir = get_dir(&state, token, &bucket.client_id, &bucket.id, &params.dir_id).await?;
 
     req.extensions_mut().insert(dir);
     Ok(next.run(req).await)
@@ -125,9 +117,8 @@ pub async fn file_middleware(
     let _ = enforce_policy(actor, Resource::Photo, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
-    let config = state.config.clone();
     let photo = get_photo(
-        &config.api_url,
+        &state,
         token,
         &bucket.client_id,
         &bucket.id,
@@ -159,9 +150,8 @@ pub async fn client_middleware(
     );
 
     let token = ctx.token().expect("token is required");
-    let config = state.config.clone();
 
-    let client = get_client(&config.api_url, token, &params.client_id).await?;
+    let client = get_client(&state, token, &params.client_id).await?;
 
     req.extensions_mut().insert(client);
     Ok(next.run(req).await)
@@ -178,9 +168,8 @@ pub async fn user_middleware(
     let _ = enforce_policy(actor, Resource::User, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
-    let config = state.config.clone();
 
-    let user = get_user(&config.api_url, token, &params.client_id, &params.user_id).await?;
+    let user = get_user(&state, token, &params.client_id, &params.user_id).await?;
 
     req.extensions_mut().insert(user);
     Ok(next.run(req).await)
@@ -197,9 +186,8 @@ pub async fn bucket_middleware(
     let _ = enforce_policy(actor, Resource::Bucket, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
-    let config = state.config.clone();
 
-    let bucket = get_bucket(&config.api_url, token, &params.client_id, &params.bucket_id).await?;
+    let bucket = get_bucket(&state, token, &params.client_id, &params.bucket_id).await?;
 
     req.extensions_mut().insert(bucket);
     Ok(next.run(req).await)
@@ -216,9 +204,8 @@ pub async fn my_bucket_middleware(
     let _ = enforce_policy(actor, Resource::Bucket, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
-    let config = state.config.clone();
 
-    let bucket = get_bucket(&config.api_url, token, &actor.client_id, &params.bucket_id).await?;
+    let bucket = get_bucket(&state, token, &actor.client_id, &params.bucket_id).await?;
 
     req.extensions_mut().insert(bucket);
     Ok(next.run(req).await)

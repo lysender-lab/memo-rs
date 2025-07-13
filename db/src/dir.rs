@@ -71,7 +71,7 @@ pub struct NewDir {
 #[derive(Debug, Clone, Deserialize, Validate, AsChangeset)]
 #[diesel(table_name = crate::schema::dirs)]
 pub struct UpdateDir {
-    #[validate(length(min = 1, max = 100))]
+    #[validate(length(min = 1, max = 60))]
     pub label: Option<String>,
 }
 

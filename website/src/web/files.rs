@@ -63,10 +63,8 @@ pub async fn photo_listing_v2_handler(
         last_item: "".to_string(),
     };
 
-    let config = state.config.clone();
-
     let auth_token = ctx.token().expect("token is required");
-    let result = list_files(&config.api_url, auth_token, &cid, &bid, &dir_id, &query).await;
+    let result = list_files(&state, auth_token, &cid, &bid, &dir_id, &query).await;
 
     match result {
         Ok(listing) => {
@@ -167,7 +165,7 @@ pub async fn upload_handler(
 
     let auth_token = ctx.token().expect("token is required");
     let result = upload_photo(
-        &config,
+        &state,
         auth_token,
         &cid,
         &bid,
@@ -297,7 +295,7 @@ pub async fn exec_delete_photo_handler(
 
     let auth_token = ctx.token().expect("token is required");
     let result = delete_photo(
-        &config,
+        &state,
         auth_token,
         &cid,
         &bid,

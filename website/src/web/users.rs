@@ -47,7 +47,7 @@ pub async fn users_handler(
     t.title = String::from("Users");
 
     let token = ctx.token().expect("token is required");
-    let users = list_users(state.config.api_url.as_str(), token, client.id.as_str()).await?;
+    let users = list_users(&state, token, &client.id).await?;
 
     let tpl = UsersPageTemplate { t, client, users };
 
@@ -149,7 +149,7 @@ pub async fn post_new_user_handler(
 
     let mut tpl = NewUserFormTemplate {
         client,
-        action: format!("/clients/{}/users/new", cid.as_str()),
+        action: format!("/clients/{}/users/new", &cid),
         payload: NewUserFormData {
             username: "".to_string(),
             password: "".to_string(),
@@ -172,7 +172,7 @@ pub async fn post_new_user_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    let result = create_user(&config, token, cid.as_str(), &user).await;
+    let result = create_user(&state, token, &cid, &user).await;
 
     match result {
         Ok(_) => {
@@ -349,7 +349,7 @@ pub async fn post_update_user_status_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    let result = update_user_status(&config, token, &cid, &uid, &data).await;
+    let result = update_user_status(&state, token, &cid, &uid, &data).await;
 
     match result {
         Ok(updated_user) => {
@@ -470,7 +470,7 @@ pub async fn post_update_user_role_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    let result = update_user_roles(&config, token, &cid, &uid, &data).await;
+    let result = update_user_roles(&state, token, &cid, &uid, &data).await;
 
     match result {
         Ok(updated_user) => {
@@ -589,7 +589,7 @@ pub async fn post_reset_password_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    let result = reset_user_password(&config, token, &cid, &uid, &data).await;
+    let result = reset_user_password(&state, token, &cid, &uid, &data).await;
 
     match result {
         Ok(_) => {
@@ -690,7 +690,7 @@ pub async fn post_delete_user_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    let result = delete_user(&config, token, &client.id, &user.id, &payload.token).await;
+    let result = delete_user(&state, token, &client.id, &user.id, &payload.token).await;
 
     match result {
         Ok(_) => {

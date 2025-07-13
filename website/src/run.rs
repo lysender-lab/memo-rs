@@ -1,6 +1,8 @@
 use axum::Router;
 use axum::extract::FromRef;
+use reqwest::{Client, ClientBuilder};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 use tower_cookies::CookieManagerLayer;
@@ -14,13 +16,20 @@ use crate::web::all_routes;
 #[derive(Clone, FromRef)]
 pub struct AppState {
     pub config: Arc<Config>,
+    pub client: Client,
 }
 
 pub async fn run(config: Config) -> Result<()> {
     let port = config.port;
     let frontend_dir = config.frontend_dir.clone();
+    let client = ClientBuilder::new()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .expect("HTTP Client is required");
+
     let state = AppState {
         config: Arc::new(config),
+        client,
     };
 
     let routes_all = Router::new()

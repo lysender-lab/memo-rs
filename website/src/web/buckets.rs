@@ -38,7 +38,7 @@ pub async fn buckets_handler(
     t.title = String::from("Buckets");
 
     let token = ctx.token().expect("token is required");
-    let buckets = list_buckets(state.config.api_url.as_str(), token, client.id.as_str()).await?;
+    let buckets = list_buckets(&state, token, client.id.as_str()).await?;
 
     let tpl = BucketsPageTemplate { t, client, buckets };
 
@@ -129,11 +129,11 @@ pub async fn post_new_bucket_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    let result = create_bucket(&config, token, cid.as_str(), &bucket).await;
+    let result = create_bucket(&state, token, &cid, &bucket).await;
 
     match result {
         Ok(_) => {
-            let next_url = format!("/clients/{}/buckets", cid.as_str());
+            let next_url = format!("/clients/{}/buckets", &cid);
             // Weird but can't do a redirect here, let htmx handle it
             Ok(Response::builder()
                 .status(200)
@@ -278,7 +278,7 @@ pub async fn post_delete_bucket_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    let result = delete_bucket(&config, token, &client.id, &bucket.id, &payload.token).await;
+    let result = delete_bucket(&state, token, &client.id, &bucket.id, &payload.token).await;
 
     match result {
         Ok(_) => {

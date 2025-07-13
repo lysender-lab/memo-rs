@@ -53,7 +53,7 @@ pub async fn search_dirs_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    match list_dirs(&state.config.api_url, token, &cid, &bid, &query).await {
+    match list_dirs(&state, token, &cid, &bid, &query).await {
         Ok(dirs) => {
             let mut keyword_param: String = "".to_string();
             if let Some(keyword) = &query.keyword {
@@ -166,7 +166,7 @@ pub async fn post_new_dir_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    let result = create_dir(&config, token, &cid, &bid, dir).await;
+    let result = create_dir(&state, token, &cid, &bid, dir).await;
 
     match result {
         Ok(_) => {
@@ -345,7 +345,7 @@ pub async fn post_edit_dir_handler(
     tpl.payload.label = payload.label.clone();
 
     let token = ctx.token().expect("token is required");
-    let result = update_dir(&config, token, &cid, &bid, &dir_id, &payload).await;
+    let result = update_dir(&state, token, &cid, &bid, &dir_id, &payload).await;
     match result {
         Ok(updated_dir) => {
             // Render the controls again with an out-of-bound swap for title
@@ -440,7 +440,7 @@ pub async fn post_delete_dir_handler(
     let auth_token = ctx.token().expect("token is required");
 
     let result = delete_dir(
-        &config,
+        &state,
         auth_token,
         &bucket.client_id,
         &bucket.id,

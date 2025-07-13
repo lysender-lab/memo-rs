@@ -1,10 +1,9 @@
 use memo::bucket::BucketDto;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 
-use crate::config::Config;
 use crate::error::{CsrfTokenSnafu, HttpClientSnafu, HttpResponseParseSnafu};
+use crate::run::AppState;
 use crate::services::token::verify_csrf_token;
 use crate::{Error, Result};
 
@@ -23,10 +22,15 @@ pub struct NewBucketData {
     pub images_only: bool,
 }
 
-pub async fn list_buckets(api_url: &str, token: &str, client_id: &str) -> Result<Vec<BucketDto>> {
-    let url = format!("{}/clients/{}/buckets", api_url, client_id);
+pub async fn list_buckets(
+    state: &AppState,
+    token: &str,
+    client_id: &str,
+) -> Result<Vec<BucketDto>> {
+    let url = format!("{}/clients/{}/buckets", &state.config.api_url, client_id);
 
-    let response = Client::new()
+    let response = state
+        .client
         .get(url)
         .bearer_auth(token)
         .send()
@@ -50,15 +54,15 @@ pub async fn list_buckets(api_url: &str, token: &str, client_id: &str) -> Result
 }
 
 pub async fn create_bucket(
-    config: &Config,
+    state: &AppState,
     token: &str,
     client_id: &str,
     form: &NewBucketFormData,
 ) -> Result<BucketDto> {
-    let csrf_result = verify_csrf_token(&form.token, &config.jwt_secret)?;
+    let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(csrf_result == "new_bucket", CsrfTokenSnafu);
 
-    let url = format!("{}/clients/{}/buckets", &config.api_url, client_id);
+    let url = format!("{}/clients/{}/buckets", &state.config.api_url, client_id);
 
     let data = NewBucketData {
         name: form.name.clone(),
@@ -68,7 +72,8 @@ pub async fn create_bucket(
         },
     };
 
-    let response = Client::new()
+    let response = state
+        .client
         .post(url)
         .bearer_auth(token)
         .json(&data)
@@ -93,13 +98,17 @@ pub async fn create_bucket(
 }
 
 pub async fn get_bucket(
-    api_url: &str,
+    state: &AppState,
     token: &str,
     client_id: &str,
     bucket_id: &str,
 ) -> Result<BucketDto> {
-    let url = format!("{}/clients/{}/buckets/{}", api_url, client_id, bucket_id);
-    let response = Client::new()
+    let url = format!(
+        "{}/clients/{}/buckets/{}",
+        &state.config.api_url, client_id, bucket_id
+    );
+    let response = state
+        .client
         .get(url)
         .bearer_auth(token)
         .send()
@@ -123,19 +132,20 @@ pub async fn get_bucket(
 }
 
 pub async fn delete_bucket(
-    config: &Config,
+    state: &AppState,
     token: &str,
     client_id: &str,
     bucket_id: &str,
     csrf_token: &str,
 ) -> Result<()> {
-    let csrf_result = verify_csrf_token(&csrf_token, &config.jwt_secret)?;
+    let csrf_result = verify_csrf_token(&csrf_token, &state.config.jwt_secret)?;
     ensure!(csrf_result == bucket_id, CsrfTokenSnafu);
     let url = format!(
         "{}/clients/{}/buckets/{}",
-        &config.api_url, client_id, bucket_id
+        &state.config.api_url, client_id, bucket_id
     );
-    let response = Client::new()
+    let response = state
+        .client
         .delete(url)
         .bearer_auth(token)
         .send()

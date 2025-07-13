@@ -37,6 +37,13 @@ pub struct NewBucket {
     pub images_only: bool,
 }
 
+#[derive(Debug, Clone, Deserialize, Validate, AsChangeset)]
+#[diesel(table_name = crate::schema::buckets)]
+pub struct UpdateBucket {
+    #[validate(length(min = 1, max = 60))]
+    pub label: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct ListBucketsParams {
     #[validate(range(min = 1, max = 1000))]
@@ -88,6 +95,8 @@ pub trait BucketStore: Send + Sync {
     async fn find_by_name(&self, client_id: &str, name: &str) -> Result<Option<BucketDto>>;
 
     async fn count_by_client(&self, client_id: &str) -> Result<i64>;
+
+    async fn update(&self, id: &str, data: &UpdateBucket) -> Result<bool>;
 
     async fn delete(&self, id: &str) -> Result<()>;
 
@@ -226,6 +235,33 @@ impl BucketStore for BucketRepo {
         Ok(count)
     }
 
+    async fn update(&self, id: &str, data: &UpdateBucket) -> Result<bool> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        // Do not update if there is no data to update
+        if data.label.is_none() {
+            return Ok(false);
+        }
+
+        let data_copy = data.clone();
+        let bid = id.to_string();
+        let update_res = db
+            .interact(move |conn| {
+                diesel::update(dsl::buckets)
+                    .filter(dsl::id.eq(bid.as_str()))
+                    .set(data_copy)
+                    .execute(conn)
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let item = update_res.context(DbQuerySnafu {
+            table: "buckets".to_string(),
+        })?;
+
+        Ok(item > 0)
+    }
+
     async fn delete(&self, id: &str) -> Result<()> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
@@ -319,6 +355,10 @@ impl BucketStore for BucketTestRepo {
     async fn count_by_client(&self, client_id: &str) -> Result<i64> {
         let buckets = self.list(client_id).await?;
         Ok(buckets.len() as i64)
+    }
+
+    async fn update(&self, _id: &str, _data: &UpdateBucket) -> Result<bool> {
+        Ok(false)
     }
 
     async fn delete(&self, _id: &str) -> Result<()> {

@@ -1,9 +1,8 @@
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 
-use crate::config::Config;
 use crate::error::{CsrfTokenSnafu, HttpClientSnafu, HttpResponseParseSnafu};
+use crate::run::AppState;
 use crate::services::token::verify_csrf_token;
 use crate::{Error, Result};
 use memo::pagination::Paginated;
@@ -53,7 +52,7 @@ pub struct UpdateDirData {
 }
 
 pub async fn list_dirs(
-    api_url: &str,
+    state: &AppState,
     token: &str,
     client_id: &str,
     bucket_id: &str,
@@ -61,7 +60,7 @@ pub async fn list_dirs(
 ) -> Result<Paginated<Dir>> {
     let url = format!(
         "{}/clients/{}/buckets/{}/dirs",
-        api_url, client_id, bucket_id
+        &state.config.api_url, client_id, bucket_id
     );
     let mut page = "1".to_string();
     let mut per_page = "10".to_string();
@@ -76,7 +75,8 @@ pub async fn list_dirs(
     if let Some(keyword) = &params.keyword {
         query.push(("keyword", keyword));
     }
-    let response = Client::new()
+    let response = state
+        .client
         .get(url)
         .bearer_auth(token)
         .query(&query)
@@ -101,25 +101,26 @@ pub async fn list_dirs(
 }
 
 pub async fn create_dir(
-    config: &Config,
+    state: &AppState,
     token: &str,
     client_id: &str,
     bucket_id: &str,
     form: NewDirFormData,
 ) -> Result<Dir> {
-    let csrf_result = verify_csrf_token(&form.token, &config.jwt_secret)?;
+    let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(csrf_result == "new_dir", CsrfTokenSnafu);
 
     let url = format!(
         "{}/clients/{}/buckets/{}/dirs",
-        &config.api_url, client_id, bucket_id
+        &state.config.api_url, client_id, bucket_id
     );
 
     let data = NewDirData {
         name: form.name,
         label: form.label,
     };
-    let response = Client::new()
+    let response = state
+        .client
         .post(url)
         .bearer_auth(token)
         .json(&data)
@@ -144,7 +145,7 @@ pub async fn create_dir(
 }
 
 pub async fn get_dir(
-    api_url: &str,
+    state: &AppState,
     token: &str,
     client_id: &str,
     bucket_id: &str,
@@ -152,9 +153,10 @@ pub async fn get_dir(
 ) -> Result<Dir> {
     let url = format!(
         "{}/clients/{}/buckets/{}/dirs/{}",
-        api_url, client_id, bucket_id, dir_id
+        &state.config.api_url, client_id, bucket_id, dir_id
     );
-    let response = Client::new()
+    let response = state
+        .client
         .get(url)
         .bearer_auth(token)
         .send()
@@ -178,24 +180,25 @@ pub async fn get_dir(
 }
 
 pub async fn update_dir(
-    config: &Config,
+    state: &AppState,
     token: &str,
     client_id: &str,
     bucket_id: &str,
     dir_id: &str,
     form: &UpdateDirFormData,
 ) -> Result<Dir> {
-    let csrf_result = verify_csrf_token(&form.token, &config.jwt_secret)?;
+    let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(csrf_result == dir_id, CsrfTokenSnafu);
 
     let url = format!(
         "{}/clients/{}/buckets/{}/dirs/{}",
-        &config.api_url, client_id, bucket_id, dir_id
+        &state.config.api_url, client_id, bucket_id, dir_id
     );
     let data = UpdateDirData {
         label: form.label.clone(),
     };
-    let response = Client::new()
+    let response = state
+        .client
         .patch(url)
         .bearer_auth(token)
         .json(&data)
@@ -220,20 +223,21 @@ pub async fn update_dir(
 }
 
 pub async fn delete_dir(
-    config: &Config,
+    state: &AppState,
     token: &str,
     client_id: &str,
     bucket_id: &str,
     dir_id: &str,
     csrf_token: &str,
 ) -> Result<()> {
-    let csrf_result = verify_csrf_token(&csrf_token, &config.jwt_secret)?;
+    let csrf_result = verify_csrf_token(&csrf_token, &state.config.jwt_secret)?;
     ensure!(csrf_result == dir_id, CsrfTokenSnafu);
     let url = format!(
         "{}/clients/{}/buckets/{}/dirs/{}",
-        &config.api_url, client_id, bucket_id, dir_id
+        &state.config.api_url, client_id, bucket_id, dir_id
     );
-    let response = Client::new()
+    let response = state
+        .client
         .delete(url)
         .bearer_auth(token)
         .send()
