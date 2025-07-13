@@ -170,6 +170,7 @@ struct BucketPageTemplate {
     t: TemplateData,
     client: ClientDto,
     bucket: BucketDto,
+    updated: bool,
     can_edit: bool,
     can_delete: bool,
 }
@@ -190,6 +191,7 @@ pub async fn bucket_page_handler(
         t,
         client,
         bucket,
+        updated: false,
         can_edit: actor.has_permissions(&vec![Permission::BucketsEdit]),
         can_delete: actor.has_permissions(&vec![Permission::BucketsDelete]),
     };

@@ -10,7 +10,9 @@
                 <li><a href="/clients/{{ client.id }}">{{ client.name }}</a></li>
                 <li><a href="/clients/{{ client.id }}/buckets">Buckets</a></li>
                 <li class="is-active">
-                    <a href="/clients/{{ client.id }}/buckets/{{ bucket.id }}" aria-current="page">{{ bucket.name }}</a>
+                    <a href="/clients/{{ client.id }}/buckets/{{ bucket.id }}" aria-current="page">
+                        <span id="breadcrumb-bucket-label">{{ bucket.label }}</span>
+                    </a>
                 </li>
             </ul>
         </nav>
@@ -25,26 +27,28 @@
             <h1 class="title is-4 has-text-weight-bold">Bucket</h1>
 
             <div class="columns is-variable is-6">
-              <div class="column is-one-third">
-                <p class="has-text-grey-dark"><strong>Name:</strong></p>
-                <p>{{ bucket.name }}</p>
-              </div>
+                <div class="column is-one-third">
+                    <p class="has-text-grey-dark"><strong>Name:</strong></p>
+                    <p>{{ bucket.name }}</p>
+                </div>
 
-              <div class="column is-one-third">
-                <p class="has-text-grey-dark"><strong>Label:</strong></p>
-                <p>{{ bucket.label }}</p>
-              </div>
+                <div class="column is-one-third">
+                    <p class="has-text-grey-dark"><strong>Label:</strong></p>
+                    <p>
+                        <span id="bucket-info-label">{{ bucket.label }}</span>
+                    </p>
+                </div>
 
-              <div id="user-status-w" class="column is-one-third">
-                <p class="has-text-grey-dark"><strong>Content Type:</strong></p>
+                <div id="user-status-w" class="column is-one-third">
+                    <p class="has-text-grey-dark"><strong>Content Type:</strong></p>
                     {% if bucket.images_only %}
                     <span class="tag is-primary">Images</span>
                     {% else %}
                     <span class="tag is-dark">Files</span>
                     {% endif %}
-              </div>
+                </div>
             </div>
-          </div>
+        </div>
     </div>
 </section>
 {% endblock %}
