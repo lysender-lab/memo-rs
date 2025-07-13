@@ -50,6 +50,12 @@ pub enum Error {
     #[snafu(display("Maximum number of files reached: 1000"))]
     MaxFilesReached,
 
+    #[snafu(display("{}", source))]
+    HashPassword {
+        source: password::Error,
+        backtrace: Backtrace,
+    },
+
     #[snafu(display("{}", msg))]
     Whatever { msg: String },
 }

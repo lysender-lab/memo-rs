@@ -14,7 +14,7 @@ use crate::Result;
 use crate::error::{DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, ValidationSnafu};
 
 use crate::schema::files::{self, dsl};
-use memo::file::{FileDto, ImgVersionDto, ORIGINAL_PATH};
+use memo::file::{FileDto, ImgVersionDto};
 use memo::pagination::Paginated;
 use memo::validators::flatten_errors;
 
@@ -370,44 +370,6 @@ impl FileStore for FileRepo {
 
         Ok(())
     }
-}
-
-fn cleanup_temp_uploads(data: &FilePayload, file: Option<&FileDto>) -> Result<()> {
-    if let Some(file) = file {
-        if file.is_image {
-            // Cleanup versions
-            if let Some(versions) = &file.img_versions {
-                let mut errors: Vec<String> = Vec::new();
-                for version in versions.iter() {
-                    let source_file = version.to_path(&data.upload_dir, &file.filename);
-                    // Collect errors, can't afford to stop here
-                    if let Err(err) = std::fs::remove_file(&source_file) {
-                        errors.push(format!("Unable to remove file after upload: {}", err));
-                    }
-                }
-
-                if errors.len() > 0 {
-                    return Err(errors.join(", ").as_str().into());
-                }
-            }
-        } else {
-            // Cleanup original file
-            let upload_dir = data.upload_dir.clone();
-            let source_file = upload_dir.join(ORIGINAL_PATH).join(&file.filename);
-            if let Err(err) = std::fs::remove_file(&source_file) {
-                return Err(format!("Unable to remove file after upload: {}", err).into());
-            }
-        }
-    } else {
-        // Full data not available, just cleanup the original
-        let upload_dir = data.upload_dir.clone();
-        let source_file = upload_dir.join(ORIGINAL_PATH).join(&data.filename);
-        if let Err(err) = std::fs::remove_file(&source_file) {
-            return Err(format!("Unable to remove file after upload: {}", err).into());
-        }
-    }
-
-    Ok(())
 }
 
 #[cfg(feature = "test")]

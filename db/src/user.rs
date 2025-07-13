@@ -5,19 +5,20 @@ use diesel::dsl::count_star;
 use diesel::prelude::*;
 use diesel::{QueryDsl, SelectableHelper};
 use serde::Deserialize;
-use snafu::{OptionExt, ResultExt, ensure};
+use snafu::{ResultExt, ensure};
 use validator::Validate;
 
+use crate::Result;
 use crate::error::{
-    DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, InvalidRolesSnafu, MaxUsersReachedSnafu,
-    ValidationSnafu,
+    DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, HashPasswordSnafu, InvalidRolesSnafu,
+    MaxUsersReachedSnafu, ValidationSnafu,
 };
 use crate::schema::users::{self, dsl};
-use crate::{Error, Result};
 use memo::role::{Role, to_roles};
 use memo::user::UserDto;
 use memo::utils::generate_id;
 use memo::validators::flatten_errors;
+use password::hash_password;
 
 #[derive(Debug, Clone, Queryable, Selectable, Insertable)]
 #[diesel(table_name = crate::schema::users)]
@@ -187,7 +188,7 @@ impl UserStore for UserRepo {
 
         let data_copy = data.clone();
         let today = chrono::Utc::now().timestamp();
-        let hashed = hash_password(&data.password)?;
+        let hashed = hash_password(&data.password).context(HashPasswordSnafu)?;
 
         let dir = User {
             id: generate_id(),
@@ -377,7 +378,7 @@ impl UserStore for UserRepo {
 
         let id = id.to_string();
         let today = chrono::Utc::now().timestamp();
-        let hashed = hash_password(&data.password)?;
+        let hashed = hash_password(&data.password).context(HashPasswordSnafu)?;
         let update_res = db
             .interact(move |conn| {
                 diesel::update(dsl::users)

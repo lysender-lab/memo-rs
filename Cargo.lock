@@ -791,6 +791,7 @@ dependencies = [
  "deadpool-diesel",
  "diesel",
  "memo",
+ "password",
  "serde",
  "snafu",
  "validator",

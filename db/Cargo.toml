@@ -12,6 +12,7 @@ serde.workspace = true
 snafu.workspace = true
 validator.workspace = true
 memo = { path = "../memo" }
+password = { path = "../password" }
 
 [features]
 test = []
