@@ -9,3 +9,6 @@ pub mod user;
 
 pub use db::{DbMapper, create_db_mapper};
 pub use error::{Error, Result};
+
+#[cfg(feature = "test")]
+pub use db::create_test_db_mapper;

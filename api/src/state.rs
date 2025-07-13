@@ -33,7 +33,7 @@ pub fn create_test_app_state() -> AppState {
     use std::path::PathBuf;
 
     use crate::config::{CloudConfig, DbConfig, ServerConfig};
-    use crate::db::create_test_db_mapper;
+    use db::create_test_db_mapper;
     use storage::StorageTestClient;
 
     let config = Config {

@@ -1,37 +1,28 @@
-use async_trait::async_trait;
-
 use chrono::{DateTime, NaiveDateTime};
+use db::file::FilePayload;
 use exif::{In, Tag};
 use image::DynamicImage;
 use image::ImageReader;
 use image::imageops;
 use memo::dir::DirDto;
-use serde::{Deserialize, Serialize};
-use snafu::{ResultExt, ensure};
+use snafu::ResultExt;
 use std::fs::File;
 use std::path::PathBuf;
 use tracing::error;
-use validator::Validate;
 
 use crate::Result;
 use crate::error::DbSnafu;
-use crate::error::{
-    DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, ExifInfoSnafu, StorageSnafu, UploadFileSnafu,
-    ValidationSnafu,
-};
+use crate::error::{ExifInfoSnafu, StorageSnafu, UploadFileSnafu, ValidationSnafu};
 
-use crate::schema::files::{self, dsl};
 use crate::state::AppState;
-use db::file::{MAX_FILES, MAX_PER_PAGE};
+use db::file::MAX_FILES;
 use memo::bucket::BucketDto;
 use memo::file::{
     ALLOWED_IMAGE_TYPES, FileDto, ImgDimension, ImgVersion, ImgVersionDto, MAX_DIMENSION,
     MAX_PREVIEW_DIMENSION, MAX_THUMB_DIMENSION, ORIGINAL_PATH,
 };
-use memo::pagination::Paginated;
 use memo::utils::generate_id;
 use memo::utils::truncate_string;
-use memo::validators::flatten_errors;
 
 #[derive(Debug, Clone)]
 pub struct PhotoExif {

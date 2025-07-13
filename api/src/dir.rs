@@ -1,18 +1,11 @@
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use validator::Validate;
 
 use crate::Result;
-use crate::error::{
-    DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, DbSnafu, MaxDirsReachedSnafu, ValidationSnafu,
-};
-use crate::schema::dirs::{self, dsl};
+use crate::error::{DbSnafu, MaxDirsReachedSnafu, ValidationSnafu};
 use crate::state::AppState;
-use db::dir::{MAX_DIRS, MAX_PER_PAGE, NewDir, UpdateDir};
+use db::dir::{MAX_DIRS, NewDir, UpdateDir};
 use memo::dir::DirDto;
-use memo::pagination::Paginated;
-use memo::utils::generate_id;
 use memo::validators::flatten_errors;
 
 pub async fn create_dir(state: &AppState, bucket_id: &str, data: &NewDir) -> Result<DirDto> {
@@ -25,11 +18,12 @@ pub async fn create_dir(state: &AppState, bucket_id: &str, data: &NewDir) -> Res
     );
 
     // Limit the number of directories per bucket
-    let count = state.dirs.count(bucket_id).await.context(DbSnafu)?;
+    let count = state.db.dirs.count(bucket_id).await.context(DbSnafu)?;
     ensure!(count < MAX_DIRS as i64, MaxDirsReachedSnafu,);
 
     // Directory name must be unique for the bucket
     let existing = state
+        .db
         .dirs
         .find_by_name(bucket_id, data.name.as_str())
         .await
@@ -59,7 +53,7 @@ pub async fn update_dir(state: &AppState, id: &str, data: &UpdateDir) -> Result<
 
 pub async fn delete_dir(state: &AppState, id: &str) -> Result<()> {
     // Do not delete if there are still files inside
-    let file_count = state.db.files.count_by_dir(id).await?;
+    let file_count = state.db.files.count_by_dir(id).await.context(DbSnafu)?;
     ensure!(
         file_count == 0,
         ValidationSnafu {

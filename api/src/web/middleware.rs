@@ -188,7 +188,7 @@ pub async fn user_middleware(
         }
     );
 
-    let user = state.db.users.get(&params.user_id).await?;
+    let user = state.db.users.get(&params.user_id).await.context(DbSnafu)?;
     let user = user.context(NotFoundSnafu {
         msg: "User not found",
     })?;

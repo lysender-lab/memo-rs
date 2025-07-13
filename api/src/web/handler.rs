@@ -13,23 +13,28 @@ use crate::{
     auth::{
         authenticate,
         user::{
-            ChangeCurrentPassword, NewUser, UpdateUserPassword, UpdateUserRoles, UpdateUserStatus,
-            change_current_password,
+            change_current_password, create_user, update_password, update_user_roles,
+            update_user_status,
         },
     },
-    bucket::{NewBucket, create_bucket, delete_bucket},
-    client::{
-        ClientDefaultBucket, NewClient, UpdateClient, create_client, delete_client, update_client,
-    },
-    dir::{ListDirsParams, NewDir, UpdateDir, create_dir, delete_dir, update_dir},
+    bucket::{create_bucket, delete_bucket},
+    client::{create_client, delete_client, update_client},
+    dir::{create_dir, delete_dir, update_dir},
     error::{
         CreateFileSnafu, DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu,
         MissingUploadFileSnafu, Result, StorageSnafu, UploadDirSnafu, WhateverSnafu,
     },
-    file::{FileObject, FilePayload, ListFilesParams, create_file},
+    file::create_file,
     health::{check_liveness, check_readiness},
     state::AppState,
     web::{params::Params, response::JsonResponse},
+};
+use db::bucket::NewBucket;
+use db::client::{ClientDefaultBucket, NewClient, UpdateClient};
+use db::dir::{ListDirsParams, NewDir, UpdateDir};
+use db::file::{FileObject, FilePayload, ListFilesParams};
+use db::user::{
+    ChangeCurrentPassword, NewUser, UpdateUserPassword, UpdateUserRoles, UpdateUserStatus,
 };
 use memo::{
     actor::{Actor, Credentials},
@@ -272,13 +277,13 @@ pub async fn update_default_bucket_handler(
         default_bucket_id: Some(data.default_bucket_id.clone()),
     };
 
-    let updated = update_client(&state, client.id.as_str(), &data).await?;
+    let updated = update_client(&state, &client.id, &data).await?;
     if !updated {
         // No changes, just return the client
         return Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()));
     }
 
-    let updated_client = state.db.clients.get(client.id.as_str()).await?;
+    let updated_client = state.db.clients.get(&client.id).await.context(DbSnafu)?;
     let updated_client = updated_client.context(WhateverSnafu {
         msg: "Unable to find updated client",
     })?;
@@ -367,7 +372,7 @@ pub async fn list_users_handler(
             msg: "Insufficient permissions"
         }
     );
-    let users = state.db.users.list(&client.id).await?;
+    let users = state.db.users.list(&client.id).await.context(DbSnafu)?;
     let dto: Vec<UserDto> = users.into_iter().map(|x| x.into()).collect();
     Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
 }
@@ -390,12 +395,11 @@ pub async fn create_user_handler(
         msg: "Invalid request payload",
     })?;
 
-    let user = state.db.users.create(&client.id, &data, false).await?;
-    let dto: UserDto = user.into();
+    let user = create_user(&state, &client.id, &data, false).await?;
 
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,
-        serde_json::to_string(&dto).unwrap(),
+        serde_json::to_string(&user).unwrap(),
     ))
 }
 
@@ -441,12 +445,19 @@ pub async fn update_user_status_handler(
     })?;
 
     // Ideally, should not update if status do not change
-    let _ = state.db.users.update_status(&user.id, &data).await?;
+    let _ = update_user_status(&state, &user.id, &data).await?;
 
     // Re-query and show
-    let updated_user = state.db.users.get(&user.id).await?.context(WhateverSnafu {
-        msg: "Unable to re-query user information.",
-    })?;
+    let updated_user = state
+        .db
+        .users
+        .get(&user.id)
+        .await
+        .context(DbSnafu)?
+        .context(WhateverSnafu {
+            msg: "Unable to re-query user information.",
+        })?;
+
     let dto: UserDto = updated_user.into();
 
     Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
@@ -479,12 +490,19 @@ pub async fn update_user_roles_handler(
     })?;
 
     // Ideally, should not update if roles do not change
-    let _ = state.db.users.update_roles(&user.id, &data).await?;
+    let _ = update_user_roles(&state, &user.id, &data).await?;
 
     // Re-query and show
-    let updated_user = state.db.users.get(&user.id).await?.context(WhateverSnafu {
-        msg: "Unable to re-query user information.",
-    })?;
+    let updated_user = state
+        .db
+        .users
+        .get(&user.id)
+        .await
+        .context(DbSnafu)?
+        .context(WhateverSnafu {
+            msg: "Unable to re-query user information.",
+        })?;
+
     let dto: UserDto = updated_user.into();
 
     Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
@@ -516,12 +534,19 @@ pub async fn reset_user_password_handler(
         msg: "Invalid request payload",
     })?;
 
-    let _ = state.db.users.update_password(&user.id, &data).await?;
+    let _ = update_password(&state, &user.id, &data).await?;
 
     // Re-query and show
-    let updated_user = state.db.users.get(&user.id).await?.context(WhateverSnafu {
-        msg: "Unable to re-query user information.",
-    })?;
+    let updated_user = state
+        .db
+        .users
+        .get(&user.id)
+        .await
+        .context(DbSnafu)?
+        .context(WhateverSnafu {
+            msg: "Unable to re-query user information.",
+        })?;
+
     let dto: UserDto = updated_user.into();
 
     Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
@@ -548,7 +573,7 @@ pub async fn delete_user_handler(
         }
     );
 
-    let _ = state.db.users.delete(&user.id).await?;
+    let _ = state.db.users.delete(&user.id).await.context(DbSnafu)?;
 
     Ok(JsonResponse::with_status(
         StatusCode::NO_CONTENT,
@@ -687,7 +712,7 @@ pub async fn list_files_handler(
 
     // Generate download urls for each files
     let items = storage_client
-        .format_files(&bucket.name, &dir.name, files)
+        .format_files(&bucket.name, &dir.name, files.data)
         .await
         .context(StorageSnafu)?;
 

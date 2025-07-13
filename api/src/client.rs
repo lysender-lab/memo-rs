@@ -1,19 +1,14 @@
-use async_trait::async_trait;
 use memo::client::ClientDto;
-use serde::Deserialize;
 use snafu::{ResultExt, ensure};
 use validator::Validate;
 
 use crate::Result;
-use crate::error::{
-    DbInteractSnafu, DbQuerySnafu, DbSnafu, MaxClientsReachedSnafu, ValidationSnafu,
-};
-use crate::schema::clients::{self, dsl};
+use crate::error::{DbSnafu, MaxClientsReachedSnafu, ValidationSnafu};
 use crate::state::AppState;
-use db::client::MAX_CLIENTS;
-use memo::{utils::generate_id, validators::flatten_errors};
+use db::client::{MAX_CLIENTS, NewClient, UpdateClient};
+use memo::validators::flatten_errors;
 
-pub async fn create_client(state: &AppState, data: &NewClient, admin: bool) -> Result<Client> {
+pub async fn create_client(state: &AppState, data: &NewClient, admin: bool) -> Result<ClientDto> {
     let valid_res = data.validate();
     ensure!(
         valid_res.is_ok(),
@@ -23,11 +18,17 @@ pub async fn create_client(state: &AppState, data: &NewClient, admin: bool) -> R
     );
 
     // Limit the number of clients because we are poor!
-    let count = state.db.clients.count().await?;
+    let count = state.db.clients.count().await.context(DbSnafu)?;
     ensure!(count < MAX_CLIENTS as i64, MaxClientsReachedSnafu,);
 
     // Client name must be unique
-    let existing = state.db.clients.find_by_name(&data.name).await?;
+    let existing = state
+        .db
+        .clients
+        .find_by_name(&data.name)
+        .await
+        .context(DbSnafu)?;
+
     ensure!(
         existing.is_none(),
         ValidationSnafu {
@@ -51,7 +52,7 @@ pub async fn update_client(state: &AppState, id: &str, data: &UpdateClient) -> R
     // Will just use a separate function for that
     if let Some(bucket_id) = data.default_bucket_id.clone() {
         if let Some(bid) = bucket_id {
-            let bucket = state.db.buckets.get(&bid).await?;
+            let bucket = state.db.buckets.get(&bid).await.context(DbSnafu)?;
             ensure!(
                 bucket.is_some(),
                 ValidationSnafu {
@@ -63,7 +64,13 @@ pub async fn update_client(state: &AppState, id: &str, data: &UpdateClient) -> R
 
     // Client name must be unique
     if let Some(name) = data.name.clone() {
-        if let Some(existing) = state.db.clients.find_by_name(&name).await? {
+        if let Some(existing) = state
+            .db
+            .clients
+            .find_by_name(&name)
+            .await
+            .context(DbSnafu)?
+        {
             ensure!(
                 &existing.id == id,
                 ValidationSnafu {
@@ -77,7 +84,7 @@ pub async fn update_client(state: &AppState, id: &str, data: &UpdateClient) -> R
 }
 
 pub async fn delete_client(state: &AppState, id: &str) -> Result<()> {
-    let Some(client) = state.db.clients.get(id).await? else {
+    let Some(client) = state.db.clients.get(id).await.context(DbSnafu)? else {
         return ValidationSnafu {
             msg: "Client not found".to_string(),
         }
@@ -91,7 +98,13 @@ pub async fn delete_client(state: &AppState, id: &str) -> Result<()> {
         }
     );
 
-    let bucket_count = state.db.buckets.count_by_client(id).await?;
+    let bucket_count = state
+        .db
+        .buckets
+        .count_by_client(id)
+        .await
+        .context(DbSnafu)?;
+
     ensure!(
         bucket_count == 0,
         ValidationSnafu {
@@ -99,7 +112,7 @@ pub async fn delete_client(state: &AppState, id: &str) -> Result<()> {
         }
     );
 
-    let users_count = state.db.users.count_by_client(id).await?;
+    let users_count = state.db.users.count_by_client(id).await.context(DbSnafu)?;
     ensure!(
         users_count == 0,
         ValidationSnafu {

@@ -1,18 +1,11 @@
-use async_trait::async_trait;
-
-use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use validator::Validate;
 
 use crate::Result;
-use crate::error::{
-    DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, DbSnafu, MaxBucketsReachedSnafu, StorageSnafu,
-    ValidationSnafu,
-};
-use crate::schema::buckets::{self, dsl};
+use crate::error::{DbSnafu, MaxBucketsReachedSnafu, StorageSnafu, ValidationSnafu};
 use crate::state::AppState;
-use db::bucket::MAX_BUCKETS_PER_CLIENT;
-use memo::{bucket::BucketDto, utils::generate_id, validators::flatten_errors};
+use db::bucket::{MAX_BUCKETS_PER_CLIENT, NewBucket};
+use memo::{bucket::BucketDto, validators::flatten_errors};
 
 pub async fn create_bucket(
     state: &AppState,

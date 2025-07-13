@@ -5,19 +5,15 @@ use diesel::dsl::count_star;
 use diesel::prelude::*;
 use diesel::{QueryDsl, SelectableHelper};
 use serde::Deserialize;
-use snafu::{ResultExt, ensure};
+use snafu::ResultExt;
 use validator::Validate;
 
 use crate::Result;
-use crate::error::{
-    DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, HashPasswordSnafu, InvalidRolesSnafu,
-    MaxUsersReachedSnafu, ValidationSnafu,
-};
+use crate::error::{DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, HashPasswordSnafu};
 use crate::schema::users::{self, dsl};
-use memo::role::{Role, to_roles};
+use memo::role::to_roles;
 use memo::user::UserDto;
 use memo::utils::generate_id;
-use memo::validators::flatten_errors;
 use password::hash_password;
 
 #[derive(Debug, Clone, Queryable, Selectable, Insertable)]
@@ -96,13 +92,15 @@ pub const MAX_USERS_PER_CLIENT: i32 = 50;
 
 #[async_trait]
 pub trait UserStore: Send + Sync {
-    async fn list(&self, client_id: &str) -> Result<Vec<User>>;
+    async fn list(&self, client_id: &str) -> Result<Vec<UserDto>>;
 
-    async fn create(&self, client_id: &str, data: &NewUser, is_setup: bool) -> Result<User>;
+    async fn create(&self, client_id: &str, data: &NewUser, is_setup: bool) -> Result<UserDto>;
 
-    async fn get(&self, id: &str) -> Result<Option<User>>;
+    async fn get(&self, id: &str) -> Result<Option<UserDto>>;
 
-    async fn find_by_username(&self, username: &str) -> Result<Option<User>>;
+    async fn get_password(&self, id: &str) -> Result<Option<String>>;
+
+    async fn find_by_username(&self, username: &str) -> Result<Option<UserDto>>;
 
     async fn count_by_client(&self, client_id: &str) -> Result<i64>;
 
@@ -127,7 +125,7 @@ impl UserRepo {
 
 #[async_trait]
 impl UserStore for UserRepo {
-    async fn list(&self, client_id: &str) -> Result<Vec<User>> {
+    async fn list(&self, client_id: &str) -> Result<Vec<UserDto>> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let client_id = client_id.to_string();
@@ -146,45 +144,13 @@ impl UserStore for UserRepo {
             table: "users".to_string(),
         })?;
 
+        let items: Vec<UserDto> = items.into_iter().map(|x| x.into()).collect();
+
         Ok(items)
     }
 
-    async fn create(&self, client_id: &str, data: &NewUser, is_setup: bool) -> Result<User> {
-        let errors = data.validate();
-        ensure!(
-            errors.is_ok(),
-            ValidationSnafu {
-                msg: flatten_errors(&errors.unwrap_err()),
-            }
-        );
-
+    async fn create(&self, client_id: &str, data: &NewUser, is_setup: bool) -> Result<UserDto> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-        let count = self.count_by_client(client_id).await?;
-        ensure!(count < MAX_USERS_PER_CLIENT as i64, MaxUsersReachedSnafu);
-
-        // Username must be unique
-        let existing = self.find_by_username(&data.username).await?;
-        ensure!(
-            existing.is_none(),
-            ValidationSnafu {
-                msg: "Username already exists".to_string(),
-            }
-        );
-
-        // Roles must be all valid
-        let roles: Vec<String> = data.roles.split(",").map(|item| item.to_string()).collect();
-        // Validate roles
-        let roles = to_roles(roles).context(InvalidRolesSnafu)?;
-
-        // Should not allow creating a system admin
-        if !is_setup {
-            ensure!(
-                !roles.contains(&Role::SystemAdmin),
-                ValidationSnafu {
-                    msg: "Creating a system admin not allowed".to_string(),
-                }
-            );
-        }
 
         let data_copy = data.clone();
         let today = chrono::Utc::now().timestamp();
@@ -215,10 +181,10 @@ impl UserStore for UserRepo {
             table: "users".to_string(),
         })?;
 
-        Ok(dir)
+        Ok(dir.into())
     }
 
-    async fn get(&self, id: &str) -> Result<Option<User>> {
+    async fn get(&self, id: &str) -> Result<Option<UserDto>> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let id = id.to_string();
@@ -237,10 +203,32 @@ impl UserStore for UserRepo {
             table: "users".to_string(),
         })?;
 
-        Ok(user)
+        Ok(user.map(|x| x.into()))
     }
 
-    async fn find_by_username(&self, username: &str) -> Result<Option<User>> {
+    async fn get_password(&self, id: &str) -> Result<Option<String>> {
+        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+
+        let id = id.to_string();
+        let select_res = db
+            .interact(move |conn| {
+                dsl::users
+                    .find(&id)
+                    .select(User::as_select())
+                    .first::<User>(conn)
+                    .optional()
+            })
+            .await
+            .context(DbInteractSnafu)?;
+
+        let user = select_res.context(DbQuerySnafu {
+            table: "users".to_string(),
+        })?;
+
+        Ok(user.map(|x| x.password))
+    }
+
+    async fn find_by_username(&self, username: &str) -> Result<Option<UserDto>> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let username = username.to_string();
@@ -259,7 +247,7 @@ impl UserStore for UserRepo {
             table: "users".to_string(),
         })?;
 
-        Ok(user)
+        Ok(user.map(|x| x.into()))
     }
 
     async fn count_by_client(&self, client_id: &str) -> Result<i64> {
@@ -284,21 +272,6 @@ impl UserStore for UserRepo {
     }
 
     async fn update_status(&self, id: &str, data: &UpdateUserStatus) -> Result<bool> {
-        let errors = data.validate();
-        ensure!(
-            errors.is_ok(),
-            ValidationSnafu {
-                msg: flatten_errors(&errors.unwrap_err()),
-            }
-        );
-
-        ensure!(
-            &data.status == "active" || &data.status == "inactive",
-            ValidationSnafu {
-                msg: "User status must be active or inactive",
-            }
-        );
-
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let id = id.to_string();
@@ -322,27 +295,6 @@ impl UserStore for UserRepo {
     }
 
     async fn update_roles(&self, id: &str, data: &UpdateUserRoles) -> Result<bool> {
-        let errors = data.validate();
-        ensure!(
-            errors.is_ok(),
-            ValidationSnafu {
-                msg: flatten_errors(&errors.unwrap_err()),
-            }
-        );
-
-        // Roles must be all valid
-        let roles_arr: Vec<String> = data.roles.split(",").map(|item| item.to_string()).collect();
-        // Validate roles
-        let roles_arr = to_roles(roles_arr).context(InvalidRolesSnafu)?;
-
-        // Should not allow creating a system admin
-        ensure!(
-            !roles_arr.contains(&Role::SystemAdmin),
-            ValidationSnafu {
-                msg: "Creating a system admin not allowed".to_string(),
-            }
-        );
-
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let id = id.to_string();
@@ -366,14 +318,6 @@ impl UserStore for UserRepo {
     }
 
     async fn update_password(&self, id: &str, data: &UpdateUserPassword) -> Result<bool> {
-        let errors = data.validate();
-        ensure!(
-            errors.is_ok(),
-            ValidationSnafu {
-                msg: flatten_errors(&errors.unwrap_err()),
-            }
-        );
-
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let id = id.to_string();
@@ -425,7 +369,7 @@ pub const TEST_USER_ID: &'static str = "0196d1adc6807c2c8aa49982466faf88";
 pub fn create_test_admin_user() -> Result<User> {
     use crate::client::TEST_ADMIN_CLIENT_ID;
 
-    let password = hash_password("secret-password")?;
+    let password = hash_password("secret-password").context(HashPasswordSnafu)?;
     let today = chrono::Utc::now().timestamp();
 
     Ok(User {
@@ -444,7 +388,7 @@ pub fn create_test_admin_user() -> Result<User> {
 pub fn create_test_user() -> Result<User> {
     use crate::client::TEST_CLIENT_ID;
 
-    let password = hash_password("secret-password")?;
+    let password = hash_password("secret-password").context(HashPasswordSnafu)?;
     let today = chrono::Utc::now().timestamp();
 
     Ok(User {
@@ -465,35 +409,44 @@ pub struct UserTestRepo {}
 #[cfg(feature = "test")]
 #[async_trait]
 impl UserStore for UserTestRepo {
-    async fn list(&self, client_id: &str) -> Result<Vec<User>> {
+    async fn list(&self, client_id: &str) -> Result<Vec<UserDto>> {
         let user1 = create_test_admin_user()?;
         let user2 = create_test_user()?;
         let users = vec![user1, user2];
-        let filtered: Vec<User> = users
+        let filtered: Vec<UserDto> = users
             .into_iter()
             .filter(|x| x.client_id.as_str() == client_id)
+            .map(|x| x.into())
             .collect();
         Ok(filtered)
     }
 
-    async fn create(&self, _client_id: &str, _data: &NewUser, _is_setup: bool) -> Result<User> {
+    async fn create(&self, _client_id: &str, _data: &NewUser, _is_setup: bool) -> Result<UserDto> {
         Err("Not supported".into())
     }
 
-    async fn get(&self, id: &str) -> Result<Option<User>> {
+    async fn get(&self, id: &str) -> Result<Option<UserDto>> {
         let user1 = create_test_admin_user()?;
         let user2 = create_test_user()?;
         let users = vec![user1, user2];
         let found = users.into_iter().find(|x| x.id.as_str() == id);
-        Ok(found)
+        Ok(found.map(|x| x.into()))
     }
 
-    async fn find_by_username(&self, username: &str) -> Result<Option<User>> {
+    async fn get_password(&self, id: &str) -> Result<Option<String>> {
+        let user1 = create_test_admin_user()?;
+        let user2 = create_test_user()?;
+        let users = vec![user1, user2];
+        let found = users.into_iter().find(|x| x.id.as_str() == id);
+        Ok(found.map(|x| x.password))
+    }
+
+    async fn find_by_username(&self, username: &str) -> Result<Option<UserDto>> {
         let user1 = create_test_admin_user()?;
         let user2 = create_test_user()?;
         let users = vec![user1, user2];
         let found = users.into_iter().find(|x| x.username.as_str() == username);
-        Ok(found)
+        Ok(found.map(|x| x.into()))
     }
 
     async fn count_by_client(&self, client_id: &str) -> Result<i64> {

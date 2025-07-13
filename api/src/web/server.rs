@@ -116,9 +116,9 @@ fn create_test_app() -> TestServer {
 #[cfg(test)]
 fn create_test_user_auth_token() -> Result<String> {
     use crate::auth::token::create_auth_token;
-    use crate::auth::user::TEST_USER_ID;
-    use crate::client::TEST_CLIENT_ID;
     use crate::state::create_test_app_state;
+    use db::client::TEST_CLIENT_ID;
+    use db::user::TEST_USER_ID;
     use memo::actor::ActorPayload;
 
     let state = create_test_app_state();
@@ -136,9 +136,9 @@ fn create_test_user_auth_token() -> Result<String> {
 #[cfg(test)]
 fn create_test_admin_auth_token() -> Result<String> {
     use crate::auth::token::create_auth_token;
-    use crate::auth::user::TEST_ADMIN_USER_ID;
-    use crate::client::TEST_ADMIN_CLIENT_ID;
     use crate::state::create_test_app_state;
+    use db::client::TEST_ADMIN_CLIENT_ID;
+    use db::user::TEST_ADMIN_USER_ID;
     use memo::actor::ActorPayload;
 
     let state = create_test_app_state();
@@ -155,12 +155,10 @@ fn create_test_admin_auth_token() -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        auth::user::{TEST_ADMIN_USER_ID, TEST_USER_ID},
-        bucket::TEST_BUCKET_ID,
-        client::{TEST_ADMIN_CLIENT_ID, TEST_CLIENT_ID},
-        dir::{Dir, TEST_DIR_ID},
-    };
+    use db::bucket::TEST_BUCKET_ID;
+    use db::client::{TEST_ADMIN_CLIENT_ID, TEST_CLIENT_ID};
+    use db::dir::{Dir, TEST_DIR_ID};
+    use db::user::{TEST_ADMIN_USER_ID, TEST_USER_ID};
 
     use super::*;
     use memo::{
