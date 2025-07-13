@@ -9,7 +9,6 @@ mod bucket;
 mod client;
 mod command;
 mod config;
-mod db;
 mod dir;
 mod error;
 mod file;

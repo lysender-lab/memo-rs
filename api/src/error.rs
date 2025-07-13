@@ -53,6 +53,12 @@ pub enum Error {
         backtrace: Backtrace,
     },
 
+    #[snafu(display("{}", source))]
+    Db {
+        source: db::Error,
+        backtrace: Backtrace,
+    },
+
     #[snafu(display("{} - {}", msg, source))]
     PasswordPrompt {
         msg: String,

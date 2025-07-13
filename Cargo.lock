@@ -122,6 +122,7 @@ dependencies = [
  "kamadak-exif",
  "memo",
  "multer",
+ "password",
  "rpassword",
  "serde",
  "serde_json",

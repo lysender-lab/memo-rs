@@ -94,15 +94,15 @@ pub const MAX_PER_PAGE: i32 = 50;
 
 #[async_trait]
 pub trait DirStore: Send + Sync {
-    async fn list(&self, bucket_id: &str, params: &ListDirsParams) -> Result<Paginated<Dir>>;
+    async fn list(&self, bucket_id: &str, params: &ListDirsParams) -> Result<Paginated<DirDto>>;
 
     async fn count(&self, bucket_id: &str) -> Result<i64>;
 
-    async fn create(&self, bucket_id: &str, data: &NewDir) -> Result<Dir>;
+    async fn create(&self, bucket_id: &str, data: &NewDir) -> Result<DirDto>;
 
-    async fn get(&self, id: &str) -> Result<Option<Dir>>;
+    async fn get(&self, id: &str) -> Result<Option<DirDto>>;
 
-    async fn find_by_name(&self, bucket_id: &str, name: &str) -> Result<Option<Dir>>;
+    async fn find_by_name(&self, bucket_id: &str, name: &str) -> Result<Option<DirDto>>;
 
     async fn update(&self, id: &str, data: &UpdateDir) -> Result<bool>;
 
@@ -152,7 +152,7 @@ impl DirRepo {
 
 #[async_trait]
 impl DirStore for DirRepo {
-    async fn list(&self, bucket_id: &str, params: &ListDirsParams) -> Result<Paginated<Dir>> {
+    async fn list(&self, bucket_id: &str, params: &ListDirsParams) -> Result<Paginated<DirDto>> {
         let valid_res = params.validate();
         ensure!(
             valid_res.is_ok(),
@@ -218,6 +218,8 @@ impl DirStore for DirRepo {
             table: "dirs".to_string(),
         })?;
 
+        let items: Vec<DirDto> = items.into_iter().map(|x| x.into()).collect();
+
         Ok(Paginated::new(items, page, per_page, total_records))
     }
 
@@ -242,29 +244,8 @@ impl DirStore for DirRepo {
         Ok(count)
     }
 
-    async fn create(&self, bucket_id: &str, data: &NewDir) -> Result<Dir> {
-        let valid_res = data.validate();
-        ensure!(
-            valid_res.is_ok(),
-            ValidationSnafu {
-                msg: flatten_errors(&valid_res.unwrap_err()),
-            }
-        );
-
+    async fn create(&self, bucket_id: &str, data: &NewDir) -> Result<DirDto> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-
-        // Limit the number of directories per bucket
-        let count = self.count(bucket_id).await?;
-        ensure!(count < MAX_DIRS as i64, MaxDirsReachedSnafu,);
-
-        // Directory name must be unique for the bucket
-        let existing = self.find_by_name(bucket_id, data.name.as_str()).await?;
-        ensure!(
-            existing.is_none(),
-            ValidationSnafu {
-                msg: "Directory name already exists".to_string(),
-            }
-        );
 
         let data_copy = data.clone();
         let today = chrono::Utc::now().timestamp();
@@ -292,10 +273,10 @@ impl DirStore for DirRepo {
             table: "dirs".to_string(),
         })?;
 
-        Ok(dir)
+        Ok(dir.into())
     }
 
-    async fn get(&self, id: &str) -> Result<Option<Dir>> {
+    async fn get(&self, id: &str) -> Result<Option<DirDto>> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let did = id.to_string();
@@ -314,10 +295,10 @@ impl DirStore for DirRepo {
             table: "dirs".to_string(),
         })?;
 
-        Ok(item)
+        Ok(item.map(|x| x.into()))
     }
 
-    async fn find_by_name(&self, bucket_id: &str, name: &str) -> Result<Option<Dir>> {
+    async fn find_by_name(&self, bucket_id: &str, name: &str) -> Result<Option<DirDto>> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let bid = bucket_id.to_string();
@@ -338,19 +319,11 @@ impl DirStore for DirRepo {
             table: "dirs".to_string(),
         })?;
 
-        Ok(item)
+        Ok(item.map(|x| x.into()))
     }
 
     async fn update(&self, id: &str, data: &UpdateDir) -> Result<bool> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-
-        let errors = data.validate();
-        ensure!(
-            errors.is_ok(),
-            ValidationSnafu {
-                msg: flatten_errors(&errors.unwrap_err()),
-            }
-        );
 
         // Do not update if there is no data to update
         if data.label.is_none() {
@@ -441,11 +414,11 @@ pub struct DirTestRepo {}
 #[cfg(feature = "test")]
 #[async_trait]
 impl DirStore for DirTestRepo {
-    async fn list(&self, bucket_id: &str, _params: &ListDirsParams) -> Result<Paginated<Dir>> {
+    async fn list(&self, bucket_id: &str, _params: &ListDirsParams) -> Result<Paginated<DirDto>> {
         let dir = create_test_dir();
         let dirs = vec![dir];
         let total_records = dirs.len() as i64;
-        let filtered = dirs
+        let filtered: Vec<DirDto> = dirs
             .into_iter()
             .filter(|x| {
                 if x.bucket_id.as_str() == bucket_id {
@@ -454,6 +427,7 @@ impl DirStore for DirTestRepo {
                 }
                 false
             })
+            .map(|x| x.into())
             .collect();
 
         Ok(Paginated::new(filtered, 1, 10, total_records))
@@ -473,18 +447,18 @@ impl DirStore for DirTestRepo {
         Ok(dirs.meta.total_records)
     }
 
-    async fn create(&self, _bucket_id: &str, _data: &NewDir) -> Result<Dir> {
+    async fn create(&self, _bucket_id: &str, _data: &NewDir) -> Result<DirDto> {
         Err("Not supported".into())
     }
 
-    async fn get(&self, id: &str) -> Result<Option<Dir>> {
+    async fn get(&self, id: &str) -> Result<Option<DirDto>> {
         let dir = create_test_dir();
         let dirs = vec![dir];
         let found = dirs.into_iter().find(|x| x.id.as_str() == id);
-        Ok(found)
+        Ok(found.map(|x| x.into()))
     }
 
-    async fn find_by_name(&self, bucket_id: &str, name: &str) -> Result<Option<Dir>> {
+    async fn find_by_name(&self, bucket_id: &str, name: &str) -> Result<Option<DirDto>> {
         let dirs = self
             .list(
                 bucket_id,

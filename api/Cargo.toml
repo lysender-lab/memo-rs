@@ -31,6 +31,7 @@ tracing-subscriber.workspace = true
 validator.workspace = true
 db = { path = "../db" }
 memo = { path = "../memo" }
+password = { path = "../password" }
 storage = { path = "../storage" }
 
 [dev-dependencies]

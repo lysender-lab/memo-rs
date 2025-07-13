@@ -21,10 +21,10 @@ use crate::{
     client::{
         ClientDefaultBucket, NewClient, UpdateClient, create_client, delete_client, update_client,
     },
-    dir::{ListDirsParams, NewDir, UpdateDir, delete_dir},
+    dir::{ListDirsParams, NewDir, UpdateDir, create_dir, delete_dir, update_dir},
     error::{
-        CreateFileSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, MissingUploadFileSnafu,
-        Result, StorageSnafu, UploadDirSnafu, WhateverSnafu,
+        CreateFileSnafu, DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu,
+        MissingUploadFileSnafu, Result, StorageSnafu, UploadDirSnafu, WhateverSnafu,
     },
     file::{FileObject, FilePayload, ListFilesParams, create_file},
     health::{check_liveness, check_readiness},
@@ -146,9 +146,8 @@ pub async fn list_clients_handler(
     if !actor.is_system_admin() {
         client_id = Some(actor.client_id.clone());
     }
-    let clients = state.db.clients.list(client_id).await?;
-    let dtos: Vec<ClientDto> = clients.into_iter().map(|x| x.into()).collect();
-    Ok(JsonResponse::new(serde_json::to_string(&dtos).unwrap()))
+    let clients = state.db.clients.list(client_id).await.context(DbSnafu)?;
+    Ok(JsonResponse::new(serde_json::to_string(&clients).unwrap()))
 }
 
 pub async fn create_client_handler(
@@ -206,7 +205,13 @@ pub async fn update_client_handler(
         return Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()));
     }
 
-    let updated_client = state.db.clients.get(client.id.as_str()).await?;
+    let updated_client = state
+        .db
+        .clients
+        .get(client.id.as_str())
+        .await
+        .context(DbSnafu)?;
+
     let updated_client = updated_client.context(WhateverSnafu {
         msg: "Unable to find updated client",
     })?;
@@ -295,7 +300,7 @@ pub async fn list_buckets_handler(
             msg: "Insufficient permissions"
         }
     );
-    let buckets = state.db.buckets.list(&client.id).await?;
+    let buckets = state.db.buckets.list(&client.id).await.context(DbSnafu)?;
     Ok(JsonResponse::new(serde_json::to_string(&buckets).unwrap()))
 }
 
@@ -565,7 +570,13 @@ pub async fn list_dirs_handler(
         }
     );
 
-    let dirs = state.db.dirs.list(bucket.id.as_str(), &query).await?;
+    let dirs = state
+        .db
+        .dirs
+        .list(bucket.id.as_str(), &query)
+        .await
+        .context(DbSnafu)?;
+
     Ok(JsonResponse::new(serde_json::to_string(&dirs).unwrap()))
 }
 
@@ -587,7 +598,8 @@ pub async fn create_dir_handler(
         msg: "Invalid request payload",
     })?;
 
-    let dir = state.db.dirs.create(bucket.id.as_str(), &data).await?;
+    let dir = create_dir(&state, &bucket.id, &data).await?;
+
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,
         serde_json::to_string(&dir).unwrap(),
@@ -616,7 +628,7 @@ pub async fn update_dir_handler(
         msg: "Invalid request payload",
     })?;
 
-    let updated = state.db.dirs.update(&dir.id, &data).await?;
+    let updated = update_dir(&state, &dir.id, &data).await?;
 
     // Either return the updated dir or the original one
     match updated {
@@ -626,7 +638,7 @@ pub async fn update_dir_handler(
 }
 
 async fn get_dir_as_response(state: &AppState, id: &str) -> Result<JsonResponse> {
-    let res = state.db.dirs.get(id).await?;
+    let res = state.db.dirs.get(id).await.context(DbSnafu)?;
     let dir = res.context(WhateverSnafu {
         msg: "Error getting directory",
     })?;
@@ -670,14 +682,12 @@ pub async fn list_files_handler(
         }
     );
 
-    let files = state.db.files.list(&dir, &query).await?;
+    let files = state.db.files.list(&dir, &query).await.context(DbSnafu)?;
     let storage_client = state.storage_client.clone();
 
     // Generate download urls for each files
-    let items: Vec<FileDto> = files.data.into_iter().map(|f| f.into()).collect();
-
     let items = storage_client
-        .format_files(&bucket.name, &dir.name, items)
+        .format_files(&bucket.name, &dir.name, files)
         .await
         .context(StorageSnafu)?;
 
@@ -804,7 +814,7 @@ pub async fn delete_file_handler(
     );
 
     // Delete record
-    let _ = state.db.files.delete(&file.id).await?;
+    let _ = state.db.files.delete(&file.id).await.context(DbSnafu)?;
 
     // Delete file(s) from storage
     let storage_client = state.storage_client.clone();

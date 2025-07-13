@@ -2,13 +2,10 @@ use axum::extract::FromRef;
 use snafu::ResultExt;
 use std::sync::Arc;
 
-use crate::{
-    Result,
-    config::Config,
-    db::{DbMapper, create_db_mapper},
-    error::StorageSnafu,
-};
+use crate::{Result, config::Config, error::StorageSnafu};
 use storage::{CloudStorable, StorageClient};
+
+use db::{DbMapper, create_db_mapper};
 
 #[derive(Clone, FromRef)]
 pub struct AppState {

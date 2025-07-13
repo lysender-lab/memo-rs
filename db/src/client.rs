@@ -5,11 +5,11 @@ use diesel::prelude::*;
 use diesel::{QueryDsl, SelectableHelper};
 use memo::client::ClientDto;
 use serde::Deserialize;
-use snafu::{ResultExt, ensure};
+use snafu::ResultExt;
 use validator::Validate;
 
 use crate::Result;
-use crate::error::{DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, ValidationSnafu};
+use crate::error::{DbInteractSnafu, DbPoolSnafu, DbQuerySnafu};
 use crate::schema::clients::{self, dsl};
 use memo::utils::generate_id;
 
@@ -104,11 +104,11 @@ pub const MAX_CLIENTS: i32 = 10;
 
 #[async_trait]
 pub trait ClientStore: Send + Sync {
-    async fn list(&self, client_id: Option<String>) -> Result<Vec<Client>>;
+    async fn list(&self, client_id: Option<String>) -> Result<Vec<ClientDto>>;
 
-    async fn find_admin(&self) -> Result<Option<Client>>;
+    async fn find_admin(&self) -> Result<Option<ClientDto>>;
 
-    async fn create(&self, data: &NewClient, admin: bool) -> Result<Client>;
+    async fn create(&self, data: &NewClient, admin: bool) -> Result<ClientDto>;
 
     async fn get(&self, id: &str) -> Result<Option<ClientDto>>;
 
@@ -133,7 +133,7 @@ impl ClientRepo {
 
 #[async_trait]
 impl ClientStore for ClientRepo {
-    async fn list(&self, client_id: Option<String>) -> Result<Vec<Client>> {
+    async fn list(&self, client_id: Option<String>) -> Result<Vec<ClientDto>> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let client_id_copy = client_id.clone();
@@ -156,10 +156,12 @@ impl ClientStore for ClientRepo {
             table: "clients".to_string(),
         })?;
 
-        Ok(items)
+        let dtos: Vec<ClientDto> = items.into_iter().map(|x| x.into()).collect();
+
+        Ok(dtos)
     }
 
-    async fn find_admin(&self) -> Result<Option<Client>> {
+    async fn find_admin(&self) -> Result<Option<ClientDto>> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let select_res = db
@@ -177,20 +179,11 @@ impl ClientStore for ClientRepo {
             table: "clients".to_string(),
         })?;
 
-        Ok(item)
+        Ok(item.map(|x| x.into()))
     }
 
-    async fn create(&self, data: &NewClient, admin: bool) -> Result<Client> {
+    async fn create(&self, data: &NewClient, admin: bool) -> Result<ClientDto> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-
-        // Client name must be unique
-        let existing = self.find_by_name(&data.name).await?;
-        ensure!(
-            existing.is_none(),
-            ValidationSnafu {
-                msg: "Client name already exists".to_string(),
-            }
-        );
 
         let today = chrono::Utc::now().timestamp();
         let admin = if admin { Some(1) } else { Some(0) };
@@ -217,7 +210,7 @@ impl ClientStore for ClientRepo {
             table: "clients".to_string(),
         })?;
 
-        Ok(client)
+        Ok(client.into())
     }
 
     async fn get(&self, id: &str) -> Result<Option<ClientDto>> {
@@ -244,18 +237,6 @@ impl ClientStore for ClientRepo {
 
     async fn update(&self, id: &str, data: &UpdateClient) -> Result<bool> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-
-        // Client name must be unique
-        if let Some(name) = data.name.clone() {
-            if let Some(existing) = self.find_by_name(&name).await? {
-                ensure!(
-                    &existing.id == id,
-                    ValidationSnafu {
-                        msg: "Client name already exists".to_string(),
-                    }
-                );
-            }
-        }
 
         let id = id.to_string();
         let data_copy = data.clone();
@@ -386,34 +367,38 @@ pub fn create_test_new_client() -> Client {
 #[cfg(feature = "test")]
 #[async_trait]
 impl ClientStore for ClientTestRepo {
-    async fn list(&self, client_id: Option<String>) -> Result<Vec<Client>> {
+    async fn list(&self, client_id: Option<String>) -> Result<Vec<ClientDto>> {
         let client1 = create_test_client();
         let client2 = create_test_admin_client();
         let clients = vec![client1, client2];
         match client_id {
             Some(cid) => {
-                let filtered: Vec<Client> = clients
+                let filtered: Vec<ClientDto> = clients
                     .into_iter()
                     .filter(|x| x.id.as_str() == cid)
+                    .map(|x| x.into())
                     .collect();
                 Ok(filtered)
             }
-            None => Ok(clients),
+            None => {
+                let dtos: Vec<ClientDto> = clients.into_iter().map(|x| x.into()).collect();
+                Ok(dtos)
+            }
         }
     }
 
-    async fn find_admin(&self) -> Result<Option<Client>> {
-        Ok(Some(create_test_admin_client()))
+    async fn find_admin(&self) -> Result<Option<ClientDto>> {
+        Ok(Some(create_test_admin_client().into()))
     }
 
-    async fn create(&self, _data: &NewClient, _admin: bool) -> Result<Client> {
-        Ok(create_test_new_client())
+    async fn create(&self, _data: &NewClient, _admin: bool) -> Result<ClientDto> {
+        Ok(create_test_new_client().into())
     }
 
     async fn get(&self, id: &str) -> Result<Option<ClientDto>> {
         let clients = self.list(None).await?;
         let found = clients.into_iter().find(|x| x.id.as_str() == id);
-        Ok(found.map(|x| x.into()))
+        Ok(found)
     }
 
     async fn update(&self, _id: &str, _data: &UpdateClient) -> Result<bool> {

@@ -44,21 +44,6 @@ pub struct FilePayload {
     pub size: i64,
 }
 
-#[derive(Debug, Clone)]
-pub struct PhotoExif {
-    pub orientation: u32,
-    pub img_taken_at: Option<i64>,
-}
-
-impl Default for PhotoExif {
-    fn default() -> Self {
-        Self {
-            orientation: 1,
-            img_taken_at: None,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct ListFilesParams {
     #[validate(range(min = 1, max = 1000))]
@@ -144,13 +129,13 @@ pub const MAX_FILES: i32 = 1000;
 
 #[async_trait]
 pub trait FileStore: Send + Sync {
-    async fn list(&self, dir: &DirDto, params: &ListFilesParams) -> Result<Paginated<FileObject>>;
+    async fn list(&self, dir: &DirDto, params: &ListFilesParams) -> Result<Paginated<FileDto>>;
 
-    async fn create(&self, file_dto: FileDto) -> Result<FileObject>;
+    async fn create(&self, file_dto: FileDto) -> Result<FileDto>;
 
-    async fn get(&self, id: &str) -> Result<Option<FileObject>>;
+    async fn get(&self, id: &str) -> Result<Option<FileDto>>;
 
-    async fn find_by_name(&self, dir_id: &str, name: &str) -> Result<Option<FileObject>>;
+    async fn find_by_name(&self, dir_id: &str, name: &str) -> Result<Option<FileDto>>;
 
     async fn count_by_dir(&self, dir_id: &str) -> Result<i64>;
 
@@ -197,7 +182,7 @@ impl FileRepo {
 
 #[async_trait]
 impl FileStore for FileRepo {
-    async fn list(&self, dir: &DirDto, params: &ListFilesParams) -> Result<Paginated<FileObject>> {
+    async fn list(&self, dir: &DirDto, params: &ListFilesParams) -> Result<Paginated<FileDto>> {
         let errors = params.validate();
         ensure!(
             errors.is_ok(),
@@ -262,10 +247,12 @@ impl FileStore for FileRepo {
             table: "files".to_string(),
         })?;
 
+        let items: Vec<FileDto> = items.into_iter().map(|x| x.into()).collect();
+
         Ok(Paginated::new(items, page, per_page, total_records))
     }
 
-    async fn create(&self, file_dto: FileDto) -> Result<FileObject> {
+    async fn create(&self, file_dto: FileDto) -> Result<FileDto> {
         let file_db_pool = self.db_pool.clone();
         let db = file_db_pool.get().await.context(DbPoolSnafu)?;
 
@@ -285,10 +272,10 @@ impl FileStore for FileRepo {
             table: "files".to_string(),
         })?;
 
-        Ok(file)
+        Ok(file.into())
     }
 
-    async fn get(&self, id: &str) -> Result<Option<FileObject>> {
+    async fn get(&self, id: &str) -> Result<Option<FileDto>> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let fid = id.to_string();
@@ -307,10 +294,10 @@ impl FileStore for FileRepo {
             table: "files".to_string(),
         })?;
 
-        Ok(item)
+        Ok(item.map(|x| x.into()))
     }
 
-    async fn find_by_name(&self, dir_id: &str, name: &str) -> Result<Option<FileObject>> {
+    async fn find_by_name(&self, dir_id: &str, name: &str) -> Result<Option<FileDto>> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let did = dir_id.to_string();
@@ -331,7 +318,7 @@ impl FileStore for FileRepo {
             table: "files".to_string(),
         })?;
 
-        Ok(item)
+        Ok(item.map(|x| x.into()))
     }
 
     async fn count_by_dir(&self, dir_id: &str) -> Result<i64> {
@@ -378,23 +365,19 @@ pub struct FileTestRepo {}
 #[cfg(feature = "test")]
 #[async_trait]
 impl FileStore for FileTestRepo {
-    async fn list(
-        &self,
-        _dir: &DirDto,
-        _params: &ListFilesParams,
-    ) -> Result<Paginated<FileObject>> {
+    async fn list(&self, _dir: &DirDto, _params: &ListFilesParams) -> Result<Paginated<FileDto>> {
         Ok(Paginated::new(vec![], 1, 10, 0))
     }
 
-    async fn create(&self, _file_dto: FileDto) -> Result<FileObject> {
+    async fn create(&self, _file_dto: FileDto) -> Result<FileDto> {
         Err("Not supported".into())
     }
 
-    async fn get(&self, _id: &str) -> Result<Option<FileObject>> {
+    async fn get(&self, _id: &str) -> Result<Option<FileDto>> {
         Ok(None)
     }
 
-    async fn find_by_name(&self, _dir_id: &str, _name: &str) -> Result<Option<FileObject>> {
+    async fn find_by_name(&self, _dir_id: &str, _name: &str) -> Result<Option<FileDto>> {
         Ok(None)
     }
 

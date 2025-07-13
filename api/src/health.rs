@@ -5,7 +5,8 @@ use serde::Serialize;
 use snafu::ResultExt;
 use tracing::error;
 
-use crate::{Result, config::Config, db::DbMapper, error::StorageSnafu};
+use crate::{Result, config::Config, error::StorageSnafu};
+use db::DbMapper;
 use storage::storage::{create_storage_client, test_list_hmac_keys};
 
 #[derive(Serialize)]
