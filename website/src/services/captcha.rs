@@ -1,10 +1,10 @@
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 
 use crate::{
     Result,
     error::{HttpClientSnafu, HttpResponseParseSnafu},
+    run::AppState,
 };
 
 const VERIFY_URL: &str =
@@ -68,17 +68,18 @@ struct TokenProperties {
     invalid_reason: String,
 }
 
-pub async fn validate_catpcha(site_key: &str, api_key: &str, response: &str) -> Result<()> {
+pub async fn validate_catpcha(state: &AppState, response: &str) -> Result<()> {
     let post_body = CaptchaPayload {
         event: CaptchaEvent {
             token: response.to_string(),
             expected_token: "login".to_string(),
-            site_key: site_key.to_string(),
+            site_key: state.config.captcha_site_key.clone(),
         },
     };
 
-    let url = format!("{}{}", VERIFY_URL, api_key);
-    let response = Client::new()
+    let url = format!("{}{}", VERIFY_URL, &state.config.captcha_api_key);
+    let response = state
+        .client
         .post(url)
         .json(&post_body)
         .send()

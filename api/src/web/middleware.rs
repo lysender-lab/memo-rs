@@ -6,14 +6,14 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use snafu::{OptionExt, ensure};
+use snafu::{OptionExt, ResultExt, ensure};
 
 use crate::{
     Result,
     auth::authenticate_token,
     error::{
-        BadRequestSnafu, ForbiddenSnafu, InsufficientAuthScopeSnafu, InvalidAuthTokenSnafu,
-        NotFoundSnafu,
+        BadRequestSnafu, DbSnafu, ForbiddenSnafu, InsufficientAuthScopeSnafu,
+        InvalidAuthTokenSnafu, NotFoundSnafu,
     },
     state::AppState,
     web::params::Params,
@@ -94,7 +94,13 @@ pub async fn client_middleware(
         )
     }
 
-    let client = state.db.clients.get(&params.client_id).await?;
+    let client = state
+        .db
+        .clients
+        .get(&params.client_id)
+        .await
+        .context(DbSnafu)?;
+
     let client = client.context(NotFoundSnafu {
         msg: "Client not found",
     })?;
@@ -134,7 +140,13 @@ pub async fn bucket_middleware(
         }
     );
 
-    let bucket = state.db.buckets.get(&params.bucket_id).await?;
+    let bucket = state
+        .db
+        .buckets
+        .get(&params.bucket_id)
+        .await
+        .context(DbSnafu)?;
+
     let bucket = bucket.context(NotFoundSnafu {
         msg: "Bucket not found",
     })?;
@@ -176,7 +188,7 @@ pub async fn user_middleware(
         }
     );
 
-    let user = state.db.users.get(&params.user_id).await?;
+    let user = state.db.users.get(&params.user_id).await.context(DbSnafu)?;
     let user = user.context(NotFoundSnafu {
         msg: "User not found",
     })?;
@@ -221,7 +233,7 @@ pub async fn dir_middleware(
     );
 
     let did = params.dir_id.clone().expect("dir_id is required");
-    let dir_res = state.db.dirs.get(&did).await?;
+    let dir_res = state.db.dirs.get(&did).await.context(DbSnafu)?;
 
     let dir = dir_res.context(NotFoundSnafu {
         msg: "Directory not found",
@@ -259,7 +271,7 @@ pub async fn file_middleware(
 
     let did = params.dir_id.clone().expect("dir_id is required");
     let fid = params.file_id.clone().expect("file_id is required");
-    let file_res = state.db.files.get(&fid).await?;
+    let file_res = state.db.files.get(&fid).await.context(DbSnafu)?;
     let file = file_res.context(NotFoundSnafu {
         msg: "File not found",
     })?;

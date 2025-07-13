@@ -1,0 +1,18 @@
+[package]
+name = "db"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+deadpool-diesel.workspace = true
+diesel.workspace = true
+serde.workspace = true
+snafu.workspace = true
+validator.workspace = true
+memo = { path = "../memo" }
+password = { path = "../password" }
+
+[features]
+test = []

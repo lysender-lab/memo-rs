@@ -2,13 +2,13 @@ use snafu::ResultExt;
 use text_io::read;
 
 use crate::Result;
-use crate::client::NewClient;
-use crate::config::Config;
-use crate::error::PasswordPromptSnafu;
-use crate::state::create_app_state;
-
-use crate::auth::user::NewUser;
+use crate::auth::user::create_user;
 use crate::client::create_client;
+use crate::config::Config;
+use crate::error::{DbSnafu, PasswordPromptSnafu};
+use crate::state::create_app_state;
+use db::client::NewClient;
+use db::user::NewUser;
 
 pub async fn run_setup(config: &Config) -> Result<()> {
     print!("Enter username for the admin user: ");
@@ -30,7 +30,7 @@ pub async fn run_setup(config: &Config) -> Result<()> {
     let state = create_app_state(config).await?;
 
     let client_id: String;
-    let admin_client = state.db.clients.find_admin().await?;
+    let admin_client = state.db.clients.find_admin().await.context(DbSnafu)?;
     if let Some(client) = admin_client {
         client_id = client.id;
     } else {
@@ -45,13 +45,13 @@ pub async fn run_setup(config: &Config) -> Result<()> {
         client_id = client.id;
     }
 
-    let users = state.db.users.list(&client_id).await?;
+    let users = state.db.users.list(&client_id).await.context(DbSnafu)?;
     if users.len() > 0 {
         println!("Admin user already exists.");
         return Ok(());
     }
 
-    let user = state.db.users.create(&client_id, &new_user, true).await?;
+    let user = create_user(&state, &client_id, &new_user, true).await?;
     println!(
         "{{ id = {}, username = {} status = {} }}",
         user.id, user.username, user.status

@@ -76,8 +76,6 @@ pub async fn post_login_handler(
     State(state): State<AppState>,
     Form(login_payload): Form<LoginFormPayload>,
 ) -> impl IntoResponse {
-    let config = state.config.clone();
-
     // Validate data
     if let Err(err) = login_payload.validate() {
         let errors: Vec<String> = err
@@ -96,12 +94,8 @@ pub async fn post_login_handler(
     }
 
     // Validate captcha
-    if let Err(captcha_err) = validate_catpcha(
-        &config.captcha_site_key,
-        &config.captcha_api_key,
-        login_payload.g_recaptcha_response.as_str(),
-    )
-    .await
+    if let Err(captcha_err) =
+        validate_catpcha(&state, login_payload.g_recaptcha_response.as_str()).await
     {
         return handle_error(captcha_err);
     }
@@ -111,7 +105,7 @@ pub async fn post_login_handler(
         username: login_payload.username,
         password: login_payload.password,
     };
-    let login_result = authenticate(&config.api_url, auth_payload).await;
+    let login_result = authenticate(&state, auth_payload).await;
     let auth = match login_result {
         Ok(val) => val,
         Err(err) => {

@@ -7,12 +7,12 @@
             <ul>
                 <li><a href="/">Home</a></li>
                 <li class="is-active">
-                    <a href="/buckets/{{ bucket.id }}" aria-current="page">{{ bucket.name }}</a>
+                    <a href="/buckets/{{ bucket.id }}" aria-current="page">{{ bucket.label }}</a>
                 </li>
             </ul>
         </nav>
 
-        <h1 class="title">{{ bucket.name }}</h1>
+        <h1 class="title">{{ bucket.label }}</h1>
 
         <div class="albums-container">
             <nav class="albums panel is-dark">

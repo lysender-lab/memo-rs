@@ -14,6 +14,7 @@ use crate::ctx::Ctx;
 use crate::error::ErrorInfo;
 use crate::models::Pref;
 use crate::run::AppState;
+use crate::web::buckets::{edit_bucket_handler, post_edit_bucket_handler};
 use crate::web::{error_handler, index_handler, login_handler, logout_handler, post_login_handler};
 
 use super::buckets::{
@@ -195,6 +196,10 @@ fn bucket_inner_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(bucket_page_handler))
         .route("/edit_controls", get(bucket_controls_handler))
+        .route(
+            "/edit",
+            get(edit_bucket_handler).post(post_edit_bucket_handler),
+        )
         .route(
             "/delete",
             get(delete_bucket_handler).post(post_delete_bucket_handler),

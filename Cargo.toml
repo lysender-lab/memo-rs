@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 
-members = [ "api", "memo", "storage", "website" ]
+members = [ "api", "db", "memo", "password", "storage", "website" ]
 
 [workspace.dependencies]
 askama = { version = "0.14.0" }

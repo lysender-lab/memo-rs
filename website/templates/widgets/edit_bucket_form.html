@@ -1,0 +1,57 @@
+<form
+    method="post"
+    action="/clients/{{ bucket.client_id }}/buckets/{{ bucket.id }}/edit"
+    hx-post="/clients/{{ bucket.client_id }}/buckets/{{ bucket.id }}/edit"
+    hx-target="#edit-bucket-container"
+>
+    <div class="columns">
+        <div class="column is-half">
+            <div class="card">
+                <div class="card-content">
+                    <h1 class="title is-4 has-text-weight-bold">
+                        Bucket
+                    </h1>
+
+                    {% match error_message %}
+                        {% when Some with (msg) %}
+                        <div class="mb-5 notification is-danger">
+                            {{ msg }}
+                        </div>
+                        {% when None %}
+                    {% endmatch %}
+
+                    <div class="field">
+                        <label class="label">Label</label>
+                        <div class="control">
+                            <input
+                                class="input"
+                                type="text"
+                                name="label"
+                                value="{{ payload.label }}"
+                                placeholder="Label"
+                                required minlength="1"
+                                maxlength="60"
+                            >
+                        </div>
+                    </div>
+
+                    <div class="pt-3 field is-grouped">
+                        <div class="control">
+                            <input type="hidden" name="token" value="{{ payload.token }}" />
+                            <button class="button is-link" type="submit" name="submit">Submit</button>
+                        </div>
+                        <div class="control">
+                            <button
+                                class="button is-link is-light"
+                                hx-get="/clients/{{ bucket.client_id }}/buckets/{{ bucket.id }}/edit_controls"
+                                hx-target="#edit-bucket-container"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>

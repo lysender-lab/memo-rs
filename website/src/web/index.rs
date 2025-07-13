@@ -43,7 +43,7 @@ pub async fn index_handler(
     t.title = String::from("Home");
 
     let token = ctx.token().expect("token is required");
-    let buckets = list_buckets(&state.config.api_url, token, &actor.client_id).await?;
+    let buckets = list_buckets(&state, token, &actor.client_id).await?;
 
     let tpl = IndexTemplate { t, buckets };
 

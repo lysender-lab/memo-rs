@@ -9,13 +9,11 @@ mod bucket;
 mod client;
 mod command;
 mod config;
-mod db;
 mod dir;
 mod error;
 mod file;
 mod health;
 mod run;
-mod schema;
 mod state;
 mod web;
 

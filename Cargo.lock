@@ -107,20 +107,19 @@ checksum = "dcfed56ad506cb2c684a14971b8861fdc3baaaae314b9e5f9bb532cbe3ba7a4f"
 name = "api"
 version = "0.2.0"
 dependencies = [
- "argon2",
  "async-trait",
  "axum",
  "axum-test",
  "chrono",
  "clap",
- "deadpool-diesel",
- "diesel",
+ "db",
  "image",
  "infer",
  "jsonwebtoken",
  "kamadak-exif",
  "memo",
  "multer",
+ "password",
  "rpassword",
  "serde",
  "serde_json",
@@ -780,6 +779,21 @@ dependencies = [
  "darling_core",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "db"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "deadpool-diesel",
+ "diesel",
+ "memo",
+ "password",
+ "serde",
+ "snafu",
+ "validator",
 ]
 
 [[package]]
@@ -2103,6 +2117,15 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "windows-targets 0.52.6",
+]
+
+[[package]]
+name = "password"
+version = "0.1.0"
+dependencies = [
+ "argon2",
+ "memo",
+ "snafu",
 ]
 
 [[package]]

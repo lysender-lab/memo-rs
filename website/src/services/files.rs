@@ -1,39 +1,16 @@
 use axum::body::Bytes;
 use axum::http::HeaderMap;
-use memo::file::{ImgDimension, ImgVersion, ImgVersionDto};
-use reqwest::Client;
+use memo::file::{FileDto, ImgDimension, ImgVersion};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 
-use crate::config::Config;
 use crate::error::{CsrfTokenSnafu, HttpClientSnafu, HttpResponseParseSnafu};
 use crate::models::ListFilesParams;
+use crate::run::AppState;
 use crate::services::handle_response_error;
 use crate::services::token::verify_csrf_token;
 use crate::{Error, Result};
 use memo::pagination::Paginated;
-
-#[derive(Clone, Deserialize)]
-pub struct FileObject {
-    pub id: String,
-    pub dir_id: String,
-    pub name: String,
-    pub filename: String,
-    pub content_type: String,
-    pub size: i64,
-
-    // Only available on non-image files
-    #[allow(dead_code)]
-    pub url: Option<String>,
-
-    pub is_image: bool,
-
-    // Only available for image files, main url is in orig version
-    pub img_versions: Option<Vec<ImgVersionDto>>,
-
-    pub created_at: i64,
-    pub updated_at: i64,
-}
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Photo {
@@ -64,10 +41,10 @@ pub struct UploadResult {
     pub next_token: String,
 }
 
-impl TryFrom<FileObject> for Photo {
+impl TryFrom<FileDto> for Photo {
     type Error = String;
 
-    fn try_from(file: FileObject) -> core::result::Result<Self, Self::Error> {
+    fn try_from(file: FileDto) -> core::result::Result<Self, Self::Error> {
         if !file.is_image {
             return Err("File is not an image".into());
         }
@@ -122,7 +99,7 @@ impl TryFrom<FileObject> for Photo {
 }
 
 pub async fn list_files(
-    api_url: &str,
+    state: &AppState,
     token: &str,
     client_id: &str,
     bucket_id: &str,
@@ -131,7 +108,7 @@ pub async fn list_files(
 ) -> Result<Paginated<Photo>> {
     let url = format!(
         "{}/clients/{}/buckets/{}/dirs/{}/files",
-        api_url, client_id, bucket_id, dir_id
+        &state.config.api_url, client_id, bucket_id, dir_id
     );
     let mut page = "1".to_string();
     let per_page = "50".to_string();
@@ -140,7 +117,8 @@ pub async fn list_files(
         page = p.to_string();
     }
     let query: Vec<(&str, &str)> = vec![("page", &page), ("per_page", &per_page)];
-    let response = Client::new()
+    let response = state
+        .client
         .get(url)
         .bearer_auth(token)
         .query(&query)
@@ -154,13 +132,12 @@ pub async fn list_files(
         return Err(handle_response_error(response, "files", Error::AlbumNotFound).await);
     }
 
-    let listing =
-        response
-            .json::<Paginated<FileObject>>()
-            .await
-            .context(HttpResponseParseSnafu {
-                msg: "Unable to parse files.".to_string(),
-            })?;
+    let listing = response
+        .json::<Paginated<FileDto>>()
+        .await
+        .context(HttpResponseParseSnafu {
+            msg: "Unable to parse files.".to_string(),
+        })?;
 
     let items: Vec<Photo> = listing
         .data
@@ -175,7 +152,7 @@ pub async fn list_files(
 }
 
 pub async fn get_photo(
-    api_url: &str,
+    state: &AppState,
     token: &str,
     client_id: &str,
     bucket_id: &str,
@@ -184,9 +161,10 @@ pub async fn get_photo(
 ) -> Result<Photo> {
     let url = format!(
         "{}/clients/{}/buckets/{}/dirs/{}/files/{}",
-        api_url, client_id, bucket_id, album_id, photo_id
+        &state.config.api_url, client_id, bucket_id, album_id, photo_id
     );
-    let response = Client::new()
+    let response = state
+        .client
         .get(url)
         .bearer_auth(token)
         .send()
@@ -196,7 +174,7 @@ pub async fn get_photo(
         })?;
 
     let file = response
-        .json::<FileObject>()
+        .json::<FileDto>()
         .await
         .context(HttpResponseParseSnafu {
             msg: "Unable to parse photo.".to_string(),
@@ -206,7 +184,7 @@ pub async fn get_photo(
 }
 
 pub async fn upload_photo(
-    config: &Config,
+    state: &AppState,
     token: &str,
     client_id: &str,
     bucket_id: &str,
@@ -223,14 +201,15 @@ pub async fn upload_photo(
         return Err("Invalid Content-Type header.".into());
     };
     let csrf_token = csrf_token.unwrap_or("".to_string());
-    let csrf_result = verify_csrf_token(&csrf_token, &config.jwt_secret)?;
+    let csrf_result = verify_csrf_token(&csrf_token, &state.config.jwt_secret)?;
     ensure!(csrf_result == album_id, CsrfTokenSnafu);
     let url = format!(
         "{}/clients/{}/buckets/{}/dirs/{}/files",
-        &config.api_url, client_id, bucket_id, album_id
+        &state.config.api_url, client_id, bucket_id, album_id
     );
 
-    let response = Client::new()
+    let response = state
+        .client
         .post(url)
         .header("Content-Type", content_type)
         .header("Content-Length", body.len().to_string())
@@ -247,7 +226,7 @@ pub async fn upload_photo(
     }
 
     let file = response
-        .json::<FileObject>()
+        .json::<FileDto>()
         .await
         .context(HttpResponseParseSnafu {
             msg: "Unable to parse photo information.".to_string(),
@@ -257,7 +236,7 @@ pub async fn upload_photo(
 }
 
 pub async fn delete_photo(
-    config: &Config,
+    state: &AppState,
     token: &str,
     client_id: &str,
     bucket_id: &str,
@@ -265,13 +244,14 @@ pub async fn delete_photo(
     photo_id: &str,
     csrf_token: &str,
 ) -> Result<()> {
-    let csrf_result = verify_csrf_token(&csrf_token, &config.jwt_secret)?;
+    let csrf_result = verify_csrf_token(&csrf_token, &state.config.jwt_secret)?;
     ensure!(csrf_result == photo_id, CsrfTokenSnafu);
     let url = format!(
         "{}/clients/{}/buckets/{}/dirs/{}/files/{}",
-        &config.api_url, client_id, bucket_id, album_id, photo_id
+        &state.config.api_url, client_id, bucket_id, album_id, photo_id
     );
-    let _ = Client::new()
+    let _ = state
+        .client
         .delete(url)
         .bearer_auth(token)
         .send()

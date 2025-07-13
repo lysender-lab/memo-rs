@@ -3,11 +3,11 @@ use std::sync::Arc;
 use deadpool_diesel::sqlite::{Manager, Pool, Runtime};
 
 use crate::{
-    auth::user::{UserRepo, UserRepoable},
-    bucket::{BucketRepo, BucketRepoable},
-    client::{ClientRepo, ClientRepoable},
-    dir::{DirRepo, DirRepoable},
-    file::{FileRepo, FileRepoable},
+    bucket::{BucketRepo, BucketStore},
+    client::{ClientRepo, ClientStore},
+    dir::{DirRepo, DirStore},
+    file::{FileRepo, FileStore},
+    user::{UserRepo, UserStore},
 };
 
 pub fn create_db_pool(database_url: &str) -> Pool {
@@ -16,11 +16,11 @@ pub fn create_db_pool(database_url: &str) -> Pool {
 }
 
 pub struct DbMapper {
-    pub buckets: Arc<dyn BucketRepoable>,
-    pub clients: Arc<dyn ClientRepoable>,
-    pub dirs: Arc<dyn DirRepoable>,
-    pub files: Arc<dyn FileRepoable>,
-    pub users: Arc<dyn UserRepoable>,
+    pub buckets: Arc<dyn BucketStore>,
+    pub clients: Arc<dyn ClientStore>,
+    pub dirs: Arc<dyn DirStore>,
+    pub files: Arc<dyn FileStore>,
+    pub users: Arc<dyn UserStore>,
 }
 
 pub fn create_db_mapper(database_url: &str) -> DbMapper {
@@ -34,13 +34,13 @@ pub fn create_db_mapper(database_url: &str) -> DbMapper {
     }
 }
 
-#[cfg(test)]
+#[cfg(feature = "test")]
 pub fn create_test_db_mapper() -> DbMapper {
-    use crate::auth::user::UserTestRepo;
     use crate::bucket::BucketTestRepo;
     use crate::client::ClientTestRepo;
     use crate::dir::DirTestRepo;
     use crate::file::FileTestRepo;
+    use crate::user::UserTestRepo;
 
     DbMapper {
         buckets: Arc::new(BucketTestRepo {}),

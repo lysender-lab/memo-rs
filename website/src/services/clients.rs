@@ -1,10 +1,9 @@
 use memo::client::ClientDto;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 
-use crate::config::Config;
 use crate::error::{CsrfTokenSnafu, HttpClientSnafu, HttpResponseParseSnafu};
+use crate::run::AppState;
 use crate::services::token::verify_csrf_token;
 use crate::{Error, Result};
 
@@ -23,10 +22,11 @@ pub struct ClientSubmitData {
     pub status: String,
 }
 
-pub async fn list_clients(api_url: &str, token: &str) -> Result<Vec<ClientDto>> {
-    let url = format!("{}/clients", api_url);
+pub async fn list_clients(state: &AppState, token: &str) -> Result<Vec<ClientDto>> {
+    let url = format!("{}/clients", &state.config.api_url);
 
-    let response = Client::new()
+    let response = state
+        .client
         .get(url)
         .bearer_auth(token)
         .send()
@@ -50,14 +50,14 @@ pub async fn list_clients(api_url: &str, token: &str) -> Result<Vec<ClientDto>> 
 }
 
 pub async fn create_client(
-    config: &Config,
+    state: &AppState,
     token: &str,
     form: &ClientFormSubmitData,
 ) -> Result<ClientDto> {
-    let csrf_result = verify_csrf_token(&form.token, &config.jwt_secret)?;
+    let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(csrf_result == "new_client", CsrfTokenSnafu);
 
-    let url = format!("{}/clients", &config.api_url);
+    let url = format!("{}/clients", &state.config.api_url);
 
     let data = ClientSubmitData {
         name: form.name.clone(),
@@ -66,7 +66,8 @@ pub async fn create_client(
             None => "inactive".to_string(),
         },
     };
-    let response = Client::new()
+    let response = state
+        .client
         .post(url)
         .bearer_auth(token)
         .json(&data)
@@ -90,9 +91,10 @@ pub async fn create_client(
     Ok(client)
 }
 
-pub async fn get_client(api_url: &str, token: &str, client_id: &str) -> Result<ClientDto> {
-    let url = format!("{}/clients/{}", api_url, client_id);
-    let response = Client::new()
+pub async fn get_client(state: &AppState, token: &str, client_id: &str) -> Result<ClientDto> {
+    let url = format!("{}/clients/{}", &state.config.api_url, client_id);
+    let response = state
+        .client
         .get(url)
         .bearer_auth(token)
         .send()
@@ -116,15 +118,15 @@ pub async fn get_client(api_url: &str, token: &str, client_id: &str) -> Result<C
 }
 
 pub async fn update_client(
-    config: &Config,
+    state: &AppState,
     token: &str,
     client_id: &str,
     form: &ClientFormSubmitData,
 ) -> Result<ClientDto> {
-    let csrf_result = verify_csrf_token(&form.token, &config.jwt_secret)?;
+    let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(&csrf_result == client_id, CsrfTokenSnafu);
 
-    let url = format!("{}/clients/{}", &config.api_url, client_id);
+    let url = format!("{}/clients/{}", &state.config.api_url, client_id);
     let data = ClientSubmitData {
         name: form.name.clone(),
         status: match form.active {
@@ -132,7 +134,8 @@ pub async fn update_client(
             None => "inactive".to_string(),
         },
     };
-    let response = Client::new()
+    let response = state
+        .client
         .patch(url)
         .bearer_auth(token)
         .json(&data)
@@ -157,16 +160,17 @@ pub async fn update_client(
 }
 
 pub async fn delete_client(
-    config: &Config,
+    state: &AppState,
     token: &str,
     client_id: &str,
     csrf_token: &str,
 ) -> Result<()> {
-    let csrf_result = verify_csrf_token(&csrf_token, &config.jwt_secret)?;
+    let csrf_result = verify_csrf_token(&csrf_token, &state.config.jwt_secret)?;
     ensure!(csrf_result == client_id, CsrfTokenSnafu);
 
-    let url = format!("{}/clients/{}", &config.api_url, client_id);
-    let response = Client::new()
+    let url = format!("{}/clients/{}", &state.config.api_url, client_id);
+    let response = state
+        .client
         .delete(url)
         .bearer_auth(token)
         .send()

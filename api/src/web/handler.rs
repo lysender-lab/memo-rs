@@ -13,23 +13,28 @@ use crate::{
     auth::{
         authenticate,
         user::{
-            ChangeCurrentPassword, NewUser, UpdateUserPassword, UpdateUserRoles, UpdateUserStatus,
-            change_current_password,
+            change_current_password, create_user, update_password, update_user_roles,
+            update_user_status,
         },
     },
-    bucket::{NewBucket, create_bucket, delete_bucket},
-    client::{
-        ClientDefaultBucket, NewClient, UpdateClient, create_client, delete_client, update_client,
-    },
-    dir::{ListDirsParams, NewDir, UpdateDir, delete_dir},
+    bucket::{create_bucket, delete_bucket, update_bucket},
+    client::{create_client, delete_client, update_client},
+    dir::{create_dir, delete_dir, update_dir},
     error::{
-        CreateFileSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, MissingUploadFileSnafu,
-        Result, StorageSnafu, UploadDirSnafu, WhateverSnafu,
+        CreateFileSnafu, DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu,
+        MissingUploadFileSnafu, Result, StorageSnafu, UploadDirSnafu, WhateverSnafu,
     },
-    file::{FileObject, FilePayload, ListFilesParams, create_file},
+    file::create_file,
     health::{check_liveness, check_readiness},
     state::AppState,
     web::{params::Params, response::JsonResponse},
+};
+use db::bucket::{NewBucket, UpdateBucket};
+use db::client::{ClientDefaultBucket, NewClient, UpdateClient};
+use db::dir::{ListDirsParams, NewDir, UpdateDir};
+use db::file::{FileObject, FilePayload, ListFilesParams};
+use db::user::{
+    ChangeCurrentPassword, NewUser, UpdateUserPassword, UpdateUserRoles, UpdateUserStatus,
 };
 use memo::{
     actor::{Actor, Credentials},
@@ -146,9 +151,8 @@ pub async fn list_clients_handler(
     if !actor.is_system_admin() {
         client_id = Some(actor.client_id.clone());
     }
-    let clients = state.db.clients.list(client_id).await?;
-    let dtos: Vec<ClientDto> = clients.into_iter().map(|x| x.into()).collect();
-    Ok(JsonResponse::new(serde_json::to_string(&dtos).unwrap()))
+    let clients = state.db.clients.list(client_id).await.context(DbSnafu)?;
+    Ok(JsonResponse::new(serde_json::to_string(&clients).unwrap()))
 }
 
 pub async fn create_client_handler(
@@ -206,7 +210,13 @@ pub async fn update_client_handler(
         return Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()));
     }
 
-    let updated_client = state.db.clients.get(client.id.as_str()).await?;
+    let updated_client = state
+        .db
+        .clients
+        .get(client.id.as_str())
+        .await
+        .context(DbSnafu)?;
+
     let updated_client = updated_client.context(WhateverSnafu {
         msg: "Unable to find updated client",
     })?;
@@ -267,13 +277,13 @@ pub async fn update_default_bucket_handler(
         default_bucket_id: Some(data.default_bucket_id.clone()),
     };
 
-    let updated = update_client(&state, client.id.as_str(), &data).await?;
+    let updated = update_client(&state, &client.id, &data).await?;
     if !updated {
         // No changes, just return the client
         return Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()));
     }
 
-    let updated_client = state.db.clients.get(client.id.as_str()).await?;
+    let updated_client = state.db.clients.get(&client.id).await.context(DbSnafu)?;
     let updated_client = updated_client.context(WhateverSnafu {
         msg: "Unable to find updated client",
     })?;
@@ -295,12 +305,47 @@ pub async fn list_buckets_handler(
             msg: "Insufficient permissions"
         }
     );
-    let buckets = state.db.buckets.list(&client.id).await?;
+    let buckets = state.db.buckets.list(&client.id).await.context(DbSnafu)?;
     Ok(JsonResponse::new(serde_json::to_string(&buckets).unwrap()))
 }
 
 pub async fn get_bucket_handler(Extension(bucket): Extension<BucketDto>) -> Result<JsonResponse> {
     Ok(JsonResponse::new(serde_json::to_string(&bucket).unwrap()))
+}
+
+pub async fn update_bucket_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(bucket): Extension<BucketDto>,
+    payload: CoreResult<Json<UpdateBucket>, JsonRejection>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::BucketsEdit];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
+
+    let updated = update_bucket(&state, &bucket.id, &data).await?;
+    let updated_bucket = match updated {
+        true => {
+            let mut b = bucket.clone();
+            if let Some(label) = &data.label {
+                b.label = label.clone();
+            }
+            b
+        }
+        false => bucket,
+    };
+
+    Ok(JsonResponse::new(
+        serde_json::to_string(&updated_bucket).unwrap(),
+    ))
 }
 
 pub async fn delete_bucket_handler(
@@ -362,7 +407,7 @@ pub async fn list_users_handler(
             msg: "Insufficient permissions"
         }
     );
-    let users = state.db.users.list(&client.id).await?;
+    let users = state.db.users.list(&client.id).await.context(DbSnafu)?;
     let dto: Vec<UserDto> = users.into_iter().map(|x| x.into()).collect();
     Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
 }
@@ -385,12 +430,11 @@ pub async fn create_user_handler(
         msg: "Invalid request payload",
     })?;
 
-    let user = state.db.users.create(&client.id, &data, false).await?;
-    let dto: UserDto = user.into();
+    let user = create_user(&state, &client.id, &data, false).await?;
 
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,
-        serde_json::to_string(&dto).unwrap(),
+        serde_json::to_string(&user).unwrap(),
     ))
 }
 
@@ -436,12 +480,19 @@ pub async fn update_user_status_handler(
     })?;
 
     // Ideally, should not update if status do not change
-    let _ = state.db.users.update_status(&user.id, &data).await?;
+    let _ = update_user_status(&state, &user.id, &data).await?;
 
     // Re-query and show
-    let updated_user = state.db.users.get(&user.id).await?.context(WhateverSnafu {
-        msg: "Unable to re-query user information.",
-    })?;
+    let updated_user = state
+        .db
+        .users
+        .get(&user.id)
+        .await
+        .context(DbSnafu)?
+        .context(WhateverSnafu {
+            msg: "Unable to re-query user information.",
+        })?;
+
     let dto: UserDto = updated_user.into();
 
     Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
@@ -474,12 +525,19 @@ pub async fn update_user_roles_handler(
     })?;
 
     // Ideally, should not update if roles do not change
-    let _ = state.db.users.update_roles(&user.id, &data).await?;
+    let _ = update_user_roles(&state, &user.id, &data).await?;
 
     // Re-query and show
-    let updated_user = state.db.users.get(&user.id).await?.context(WhateverSnafu {
-        msg: "Unable to re-query user information.",
-    })?;
+    let updated_user = state
+        .db
+        .users
+        .get(&user.id)
+        .await
+        .context(DbSnafu)?
+        .context(WhateverSnafu {
+            msg: "Unable to re-query user information.",
+        })?;
+
     let dto: UserDto = updated_user.into();
 
     Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
@@ -511,12 +569,19 @@ pub async fn reset_user_password_handler(
         msg: "Invalid request payload",
     })?;
 
-    let _ = state.db.users.update_password(&user.id, &data).await?;
+    let _ = update_password(&state, &user.id, &data).await?;
 
     // Re-query and show
-    let updated_user = state.db.users.get(&user.id).await?.context(WhateverSnafu {
-        msg: "Unable to re-query user information.",
-    })?;
+    let updated_user = state
+        .db
+        .users
+        .get(&user.id)
+        .await
+        .context(DbSnafu)?
+        .context(WhateverSnafu {
+            msg: "Unable to re-query user information.",
+        })?;
+
     let dto: UserDto = updated_user.into();
 
     Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
@@ -543,7 +608,7 @@ pub async fn delete_user_handler(
         }
     );
 
-    let _ = state.db.users.delete(&user.id).await?;
+    let _ = state.db.users.delete(&user.id).await.context(DbSnafu)?;
 
     Ok(JsonResponse::with_status(
         StatusCode::NO_CONTENT,
@@ -565,7 +630,13 @@ pub async fn list_dirs_handler(
         }
     );
 
-    let dirs = state.db.dirs.list(bucket.id.as_str(), &query).await?;
+    let dirs = state
+        .db
+        .dirs
+        .list(bucket.id.as_str(), &query)
+        .await
+        .context(DbSnafu)?;
+
     Ok(JsonResponse::new(serde_json::to_string(&dirs).unwrap()))
 }
 
@@ -587,7 +658,8 @@ pub async fn create_dir_handler(
         msg: "Invalid request payload",
     })?;
 
-    let dir = state.db.dirs.create(bucket.id.as_str(), &data).await?;
+    let dir = create_dir(&state, &bucket.id, &data).await?;
+
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,
         serde_json::to_string(&dir).unwrap(),
@@ -616,7 +688,7 @@ pub async fn update_dir_handler(
         msg: "Invalid request payload",
     })?;
 
-    let updated = state.db.dirs.update(&dir.id, &data).await?;
+    let updated = update_dir(&state, &dir.id, &data).await?;
 
     // Either return the updated dir or the original one
     match updated {
@@ -626,7 +698,7 @@ pub async fn update_dir_handler(
 }
 
 async fn get_dir_as_response(state: &AppState, id: &str) -> Result<JsonResponse> {
-    let res = state.db.dirs.get(id).await?;
+    let res = state.db.dirs.get(id).await.context(DbSnafu)?;
     let dir = res.context(WhateverSnafu {
         msg: "Error getting directory",
     })?;
@@ -670,14 +742,12 @@ pub async fn list_files_handler(
         }
     );
 
-    let files = state.db.files.list(&dir, &query).await?;
+    let files = state.db.files.list(&dir, &query).await.context(DbSnafu)?;
     let storage_client = state.storage_client.clone();
 
     // Generate download urls for each files
-    let items: Vec<FileDto> = files.data.into_iter().map(|f| f.into()).collect();
-
     let items = storage_client
-        .format_files(&bucket.name, &dir.name, items)
+        .format_files(&bucket.name, &dir.name, files.data)
         .await
         .context(StorageSnafu)?;
 
@@ -804,7 +874,7 @@ pub async fn delete_file_handler(
     );
 
     // Delete record
-    let _ = state.db.files.delete(&file.id).await?;
+    let _ = state.db.files.delete(&file.id).await.context(DbSnafu)?;
 
     // Delete file(s) from storage
     let storage_client = state.storage_client.clone();

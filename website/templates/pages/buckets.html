@@ -44,6 +44,7 @@
               <thead>
                 <tr>
                   <th>Name</th>
+                  <th>Label</th>
                   <th>Content Type</th>
                 </tr>
               </thead>
@@ -51,6 +52,7 @@
                 {% for bucket in buckets %}
                 <tr>
                     <td><a href="/clients/{{ client.id }}/buckets/{{ bucket.id }}">{{ bucket.name }}</a></td>
+                    <td>{{ bucket.label }}</td>
                     <td>
                         {% if bucket.images_only %}
                         <span class="tag is-primary">Images</span>

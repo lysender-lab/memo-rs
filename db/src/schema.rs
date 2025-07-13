@@ -7,6 +7,7 @@ diesel::table! {
         name -> Text,
         images_only -> Integer,
         created_at -> BigInt,
+        label -> Text,
     }
 }
 

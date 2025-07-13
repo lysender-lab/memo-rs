@@ -64,15 +64,13 @@ pub async fn clients_listing_handler(
     Extension(ctx): Extension<Ctx>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
-    let config = state.config.clone();
-
     let mut tpl = ClientsTemplate {
         error_message: None,
         clients: Vec::new(),
     };
 
     let token = ctx.token().expect("token is required");
-    match list_clients(&config.api_url, token).await {
+    match list_clients(&state, token).await {
         Ok(clients) => {
             tpl.clients = clients;
             build_response(tpl)
@@ -161,7 +159,7 @@ pub async fn post_new_client_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    let result = create_client(&config, token, &payload).await;
+    let result = create_client(&state, token, &payload).await;
 
     match result {
         Ok(_) => {
@@ -296,7 +294,7 @@ pub async fn post_edit_client_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    let result = update_client(&config, token, &client.id, &payload).await;
+    let result = update_client(&state, token, &client.id, &payload).await;
 
     match result {
         Ok(updated_client) => {
@@ -413,7 +411,7 @@ pub async fn post_delete_client_handler(
     let status: StatusCode;
 
     let token = ctx.token().expect("token is required");
-    let result = delete_client(&config, token, &client.id, &payload.token).await;
+    let result = delete_client(&state, token, &client.id, &payload.token).await;
 
     match result {
         Ok(_) => {
