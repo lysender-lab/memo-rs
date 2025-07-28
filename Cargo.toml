@@ -7,6 +7,8 @@ members = [ "api", "db", "memo", "password", "storage", "website" ]
 askama = { version = "0.14.0" }
 async-trait = "0.1.88"
 argon2 = { version = "0.5.3", features = ["std"] }
+aws-config = { version = "1.1.7", features = ["behavior-version-latest"] }
+aws-sdk-s3 = "1.100.0"
 axum = { version = "0.8.1", features = ["macros", "multipart"] }
 axum-extra = { version = "0.10.0", features = ["cookie"] }
 axum-test = "17.3.0"
