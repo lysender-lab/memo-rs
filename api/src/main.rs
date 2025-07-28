@@ -1,7 +1,6 @@
 use clap::Parser;
 use config::CliArgs;
 use run::run_command;
-use snafu::ErrorCompat;
 use std::process;
 
 mod auth;
@@ -31,9 +30,6 @@ async fn main() {
 
     if let Err(e) = run_command(args).await {
         eprintln!("Application error: {}", e);
-        if let Some(bt) = ErrorCompat::backtrace(&e) {
-            println!("{}", bt);
-        }
         process::exit(1);
     }
 }

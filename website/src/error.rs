@@ -5,7 +5,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
-use snafu::{Backtrace, ErrorCompat, Snafu};
+use snafu::{ErrorCompat, Snafu};
 use std::path::PathBuf;
 
 use memo::role::{InvalidPermissionsError, InvalidRolesError};
@@ -16,49 +16,28 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[snafu(visibility(pub(crate)))]
 pub enum Error {
     #[snafu(display("Error reading config file: {}", source))]
-    ConfigFile {
-        source: std::io::Error,
-        backtrace: Backtrace,
-    },
+    ConfigFile { source: std::io::Error },
 
     #[snafu(display("Error parsing config file: {}", source))]
-    ConfigParse {
-        source: toml::de::Error,
-        backtrace: Backtrace,
-    },
+    ConfigParse { source: toml::de::Error },
 
     #[snafu(display("Unable to create upload dir: {}", source))]
-    UploadDir {
-        source: std::io::Error,
-        backtrace: Backtrace,
-    },
+    UploadDir { source: std::io::Error },
 
     #[snafu(display("Config error: {}", msg))]
     Config { msg: String },
 
     #[snafu(display("Failed to read bundles.json: {}", source))]
-    ManifestRead {
-        source: std::io::Error,
-        backtrace: Backtrace,
-    },
+    ManifestRead { source: std::io::Error },
 
     #[snafu(display("Failed to parse bundles.json: {}", source))]
-    ManifestParse {
-        source: serde_json::Error,
-        backtrace: Backtrace,
-    },
+    ManifestParse { source: serde_json::Error },
 
     #[snafu(display("Failed to render template: {}", source))]
-    Template {
-        source: askama::Error,
-        backtrace: Backtrace,
-    },
+    Template { source: askama::Error },
 
     #[snafu(display("Response builder error: {}", source))]
-    ResponseBuilder {
-        source: http::Error,
-        backtrace: Backtrace,
-    },
+    ResponseBuilder { source: http::Error },
 
     #[snafu(display("{}", msg))]
     Validation { msg: String },
@@ -85,11 +64,7 @@ pub enum Error {
     Forbidden { msg: String },
 
     #[snafu(display("{}", msg))]
-    JsonRejection {
-        msg: String,
-        source: JsonRejection,
-        backtrace: Backtrace,
-    },
+    JsonRejection { msg: String, source: JsonRejection },
 
     #[snafu(display("{}", msg))]
     MissingUploadFile { msg: String },
@@ -98,7 +73,6 @@ pub enum Error {
     CreateFile {
         path: PathBuf,
         source: std::io::Error,
-        backtrace: Backtrace,
     },
 
     #[snafu(display("File type not allowed"))]
@@ -132,30 +106,16 @@ pub enum Error {
     UserNotFound,
 
     #[snafu(display("{}", source))]
-    InvalidRoles {
-        source: InvalidRolesError,
-        backtrace: Backtrace,
-    },
+    InvalidRoles { source: InvalidRolesError },
 
     #[snafu(display("{}", source))]
-    InvalidPermissions {
-        source: InvalidPermissionsError,
-        backtrace: Backtrace,
-    },
+    InvalidPermissions { source: InvalidPermissionsError },
 
     #[snafu(display("{}: {}", msg, source))]
-    HttpClient {
-        msg: String,
-        source: reqwest::Error,
-        backtrace: Backtrace,
-    },
+    HttpClient { msg: String, source: reqwest::Error },
 
     #[snafu(display("{}: {}", msg, source))]
-    HttpResponseParse {
-        msg: String,
-        source: reqwest::Error,
-        backtrace: Backtrace,
-    },
+    HttpResponseParse { msg: String, source: reqwest::Error },
 
     #[snafu(display("Invalid username or password"))]
     LoginFailed,

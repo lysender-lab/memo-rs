@@ -50,9 +50,6 @@ async fn response_mapper(res: Response) -> Response {
         if e.status_code.is_server_error() {
             // Build the error response
             error!("{}", e.message);
-            if let Some(bt) = &e.backtrace {
-                error!("{}", bt);
-            }
         }
 
         let body = ErrorResponse {
