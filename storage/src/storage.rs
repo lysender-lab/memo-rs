@@ -12,6 +12,10 @@ use google_cloud_storage::http::objects::delete::DeleteObjectRequest;
 use google_cloud_storage::http::objects::upload::{Media, UploadObjectRequest, UploadType};
 use google_cloud_storage::sign::SignedURLOptions;
 
+use aws_config::from_env;
+use aws_credential_types::CredentialsBuilder;
+use aws_types::region::Region;
+
 use crate::Result;
 use crate::error::{GoogleSnafu, ValidationSnafu};
 use memo::bucket::BucketDto;
@@ -51,6 +55,39 @@ pub trait CloudStorable: Send + Sync {
         dir_name: &str,
         file: FileDto,
     ) -> Result<FileDto>;
+}
+
+pub struct StorageClientS3 {
+    client: Arc<aws_sdk_s3::Client>,
+}
+
+impl StorageClientS3 {
+    pub async fn new(region: &str, access_key: &str, secret_key: &str) -> Self {
+        // Manually create credentials
+        let credentials = CredentialsBuilder::default()
+            .access_key_id(access_key)
+            .secret_access_key(secret_key)
+            .build();
+
+        let region = Region::new(region.to_string());
+
+        // Build config with manually provided credentials and region
+        let config = from_env()
+            .region(region)
+            .credentials_provider(credentials)
+            .load()
+            .await;
+
+        let client = aws_sdk_s3::Client::new(&config);
+
+        Self {
+            client: Arc::new(client),
+        }
+    }
+
+    pub fn get_client(&self) -> Arc<aws_sdk_s3::Client> {
+        self.client.clone()
+    }
 }
 
 pub struct StorageClient {
