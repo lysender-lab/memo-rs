@@ -23,7 +23,7 @@ pub async fn run(config: Config) -> Result<()> {
     let port = config.port;
     let frontend_dir = config.frontend_dir.clone();
     let client = ClientBuilder::new()
-        .timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(30))
         .build()
         .expect("HTTP Client is required");
 

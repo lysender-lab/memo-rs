@@ -32,7 +32,7 @@ use crate::{
 use db::bucket::{NewBucket, UpdateBucket};
 use db::client::{ClientDefaultBucket, NewClient, UpdateClient};
 use db::dir::{ListDirsParams, NewDir, UpdateDir};
-use db::file::{FileObject, FilePayload, ListFilesParams};
+use db::file::{FilePayload, ListFilesParams};
 use db::user::{
     ChangeCurrentPassword, NewUser, UpdateUserPassword, UpdateUserRoles, UpdateUserStatus,
 };
@@ -846,13 +846,12 @@ pub async fn get_file_handler(
     State(state): State<AppState>,
     Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
-    Extension(file): Extension<FileObject>,
+    Extension(file): Extension<FileDto>,
 ) -> Result<JsonResponse> {
     let storage_client = state.storage_client.clone();
     // Extract dir from the middleware extension
-    let file_dto: FileDto = file.clone().into();
     let file_dto = storage_client
-        .format_file(&bucket.name, &dir.name, file_dto)
+        .format_file(&bucket.name, &dir.name, file)
         .await
         .context(StorageSnafu)?;
     Ok(JsonResponse::new(serde_json::to_string(&file_dto).unwrap()))
@@ -863,7 +862,7 @@ pub async fn delete_file_handler(
     Extension(actor): Extension<Actor>,
     Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
-    Extension(file): Extension<FileObject>,
+    Extension(file): Extension<FileDto>,
 ) -> Result<JsonResponse> {
     let permissions = vec![Permission::FilesDelete];
     ensure!(
@@ -878,9 +877,8 @@ pub async fn delete_file_handler(
 
     // Delete file(s) from storage
     let storage_client = state.storage_client.clone();
-    let dto: FileDto = file.into();
     let _ = storage_client
-        .delete_file_object(&bucket.name, &dir.name, &dto)
+        .delete_file_object(&bucket.name, &dir.name, &file)
         .await
         .context(StorageSnafu)?;
 
