@@ -98,7 +98,7 @@ impl From<FileObject> for FileDto {
                     .filter_map(|s| s.parse::<ImgVersionDto>().ok())
                     .collect();
 
-                if versions.len() > 0 {
+                if !versions.is_empty() {
                     Some(versions)
                 } else {
                     None
@@ -161,12 +161,11 @@ impl FileRepo {
             .interact(move |conn| {
                 let mut query = dsl::files.into_boxed();
                 query = query.filter(dsl::dir_id.eq(did.as_str()));
-                if let Some(keyword) = params_copy.keyword {
-                    if keyword.len() > 0 {
+                if let Some(keyword) = params_copy.keyword
+                    && !keyword.is_empty() {
                         let pattern = format!("%{}%", keyword);
                         query = query.filter(dsl::name.like(pattern));
                     }
-                }
                 query.select(count_star()).get_result::<i64>(conn)
             })
             .await
@@ -200,11 +199,10 @@ impl FileStore for FileRepo {
         let mut per_page: i32 = MAX_PER_PAGE;
         let mut offset: i64 = 0;
 
-        if let Some(per_page_param) = params.per_page {
-            if per_page_param > 0 && per_page_param <= MAX_PER_PAGE {
+        if let Some(per_page_param) = params.per_page
+            && per_page_param > 0 && per_page_param <= MAX_PER_PAGE {
                 per_page = per_page_param;
             }
-        }
 
         let total_pages: i64 = (total_records as f64 / per_page as f64).ceil() as i64;
 
@@ -227,12 +225,11 @@ impl FileStore for FileRepo {
                 let mut query = dsl::files.into_boxed();
                 query = query.filter(dsl::dir_id.eq(did.as_str()));
 
-                if let Some(keyword) = params_copy.keyword {
-                    if keyword.len() > 0 {
+                if let Some(keyword) = params_copy.keyword
+                    && !keyword.is_empty() {
                         let pattern = format!("%{}%", keyword);
                         query = query.filter(dsl::name.like(pattern));
                     }
-                }
                 query
                     .limit(per_page as i64)
                     .offset(offset)
