@@ -153,7 +153,7 @@ pub async fn bucket_middleware(
 
     if !actor.is_system_admin() {
         ensure!(
-            &bucket.client_id == &actor.client_id,
+            bucket.client_id == actor.client_id,
             NotFoundSnafu {
                 msg: "Bucket not found"
             }
@@ -195,14 +195,14 @@ pub async fn user_middleware(
 
     if !actor.is_system_admin() {
         ensure!(
-            &user.client_id == &actor.client_id,
+            user.client_id == actor.client_id,
             NotFoundSnafu {
                 msg: "User not found"
             }
         );
     }
 
-    let user: UserDto = user.into();
+    let user: UserDto = user;
 
     // Forward to the next middleware/handler passing the bucket information
     request.extensions_mut().insert(user);
@@ -239,10 +239,10 @@ pub async fn dir_middleware(
         msg: "Directory not found",
     })?;
 
-    let dto: DirDto = dir.into();
+    let dto: DirDto = dir;
 
     ensure!(
-        &dto.bucket_id == &params.bucket_id,
+        dto.bucket_id == params.bucket_id,
         NotFoundSnafu {
             msg: "Directory not found"
         }
@@ -277,7 +277,7 @@ pub async fn file_middleware(
     })?;
 
     ensure!(
-        &file.dir_id == &did,
+        file.dir_id == did,
         NotFoundSnafu {
             msg: "File not found"
         }

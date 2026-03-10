@@ -107,7 +107,7 @@ pub async fn create_file(
 
         match create_versions(data, &exif_info) {
             Ok(versions) => {
-                if versions.len() > 0 {
+                if !versions.is_empty() {
                     file_dto.img_versions = Some(versions);
                 }
             }
@@ -179,7 +179,7 @@ fn cleanup_temp_uploads(data: &FilePayload, file: Option<&FileDto>) -> Result<()
                     }
                 }
 
-                if errors.len() > 0 {
+                if !errors.is_empty() {
                     return Err(errors.join(", ").as_str().into());
                 }
             }
@@ -243,19 +243,19 @@ fn read_image(path: &PathBuf) -> Result<DynamicImage> {
             Ok(format_img) => match format_img.decode() {
                 Ok(img) => Ok(img),
                 Err(e) => {
-                    let msg = format!("Unable to decode image: {}", e.to_string());
+                    let msg = format!("Unable to decode image: {}", e);
                     error!("{}", msg);
                     Err(msg.as_str().into())
                 }
             },
             Err(e) => {
-                let msg = format!("Unable to guess image format: {}", e.to_string());
+                let msg = format!("Unable to guess image format: {}", e);
                 error!("{}", msg);
                 Err(msg.as_str().into())
             }
         },
         Err(e) => {
-            let msg = format!("Unable to read image: {}", e.to_string());
+            let msg = format!("Unable to read image: {}", e);
             error!("{}", msg);
             Err(msg.as_str().into())
         }
@@ -409,10 +409,7 @@ fn parse_exif_info(path: &PathBuf) -> Result<PhotoExif> {
 
     // Default to 1 if cannot identify orientation
     let orientation = match exif.get_field(Tag::Orientation, In::PRIMARY) {
-        Some(orientation) => match orientation.value.get_uint(0) {
-            Some(v @ 1..=8) => v,
-            _ => 1,
-        },
+        Some(orientation) => orientation.value.get_uint(0).unwrap_or(1),
         None => 1,
     };
 

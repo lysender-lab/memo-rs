@@ -46,7 +46,7 @@ pub async fn run_setup(config: &Config) -> Result<()> {
     }
 
     let users = state.db.users.list(&client_id).await.context(DbSnafu)?;
-    if users.len() > 0 {
+    if !users.is_empty() {
         println!("Admin user already exists.");
         return Ok(());
     }

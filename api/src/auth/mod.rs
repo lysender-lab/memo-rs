@@ -73,7 +73,7 @@ pub async fn authenticate(state: &AppState, credentials: &Credentials) -> Result
     };
     let token = create_auth_token(&actor, &state.config.jwt_secret)?;
     Ok(AuthResponse {
-        user: user.into(),
+        user: user,
         token,
     })
 }
@@ -94,7 +94,7 @@ pub async fn authenticate_token(state: &AppState, token: &str) -> Result<Actor> 
 
     let user = state.db.users.get(&actor.id).await.context(DbSnafu)?;
     let user = user.context(UserNotFoundSnafu)?;
-    ensure!(&user.client_id == &client.id, UserNotFoundSnafu);
+    ensure!(user.client_id == client.id, UserNotFoundSnafu);
 
-    Ok(Actor::new(actor, user.into()))
+    Ok(Actor::new(actor, user))
 }

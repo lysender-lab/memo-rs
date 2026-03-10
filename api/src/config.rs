@@ -38,28 +38,28 @@ impl Config {
 
         // Validate config values
         ensure!(
-            config.jwt_secret.len() > 0,
+            !config.jwt_secret.is_empty(),
             ConfigSnafu {
                 msg: "Jwt secret is required.".to_string()
             }
         );
 
         ensure!(
-            config.cloud.project_id.len() > 0,
+            !config.cloud.project_id.is_empty(),
             ConfigSnafu {
                 msg: "Google Cloud Project ID is required.".to_string()
             }
         );
 
         ensure!(
-            config.cloud.credentials.len() > 0,
+            !config.cloud.credentials.is_empty(),
             ConfigSnafu {
                 msg: "Google Cloud credentials file is required.".to_string()
             }
         );
 
         ensure!(
-            config.db.url.len() > 0,
+            !config.db.url.is_empty(),
             ConfigSnafu {
                 msg: "Database URL is required.".to_string()
             }
