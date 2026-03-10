@@ -162,10 +162,11 @@ impl FileRepo {
                 let mut query = dsl::files.into_boxed();
                 query = query.filter(dsl::dir_id.eq(did.as_str()));
                 if let Some(keyword) = params_copy.keyword
-                    && !keyword.is_empty() {
-                        let pattern = format!("%{}%", keyword);
-                        query = query.filter(dsl::name.like(pattern));
-                    }
+                    && !keyword.is_empty()
+                {
+                    let pattern = format!("%{}%", keyword);
+                    query = query.filter(dsl::name.like(pattern));
+                }
                 query.select(count_star()).get_result::<i64>(conn)
             })
             .await
@@ -200,9 +201,11 @@ impl FileStore for FileRepo {
         let mut offset: i64 = 0;
 
         if let Some(per_page_param) = params.per_page
-            && per_page_param > 0 && per_page_param <= MAX_PER_PAGE {
-                per_page = per_page_param;
-            }
+            && per_page_param > 0
+            && per_page_param <= MAX_PER_PAGE
+        {
+            per_page = per_page_param;
+        }
 
         let total_pages: i64 = (total_records as f64 / per_page as f64).ceil() as i64;
 
@@ -226,10 +229,11 @@ impl FileStore for FileRepo {
                 query = query.filter(dsl::dir_id.eq(did.as_str()));
 
                 if let Some(keyword) = params_copy.keyword
-                    && !keyword.is_empty() {
-                        let pattern = format!("%{}%", keyword);
-                        query = query.filter(dsl::name.like(pattern));
-                    }
+                    && !keyword.is_empty()
+                {
+                    let pattern = format!("%{}%", keyword);
+                    query = query.filter(dsl::name.like(pattern));
+                }
                 query
                     .limit(per_page as i64)
                     .offset(offset)

@@ -124,8 +124,7 @@ impl StorageClient {
     ) -> Result<()> {
         if let Some(versions) = &file.img_versions {
             for version in versions.iter() {
-                self
-                    .upload_image_version(bucket, dir, source_dir, file, version)
+                self.upload_image_version(bucket, dir, source_dir, file, version)
                     .await?;
             }
         }
@@ -276,12 +275,7 @@ impl CloudStorable for StorageClient {
             // Delete all versions
             if let Some(versions) = &file.img_versions {
                 for version in versions.iter() {
-                    let path = format!(
-                        "{}/{}/{}",
-                        dir_name,
-                        version.version,
-                        &file.filename
-                    );
+                    let path = format!("{}/{}/{}", dir_name, version.version, &file.filename);
                     let _ = self.delete_object_by_path(bucket_name, &path).await?;
                 }
             }
@@ -395,40 +389,36 @@ async fn format_file_single(
 ) -> Result<FileDto> {
     if file.is_image {
         if let Some(versions) = &file.img_versions
-            && !versions.is_empty() {
-                let mut tasks = Vec::with_capacity(versions.len());
+            && !versions.is_empty()
+        {
+            let mut tasks = Vec::with_capacity(versions.len());
 
-                for version in versions.iter() {
-                    let client_copy = client.clone();
-                    let bname = bucket_name.to_string();
-                    let file_path = format!(
-                        "{}/{}/{}",
-                        dir_name,
-                        version.version,
-                        file.filename
-                    );
+            for version in versions.iter() {
+                let client_copy = client.clone();
+                let bname = bucket_name.to_string();
+                let file_path = format!("{}/{}/{}", dir_name, version.version, file.filename);
 
-                    tasks.push(tokio::spawn(async move {
-                        generate_signed_url(&client_copy, &bname, &file_path).await
-                    }));
-                }
-
-                let mut updated_versions: Vec<ImgVersionDto> = Vec::with_capacity(versions.len());
-                for (k, task) in tasks.into_iter().enumerate() {
-                    let Ok(res) = task.await else {
-                        return Err("Unable to extract data from spanwed task.".into());
-                    };
-                    let url = res?;
-                    let mut version = versions[k].clone();
-                    version.url = Some(url);
-
-                    updated_versions.push(version);
-                }
-
-                if !updated_versions.is_empty() {
-                    file.img_versions = Some(updated_versions);
-                }
+                tasks.push(tokio::spawn(async move {
+                    generate_signed_url(&client_copy, &bname, &file_path).await
+                }));
             }
+
+            let mut updated_versions: Vec<ImgVersionDto> = Vec::with_capacity(versions.len());
+            for (k, task) in tasks.into_iter().enumerate() {
+                let Ok(res) = task.await else {
+                    return Err("Unable to extract data from spanwed task.".into());
+                };
+                let url = res?;
+                let mut version = versions[k].clone();
+                version.url = Some(url);
+
+                updated_versions.push(version);
+            }
+
+            if !updated_versions.is_empty() {
+                file.img_versions = Some(updated_versions);
+            }
+        }
     } else {
         let url = generate_signed_url(
             &client,
