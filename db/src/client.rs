@@ -90,10 +90,7 @@ impl From<Client> for ClientDto {
             name: client.name,
             default_bucket_id: client.default_bucket_id,
             status: client.status,
-            admin: match client.admin {
-                Some(1) => true,
-                _ => false,
-            },
+            admin: matches!(client.admin, Some(1)),
             created_at: client.created_at,
         }
     }
