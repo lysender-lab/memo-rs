@@ -51,15 +51,16 @@ pub async fn update_client(state: &AppState, id: &str, data: &UpdateClient) -> R
     // We can't tell whether we are setting default bucket to null or skipping it
     // Will just use a separate function for that
     if let Some(bucket_id) = data.default_bucket_id.clone()
-        && let Some(bid) = bucket_id {
-            let bucket = state.db.buckets.get(&bid).await.context(DbSnafu)?;
-            ensure!(
-                bucket.is_some(),
-                ValidationSnafu {
-                    msg: "Default bucket not found".to_string(),
-                }
-            );
-        }
+        && let Some(bid) = bucket_id
+    {
+        let bucket = state.db.buckets.get(&bid).await.context(DbSnafu)?;
+        ensure!(
+            bucket.is_some(),
+            ValidationSnafu {
+                msg: "Default bucket not found".to_string(),
+            }
+        );
+    }
 
     // Client name must be unique
     if let Some(name) = data.name.clone()
@@ -69,14 +70,14 @@ pub async fn update_client(state: &AppState, id: &str, data: &UpdateClient) -> R
             .find_by_name(&name)
             .await
             .context(DbSnafu)?
-        {
-            ensure!(
-                existing.id == id,
-                ValidationSnafu {
-                    msg: "Client name already exists".to_string(),
-                }
-            );
-        }
+    {
+        ensure!(
+            existing.id == id,
+            ValidationSnafu {
+                msg: "Client name already exists".to_string(),
+            }
+        );
+    }
 
     state.db.clients.update(id, data).await.context(DbSnafu)
 }

@@ -305,13 +305,11 @@ pub async fn exec_delete_photo_handler(
     )
     .await;
     match result {
-        Ok(_) => {
-            Response::builder()
-                .status(204)
-                .header("HX-Trigger", "PhotoDeletedEvent")
-                .body(Body::from("".to_string()))
-                .context(ResponseBuilderSnafu)
-        }
+        Ok(_) => Response::builder()
+            .status(204)
+            .header("HX-Trigger", "PhotoDeletedEvent")
+            .body(Body::from("".to_string()))
+            .context(ResponseBuilderSnafu),
         Err(err) => {
             let error_info = ErrorInfo::from(&err);
 

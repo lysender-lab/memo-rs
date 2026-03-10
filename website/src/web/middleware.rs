@@ -53,7 +53,6 @@ pub async fn auth_middleware(
             Err(err) => match err {
                 Error::LoginRequired => {
                     // Allow passing through
-                    
                 }
                 _ => return handle_error(&state, None, &pref, ErrorInfo::from(&err), full_page),
             },

@@ -72,10 +72,7 @@ pub async fn authenticate(state: &AppState, credentials: &Credentials) -> Result
         scope: "auth files".to_string(),
     };
     let token = create_auth_token(&actor, &state.config.jwt_secret)?;
-    Ok(AuthResponse {
-        user: user,
-        token,
-    })
+    Ok(AuthResponse { user: user, token })
 }
 
 pub async fn authenticate_token(state: &AppState, token: &str) -> Result<Actor> {
