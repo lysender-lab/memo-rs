@@ -48,11 +48,7 @@ async fn response_mapper(res: Response) -> Response {
     let error = res.extensions().get::<ErrorInfo>();
     if let Some(e) = error {
         if e.status_code.is_server_error() {
-            // Build the error response
             error!("{}", e.message);
-            if let Some(bt) = &e.backtrace {
-                error!("{}", bt);
-            }
         }
 
         let body = ErrorResponse {

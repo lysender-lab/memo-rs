@@ -1,6 +1,6 @@
 use deadpool_diesel::{InteractError, PoolError};
 use memo::role::InvalidRolesError;
-use snafu::{Backtrace, Snafu};
+use snafu::Snafu;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -8,32 +8,22 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[snafu(visibility(pub(crate)))]
 pub enum Error {
     #[snafu(display("Error getting db connection: {}", source))]
-    DbPool {
-        source: PoolError,
-        backtrace: Backtrace,
-    },
+    DbPool { source: PoolError },
 
     #[snafu(display("Error using the db connection: {}", source))]
-    DbInteract {
-        source: InteractError,
-        backtrace: Backtrace,
-    },
+    DbInteract { source: InteractError },
 
     #[snafu(display("Error querying {}: {}", table, source))]
     DbQuery {
         table: String,
         source: diesel::result::Error,
-        backtrace: Backtrace,
     },
 
     #[snafu(display("{}", msg))]
     Validation { msg: String },
 
     #[snafu(display("{}", source))]
-    InvalidRoles {
-        source: InvalidRolesError,
-        backtrace: Backtrace,
-    },
+    InvalidRoles { source: InvalidRolesError },
 
     #[snafu(display("Maximum number of clients reached: 10"))]
     MaxClientsReached,
@@ -51,10 +41,7 @@ pub enum Error {
     MaxFilesReached,
 
     #[snafu(display("{}", source))]
-    HashPassword {
-        source: password::Error,
-        backtrace: Backtrace,
-    },
+    HashPassword { source: password::Error },
 
     #[snafu(display("{}", msg))]
     Whatever { msg: String },

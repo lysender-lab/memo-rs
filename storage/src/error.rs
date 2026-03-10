@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use snafu::{Backtrace, Snafu};
+use snafu::Snafu;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -8,10 +8,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[snafu(visibility(pub(crate)))]
 pub enum Error {
     #[snafu(display("Unable to create upload dir: {}", source))]
-    UploadDir {
-        source: std::io::Error,
-        backtrace: Backtrace,
-    },
+    UploadDir { source: std::io::Error },
 
     #[snafu(display("{}", msg))]
     Validation { msg: String },
@@ -32,7 +29,6 @@ pub enum Error {
     CreateFile {
         path: PathBuf,
         source: std::io::Error,
-        backtrace: Backtrace,
     },
 
     #[snafu(display("File type not allowed"))]
@@ -42,10 +38,7 @@ pub enum Error {
     NotFound { msg: String },
 
     #[snafu(display("Upload error: {}", source))]
-    UploadFile {
-        source: std::io::Error,
-        backtrace: Backtrace,
-    },
+    UploadFile { source: std::io::Error },
 
     #[snafu(display("{}", msg))]
     Whatever { msg: String },

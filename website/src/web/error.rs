@@ -40,7 +40,6 @@ pub async fn error_handler(State(state): State<AppState>) -> Response<Body> {
             status_code: StatusCode::NOT_FOUND,
             title: String::from("Not Found"),
             message: String::from("The page you are looking for cannot be found."),
-            backtrace: None,
         },
         true,
     )
