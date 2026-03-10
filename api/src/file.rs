@@ -79,12 +79,13 @@ pub async fn create_file(
     }
 
     // Name must be unique for the dir (not filename)
-    if let Some(_) = state
+    if state
         .db
         .files
         .find_by_name(&dir.id, &data.name)
         .await
         .context(DbSnafu)?
+        .is_some()
     {
         cleanup(data, None);
 
@@ -97,13 +98,7 @@ pub async fn create_file(
     }
 
     if file_dto.is_image {
-        let exif_info = match parse_exif_info(&data.path) {
-            Ok(info) => info,
-            Err(_) => {
-                // It's okay to continue without exif info
-                PhotoExif::default()
-            }
-        };
+        let exif_info = parse_exif_info(&data.path).unwrap_or_default();
 
         match create_versions(data, &exif_info) {
             Ok(versions) => {

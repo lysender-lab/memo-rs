@@ -408,8 +408,7 @@ pub async fn list_users_handler(
         }
     );
     let users = state.db.users.list(&client.id).await.context(DbSnafu)?;
-    let dto: Vec<UserDto> = users.into_iter().map(|x| x).collect();
-    Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
+    Ok(JsonResponse::new(serde_json::to_string(&users).unwrap()))
 }
 
 pub async fn create_user_handler(
