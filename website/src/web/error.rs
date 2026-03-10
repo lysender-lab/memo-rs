@@ -57,7 +57,7 @@ pub fn handle_error(
         let title = error.title.as_str();
         let status_code = error.status_code;
 
-        let mut t = TemplateData::new(&state, actor, pref);
+        let mut t = TemplateData::new(state, actor, pref);
         t.title = String::from(title);
 
         let tpl = ErrorPageData { t, error };

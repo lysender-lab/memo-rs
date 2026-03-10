@@ -190,7 +190,7 @@ impl From<&Error> for StatusCode {
             Error::UserNotFound => StatusCode::NOT_FOUND,
             Error::InvalidRoles { .. } => StatusCode::BAD_REQUEST,
             Error::InvalidPermissions { .. } => StatusCode::BAD_REQUEST,
-            Error::LoginFailed { .. } => StatusCode::UNAUTHORIZED,
+            Error::LoginFailed => StatusCode::UNAUTHORIZED,
             Error::LoginRequired => StatusCode::UNAUTHORIZED,
             Error::FileNotFound => StatusCode::NOT_FOUND,
             Error::AlbumNotFound => StatusCode::NOT_FOUND,

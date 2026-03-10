@@ -40,7 +40,7 @@ pub fn verify_csrf_token(token: &str, secret: &str) -> Result<String> {
         return Err(Error::CsrfToken);
     };
 
-    ensure!(decoded.claims.sub.len() > 0, CsrfTokenSnafu);
+    ensure!(!decoded.claims.sub.is_empty(), CsrfTokenSnafu);
     Ok(decoded.claims.sub)
 }
 

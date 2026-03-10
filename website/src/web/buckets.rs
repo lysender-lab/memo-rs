@@ -36,7 +36,7 @@ pub async fn buckets_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::Bucket, Action::Read)?;
+    enforce_policy(actor, Resource::Bucket, Action::Read)?;
 
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
     t.title = String::from("Buckets");
@@ -46,10 +46,10 @@ pub async fn buckets_handler(
 
     let tpl = BucketsPageTemplate { t, client, buckets };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[derive(Template)]
@@ -78,7 +78,7 @@ pub async fn new_bucket_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Bucket, Action::Create)?;
+    enforce_policy(actor, Resource::Bucket, Action::Create)?;
 
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
     t.title = String::from("Create New Bucket");
@@ -97,10 +97,10 @@ pub async fn new_bucket_handler(
         error_message: None,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 pub async fn post_new_bucket_handler(
@@ -112,7 +112,7 @@ pub async fn post_new_bucket_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Bucket, Action::Create)?;
+    enforce_policy(actor, Resource::Bucket, Action::Create)?;
 
     let token = create_csrf_token("new_bucket", &config.jwt_secret)?;
     let cid = client.id.clone();
@@ -196,10 +196,10 @@ pub async fn bucket_page_handler(
         can_delete: actor.has_permissions(&vec![Permission::BucketsDelete]),
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[derive(Template)]
@@ -219,7 +219,7 @@ pub async fn bucket_controls_handler(
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Bucket, Action::Update)?;
+    enforce_policy(actor, Resource::Bucket, Action::Update)?;
 
     let tpl = BucketControlsTemplate {
         client,
@@ -229,11 +229,11 @@ pub async fn bucket_controls_handler(
         can_delete: actor.has_permissions(&vec![Permission::BucketsDelete]),
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .header("Content-Type", "text/html")
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[derive(Template)]
@@ -253,7 +253,7 @@ pub async fn edit_bucket_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Bucket, Action::Update)?;
+    enforce_policy(actor, Resource::Bucket, Action::Update)?;
 
     let token = create_csrf_token(&bucket.id, &config.jwt_secret)?;
 
@@ -264,10 +264,10 @@ pub async fn edit_bucket_handler(
         error_message: None,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 /// Handles the edit album submission
@@ -283,7 +283,7 @@ pub async fn post_edit_bucket_handler(
     let bid = bucket.id.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Bucket, Action::Update)?;
+    enforce_policy(actor, Resource::Bucket, Action::Update)?;
 
     let token = create_csrf_token(&bid, &config.jwt_secret)?;
 
@@ -358,7 +358,7 @@ pub async fn delete_bucket_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Bucket, Action::Delete)?;
+    enforce_policy(actor, Resource::Bucket, Action::Delete)?;
 
     let token = create_csrf_token(&bucket.id, &config.jwt_secret)?;
 
@@ -369,10 +369,10 @@ pub async fn delete_bucket_handler(
         error_message: None,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 pub async fn post_delete_bucket_handler(
@@ -385,7 +385,7 @@ pub async fn post_delete_bucket_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Bucket, Action::Delete)?;
+    enforce_policy(actor, Resource::Bucket, Action::Delete)?;
 
     let token = create_csrf_token(&bucket.id, &config.jwt_secret)?;
 
@@ -411,11 +411,11 @@ pub async fn post_delete_bucket_handler(
                 },
                 error_message: None,
             };
-            return Ok(Response::builder()
+            Response::builder()
                 .status(200)
                 .header("HX-Redirect", format!("/clients/{}/buckets", &cid))
                 .body(Body::from(tpl.render().context(TemplateSnafu)?))
-                .context(ResponseBuilderSnafu)?);
+                .context(ResponseBuilderSnafu)
         }
         Err(err) => {
             let error_info = ErrorInfo::from(&err);

@@ -41,7 +41,7 @@ pub async fn users_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::User, Action::Read)?;
+    enforce_policy(actor, Resource::User, Action::Read)?;
 
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
     t.title = String::from("Users");
@@ -51,10 +51,10 @@ pub async fn users_handler(
 
     let tpl = UsersPageTemplate { t, client, users };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[derive(Template)]
@@ -104,7 +104,7 @@ pub async fn new_user_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::User, Action::Create)?;
+    enforce_policy(actor, Resource::User, Action::Create)?;
 
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
     t.title = String::from("Create New User");
@@ -127,10 +127,10 @@ pub async fn new_user_handler(
         error_message: None,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 pub async fn post_new_user_handler(
@@ -142,7 +142,7 @@ pub async fn post_new_user_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::User, Action::Create)?;
+    enforce_policy(actor, Resource::User, Action::Create)?;
 
     let token = create_csrf_token("new_user", &config.jwt_secret)?;
     let cid = client.id.clone();
@@ -178,11 +178,11 @@ pub async fn post_new_user_handler(
         Ok(_) => {
             let next_url = format!("/clients/{}/users", cid.as_str());
             // Weird but can't do a redirect here, let htmx handle it
-            return Ok(Response::builder()
+            return Response::builder()
                 .status(200)
                 .header("HX-Redirect", next_url)
                 .body(Body::from("".to_string()))
-                .context(ResponseBuilderSnafu)?);
+                .context(ResponseBuilderSnafu);
         }
         Err(err) => {
             let error_info = ErrorInfo::from(&err);
@@ -195,10 +195,10 @@ pub async fn post_new_user_handler(
     tpl.payload.role = payload.role.clone();
 
     // Will only arrive here on error
-    Ok(Response::builder()
+    Response::builder()
         .status(status)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[derive(Template)]
@@ -233,10 +233,10 @@ pub async fn user_page_handler(
         can_delete: actor.has_permissions(&vec![Permission::UsersDelete]),
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[derive(Template)]
@@ -256,7 +256,7 @@ pub async fn user_controls_handler(
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::User, Action::Update)?;
+    enforce_policy(actor, Resource::User, Action::Update)?;
 
     let tpl = UserControlsTemplate {
         client,
@@ -266,11 +266,11 @@ pub async fn user_controls_handler(
         can_delete: actor.has_permissions(&vec![Permission::UsersDelete]),
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .header("Content-Type", "text/html")
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[derive(Template)]
@@ -291,7 +291,7 @@ pub async fn update_user_status_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::User, Action::Update)?;
+    enforce_policy(actor, Resource::User, Action::Update)?;
     let token = create_csrf_token(&user.id, &config.jwt_secret)?;
 
     let mut status_opt = None;
@@ -309,11 +309,11 @@ pub async fn update_user_status_handler(
         error_message: None,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .header("Content-Type", "text/html")
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[debug_handler]
@@ -327,7 +327,7 @@ pub async fn post_update_user_status_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::User, Action::Update)?;
+    enforce_policy(actor, Resource::User, Action::Update)?;
 
     let token = create_csrf_token(&user.id, &config.jwt_secret)?;
     let cid = client.id.clone();
@@ -413,7 +413,7 @@ pub async fn update_user_role_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::User, Action::Update)?;
+    enforce_policy(actor, Resource::User, Action::Update)?;
     let token = create_csrf_token(&user.id, &config.jwt_secret)?;
 
     let current_role = user.roles.first().unwrap().to_string();
@@ -429,11 +429,11 @@ pub async fn update_user_role_handler(
         error_message: None,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .header("Content-Type", "text/html")
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[debug_handler]
@@ -447,7 +447,7 @@ pub async fn post_update_user_role_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::User, Action::Update)?;
+    enforce_policy(actor, Resource::User, Action::Update)?;
 
     let token = create_csrf_token(&user.id, &config.jwt_secret)?;
     let cid = client.id.clone();
@@ -533,7 +533,7 @@ pub async fn reset_user_password_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::User, Action::Update)?;
+    enforce_policy(actor, Resource::User, Action::Update)?;
     let token = create_csrf_token(&user.id, &config.jwt_secret)?;
 
     let tpl = ResetUserPasswordTemplate {
@@ -547,11 +547,11 @@ pub async fn reset_user_password_handler(
         error_message: None,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .header("Content-Type", "text/html")
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[debug_handler]
@@ -565,7 +565,7 @@ pub async fn post_reset_password_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::User, Action::Update)?;
+    enforce_policy(actor, Resource::User, Action::Update)?;
 
     let token = create_csrf_token(&user.id, &config.jwt_secret)?;
     let cid = client.id.clone();
@@ -651,7 +651,7 @@ pub async fn delete_user_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::User, Action::Delete)?;
+    enforce_policy(actor, Resource::User, Action::Delete)?;
 
     let token = create_csrf_token(&user.id, &config.jwt_secret)?;
 
@@ -662,10 +662,10 @@ pub async fn delete_user_handler(
         error_message: None,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 pub async fn post_delete_user_handler(
@@ -678,7 +678,7 @@ pub async fn post_delete_user_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::User, Action::Delete)?;
+    enforce_policy(actor, Resource::User, Action::Delete)?;
 
     let token = create_csrf_token(&user.id, &config.jwt_secret)?;
 
@@ -704,11 +704,11 @@ pub async fn post_delete_user_handler(
                 },
                 error_message: None,
             };
-            return Ok(Response::builder()
+            Response::builder()
                 .status(200)
                 .header("HX-Redirect", format!("/clients/{}/users", &cid))
                 .body(Body::from(tpl.render().context(TemplateSnafu)?))
-                .context(ResponseBuilderSnafu)?);
+                .context(ResponseBuilderSnafu)
         }
         Err(err) => {
             let error_info = ErrorInfo::from(&err);

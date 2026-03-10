@@ -58,7 +58,7 @@ pub async fn login_handler(
         error_message,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .header("Surrogate-Control", "no-store")
         .header(
@@ -68,7 +68,7 @@ pub async fn login_handler(
         .header("Pragma", "no-cache")
         .header("Expires", 0)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 pub async fn post_login_handler(

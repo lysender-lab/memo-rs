@@ -220,7 +220,7 @@ pub async fn delete_dir(
     dir_id: &str,
     csrf_token: &str,
 ) -> Result<()> {
-    let csrf_result = verify_csrf_token(&csrf_token, &state.config.jwt_secret)?;
+    let csrf_result = verify_csrf_token(csrf_token, &state.config.jwt_secret)?;
     ensure!(csrf_result == dir_id, CsrfTokenSnafu);
     let url = format!(
         "{}/clients/{}/buckets/{}/dirs/{}",

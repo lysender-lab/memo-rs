@@ -193,7 +193,7 @@ pub async fn update_user_status(
     form: &UserActiveFormData,
 ) -> Result<UserDto> {
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
-    ensure!(&csrf_result == user_id, CsrfTokenSnafu);
+    ensure!(csrf_result == user_id, CsrfTokenSnafu);
 
     let url = format!(
         "{}/clients/{}/users/{}/update_status",
@@ -238,7 +238,7 @@ pub async fn update_user_roles(
     form: &UserRoleFormData,
 ) -> Result<UserDto> {
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
-    ensure!(&csrf_result == user_id, CsrfTokenSnafu);
+    ensure!(csrf_result == user_id, CsrfTokenSnafu);
 
     let url = format!(
         "{}/clients/{}/users/{}/update_roles",
@@ -281,10 +281,10 @@ pub async fn reset_user_password(
     form: &ResetPasswordFormData,
 ) -> Result<UserDto> {
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
-    ensure!(&csrf_result == user_id, CsrfTokenSnafu);
+    ensure!(csrf_result == user_id, CsrfTokenSnafu);
 
     ensure!(
-        &form.password == &form.confirm_password,
+        form.password == form.confirm_password,
         ValidationSnafu {
             msg: "Passwords must match."
         }
@@ -331,10 +331,10 @@ pub async fn change_user_password(
     form: &ChangePasswordFormData,
 ) -> Result<()> {
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
-    ensure!(&csrf_result == user_id, CsrfTokenSnafu);
+    ensure!(csrf_result == user_id, CsrfTokenSnafu);
 
     ensure!(
-        &form.new_password == &form.confirm_new_password,
+        form.new_password == form.confirm_new_password,
         ValidationSnafu {
             msg: "Passwords must match."
         }
@@ -372,7 +372,7 @@ pub async fn delete_user(
     user_id: &str,
     csrf_token: &str,
 ) -> Result<()> {
-    let csrf_result = verify_csrf_token(&csrf_token, &state.config.jwt_secret)?;
+    let csrf_result = verify_csrf_token(csrf_token, &state.config.jwt_secret)?;
     ensure!(csrf_result == user_id, CsrfTokenSnafu);
     let url = format!(
         "{}/clients/{}/users/{}",

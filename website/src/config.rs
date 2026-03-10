@@ -55,25 +55,25 @@ impl Config {
 
         // Validate config values
         ensure!(
-            config.jwt_secret.len() > 0,
+            !config.jwt_secret.is_empty(),
             ConfigSnafu {
                 msg: "JWT secret is required.".to_string()
             }
         );
         ensure!(
-            config.captcha_api_key.len() > 0,
+            !config.captcha_api_key.is_empty(),
             ConfigSnafu {
                 msg: "Captcha API key is required.".to_string()
             }
         );
         ensure!(
-            config.captcha_site_key.len() > 0,
+            !config.captcha_site_key.is_empty(),
             ConfigSnafu {
                 msg: "Captcha site key is required.".to_string()
             }
         );
         ensure!(
-            config.api_url.len() > 0,
+            !config.api_url.is_empty(),
             ConfigSnafu {
                 msg: "API URL is required.".to_string()
             }

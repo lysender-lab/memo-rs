@@ -46,7 +46,7 @@ pub async fn photo_listing_v2_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::Photo, Action::Read)?;
+    enforce_policy(actor, Resource::Photo, Action::Read)?;
 
     let cid = bucket.client_id.clone();
     let bid = bucket.id.clone();
@@ -123,7 +123,7 @@ pub async fn upload_page_handler(
     let config = state.config.clone();
 
     let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::Photo, Action::Create)?;
+    enforce_policy(actor, Resource::Photo, Action::Create)?;
 
     let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
@@ -138,10 +138,10 @@ pub async fn upload_page_handler(
         token,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 pub async fn upload_handler(
@@ -156,7 +156,7 @@ pub async fn upload_handler(
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::Photo, Action::Create)?;
+    enforce_policy(actor, Resource::Photo, Action::Create)?;
 
     let cid = bucket.client_id.clone();
     let bid = bucket.id.clone();
@@ -226,10 +226,10 @@ pub async fn pre_delete_photo_handler(
     // Just render the form on first load or on error
     let tpl = PreDeletePhotoTemplate { bucket, dir, photo };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 /// Shows delete/cancel form controls
@@ -263,10 +263,10 @@ pub async fn confirm_delete_photo_handler(
         error_message: None,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 pub async fn exec_delete_photo_handler(
@@ -306,11 +306,11 @@ pub async fn exec_delete_photo_handler(
     .await;
     match result {
         Ok(_) => {
-            return Ok(Response::builder()
+            Response::builder()
                 .status(204)
                 .header("HX-Trigger", "PhotoDeletedEvent")
                 .body(Body::from("".to_string()))
-                .context(ResponseBuilderSnafu)?);
+                .context(ResponseBuilderSnafu)
         }
         Err(err) => {
             let error_info = ErrorInfo::from(&err);

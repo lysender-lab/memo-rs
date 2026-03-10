@@ -37,10 +37,10 @@ pub async fn profile_page_handler(
         user: actor.user.clone(),
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[derive(Template)]
@@ -50,11 +50,11 @@ struct ProfileControlsTemplate {}
 pub async fn profile_controls_handler() -> Result<Response<Body>> {
     let tpl = ProfileControlsTemplate {};
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .header("Content-Type", "text/html")
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[derive(Template)]
@@ -83,11 +83,11 @@ pub async fn change_user_password_handler(
         error_message: None,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .header("Content-Type", "text/html")
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[debug_handler]
