@@ -124,8 +124,8 @@ impl StorageClient {
     ) -> Result<()> {
         if let Some(versions) = &file.img_versions {
             for version in versions.iter() {
-                let _ = self
-                    .upload_image_version(bucket, dir, source_dir, &file, version)
+                self
+                    .upload_image_version(bucket, dir, source_dir, file, version)
                     .await?;
             }
         }
@@ -279,7 +279,7 @@ impl CloudStorable for StorageClient {
                     let path = format!(
                         "{}/{}/{}",
                         dir_name,
-                        version.version.to_string(),
+                        version.version,
                         &file.filename
                     );
                     let _ = self.delete_object_by_path(bucket_name, &path).await?;
@@ -394,8 +394,8 @@ async fn format_file_single(
     mut file: FileDto,
 ) -> Result<FileDto> {
     if file.is_image {
-        if let Some(versions) = &file.img_versions {
-            if versions.len() > 0 {
+        if let Some(versions) = &file.img_versions
+            && !versions.is_empty() {
                 let mut tasks = Vec::with_capacity(versions.len());
 
                 for version in versions.iter() {
@@ -404,7 +404,7 @@ async fn format_file_single(
                     let file_path = format!(
                         "{}/{}/{}",
                         dir_name,
-                        version.version.to_string(),
+                        version.version,
                         file.filename
                     );
 
@@ -425,11 +425,10 @@ async fn format_file_single(
                     updated_versions.push(version);
                 }
 
-                if updated_versions.len() > 0 {
+                if !updated_versions.is_empty() {
                     file.img_versions = Some(updated_versions);
                 }
             }
-        }
     } else {
         let url = generate_signed_url(
             &client,
