@@ -67,4 +67,4 @@ jobs:
           aws s3 cp target/release/website s3://$S3_UPLOAD_BUCKET/memo-rs/bin/website
 
       - name: Upload website public assets zip to S3
-        run: aws s3 cp frontend/public.zip s3://$S3_UPLOAD_BUCKET/memo-rs/html/public.zip
+        run: aws s3 cp website/frontend/public.zip s3://$S3_UPLOAD_BUCKET/memo-rs/html/public.zip
