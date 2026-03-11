@@ -1,4 +1,4 @@
-import '../public/assets/js/errors.js';
 import '../public/assets/js/site.js';
-import '../public/assets/js/tools.js';
-import '../public/assets/js/projects.js';
+import '../public/assets/js/nav.js';
+import '../public/assets/js/login.js';
+import '../public/assets/js/create-album.js';

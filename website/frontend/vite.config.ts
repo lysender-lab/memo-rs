@@ -22,6 +22,7 @@ export default defineConfig({
         // 4 explicit entrypoints:
         'main.min': resolve(__dirname, 'bundles/main.js'),
         'main.min.css': resolve(__dirname, 'bundles/main.css'),
+        'gallery.min.css': resolve(__dirname, 'bundles/gallery.css'),
       },
       output: {
         // JS outputs
@@ -36,7 +37,11 @@ export default defineConfig({
           const name = assetInfo.name ?? '';
 
           // Our css entries are named "vendors.min.css" / "main.min.css"
-          if (name === 'main.min.css') return `main-[hash].min.css`;
+          if (name === 'main.min.css') {
+            return `main-[hash].min.css`;
+          } else if (name === 'gallery.min.css') {
+            return `gallery-[hash].min.css`;
+          }
 
           // Fallback for anything else (fonts/images if they get pulled in)
           return `[name]-[hash][extname]`;
