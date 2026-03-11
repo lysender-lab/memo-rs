@@ -22,7 +22,7 @@ pub struct CloudConfig {
 
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
-    pub port: u16,
+    pub address: String,
 }
 
 #[derive(Debug, Clone)]
@@ -40,7 +40,7 @@ impl Config {
                 credentials: required_env("GOOGLE_APPLICATION_CREDENTIALS")?,
             },
             server: ServerConfig {
-                port: required_env_parse::<u16>("PORT")?,
+                address: required_env("SERVER_ADDRESS")?,
             },
             db: DbConfig {
                 url: required_env("DATABASE_URL")?,
@@ -77,13 +77,6 @@ impl Config {
         );
 
         ensure!(
-            config.server.port > 0,
-            ConfigSnafu {
-                msg: "Server port is required.".to_string()
-            }
-        );
-
-        ensure!(
             config.upload_dir.exists(),
             ConfigSnafu {
                 msg: "Upload directory does not exist.".to_string()
@@ -105,16 +98,6 @@ fn required_env(name: &str) -> Result<String> {
         }
         .fail(),
     }
-}
-
-fn required_env_parse<T>(name: &str) -> Result<T>
-where
-    T: std::str::FromStr,
-{
-    let value = required_env(name)?;
-    value.parse::<T>().map_err(|_| crate::Error::Config {
-        msg: format!("{} is invalid.", name),
-    })
 }
 
 /// File Management in the cloud

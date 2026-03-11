@@ -11,7 +11,7 @@ use crate::error::{ConfigSnafu, ManifestParseSnafu, ManifestReadSnafu};
 
 #[derive(Clone)]
 pub struct Config {
-    pub port: u16,
+    pub server_address: String,
     pub ssl: bool,
     pub frontend_dir: PathBuf,
     pub captcha_site_key: Option<String>,
@@ -41,7 +41,7 @@ impl Config {
     }
 
     pub fn build_from_env() -> Result<Config> {
-        let port = required_env_parse::<u16>("PORT")?;
+        let server_address = required_env("SERVER_ADDRESS")?;
         let ssl = required_env_parse::<bool>("SSL")?;
         let frontend_dir = PathBuf::from(required_env("FRONTEND_DIR")?);
         let captcha_site_key = optional_env("CAPTCHA_SITE_KEY");
@@ -64,12 +64,6 @@ impl Config {
             }
         );
         ensure!(
-            port > 0,
-            ConfigSnafu {
-                msg: "Server port is required.".to_string()
-            }
-        );
-        ensure!(
             frontend_dir.exists(),
             ConfigSnafu {
                 msg: "Frontend directory does not exist.".to_string()
@@ -79,7 +73,7 @@ impl Config {
         let assets = AssetManifest::build(&frontend_dir)?;
 
         Ok(Config {
-            port,
+            server_address,
             ssl,
             frontend_dir,
             captcha_site_key,

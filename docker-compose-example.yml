@@ -1,0 +1,40 @@
+services:
+  api:
+    platform: linux/arm64
+    container_name: memo-api
+    build:
+      context: api
+    volumes:
+      - ./build/bin/api:/app/bin/api:ro
+      - ./build/db:/app/db
+      - ./build/certs/google-service-account.json:/app/certs/google-service-account.json:ro
+    ports:
+      - "127.0.0.1:11001:80"
+    environment:
+      DATABASE_URL: "/app/db/db.sqlite3"
+      JWT_SECRET: "secret"
+      UPLOAD_DIR: "/app/uploads"
+      SERVER_ADDRESS: "0.0.0.0:80"
+      GOOGLE_PROJECT_ID: "google-project"
+      GOOGLE_APPLICATION_CREDENTIALS: "/app/certs/google-service-account.json"
+    restart: always
+
+  website:
+    platform: linux/arm64
+    container_name: memo-website
+    build:
+      context: website
+    volumes:
+      - ./build/bin/website:/app/bin/website:ro
+    ports:
+      - "127.0.0.1:11000:80"
+    environment:
+      SERVER_ADDRESS: "0.0.0.0:80"
+      SSL: "false"
+      FRONTEND_DIR: "/app/frontend"
+      CAPTCHA_SITE_KEY: ""
+      CAPTCHA_API_KEY: ""
+      API_URL: "http://api"
+      JWT_SECRET: "secret"
+      GA_TAG_ID: ""
+    restart: always
