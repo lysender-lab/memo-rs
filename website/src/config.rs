@@ -1,6 +1,7 @@
 use clap::Parser;
 use serde::Deserialize;
 use snafu::{ResultExt, ensure};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -34,6 +35,13 @@ pub struct Config {
     pub assets: AssetManifest,
 }
 
+#[derive(Deserialize)]
+struct BundleEntry {
+    pub file: String,
+}
+
+type BundleConfigMap = HashMap<String, BundleEntry>;
+
 #[derive(Clone, Deserialize)]
 pub struct AssetManifest {
     pub main_js: String,
@@ -41,11 +49,6 @@ pub struct AssetManifest {
     pub upload_js: String,
     pub main_css: String,
     pub gallery_css: String,
-}
-
-#[derive(Deserialize)]
-struct BundleConfig {
-    suffix: String,
 }
 
 impl Config {
@@ -109,17 +112,37 @@ impl Config {
 
 impl AssetManifest {
     pub fn build(frontend_dir: &PathBuf) -> Result<Self> {
-        let filename = Path::new(frontend_dir).join("bundles.json");
+        let filename = Path::new(frontend_dir).join("public/assets/bundles/.vite/manifest.json");
         let contents = fs::read_to_string(filename).context(ManifestReadSnafu)?;
-        let config =
-            serde_json::from_str::<BundleConfig>(contents.as_str()).context(ManifestParseSnafu)?;
+        let config_map = serde_json::from_str::<BundleConfigMap>(contents.as_str())
+            .context(ManifestParseSnafu)?;
+
+        let main_css = config_map
+            .get("bundles/main.css")
+            .expect("main.css bundle is required");
+
+        let gallery_css = config_map
+            .get("bundles/gallery.css")
+            .expect("gallery.css bundle is required");
+
+        let main_js = config_map
+            .get("bundles/main.js")
+            .expect("main.js bundle is required");
+
+        let upload_js = config_map
+            .get("bundles/upload.js")
+            .expect("upload.js bundle is required");
+
+        let gallery_js = config_map
+            .get("bundles/gallery.js")
+            .expect("gallery.js bundle is required");
 
         Ok(AssetManifest {
-            main_js: format!("/assets/bundles/js/main-{}.js", config.suffix),
-            gallery_js: format!("/assets/bundles/js/gallery-{}.js", config.suffix),
-            upload_js: format!("/assets/bundles/js/upload-{}.js", config.suffix),
-            main_css: format!("/assets/bundles/css/main-{}.css", config.suffix),
-            gallery_css: format!("/assets/bundles/css/gallery-{}.css", config.suffix),
+            main_js: format!("/assets/bundles/{}", main_js.file),
+            gallery_js: format!("/assets/bundles/{}", gallery_js.file),
+            upload_js: format!("/assets/bundles/{}", upload_js.file),
+            main_css: format!("/assets/bundles/{}", main_css.file),
+            gallery_css: format!("/assets/bundles/{}", gallery_css.file),
         })
     }
 }
