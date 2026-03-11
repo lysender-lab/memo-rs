@@ -5,7 +5,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, get_service, post};
 use axum::{Extension, Router, middleware};
 use reqwest::StatusCode;
-use std::path::PathBuf;
+use std::path::Path;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::error;
@@ -52,7 +52,7 @@ use super::users::{
 };
 use super::{dark_theme_handler, handle_error, light_theme_handler};
 
-pub fn all_routes(state: AppState, frontend_dir: &PathBuf) -> Router {
+pub fn all_routes(state: AppState, frontend_dir: &Path) -> Router {
     Router::new()
         .merge(public_routes(state.clone()))
         .merge(private_routes(state.clone()))
@@ -60,7 +60,7 @@ pub fn all_routes(state: AppState, frontend_dir: &PathBuf) -> Router {
         .fallback(any(error_handler).with_state(state))
 }
 
-pub fn assets_routes(dir: &PathBuf) -> Router {
+pub fn assets_routes(dir: &Path) -> Router {
     let target_dir = dir.join("public");
     Router::new()
         .route(
@@ -291,15 +291,11 @@ async fn response_mapper(
     let error = res.extensions().get::<ErrorInfo>();
     if let Some(e) = error {
         if e.status_code.is_server_error() {
-            // Build the error response
             error!("{}", e.message);
-            if let Some(bt) = &e.backtrace {
-                error!("{}", bt);
-            }
         }
 
         let full_page = headers.get("HX-Request").is_none();
-        let actor = ctx.actor().map(|t| t.clone());
+        let actor = ctx.actor().cloned();
         return handle_error(&state, actor, &pref, e.clone(), full_page);
     }
     res

@@ -40,7 +40,7 @@ pub async fn clients_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::Album, Action::Read)?;
+    enforce_policy(actor, Resource::Album, Action::Read)?;
 
     ensure!(
         actor.is_system_admin(),
@@ -54,10 +54,10 @@ pub async fn clients_handler(
 
     let tpl = ClientsPageTemplate { t };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 pub async fn clients_listing_handler(
@@ -104,7 +104,7 @@ pub async fn new_client_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Client, Action::Create)?;
+    enforce_policy(actor, Resource::Client, Action::Create)?;
 
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
     t.title = String::from("Create New Client");
@@ -122,10 +122,10 @@ pub async fn new_client_handler(
         error_message: None,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 pub async fn post_new_client_handler(
@@ -136,7 +136,7 @@ pub async fn post_new_client_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Client, Action::Create)?;
+    enforce_policy(actor, Resource::Client, Action::Create)?;
 
     let token = create_csrf_token("new_client", &config.jwt_secret)?;
 
@@ -165,11 +165,11 @@ pub async fn post_new_client_handler(
         Ok(_) => {
             let next_url = "/clients".to_string();
             // Weird but can't do a redirect here, let htmx handle it
-            return Ok(Response::builder()
+            return Response::builder()
                 .status(200)
                 .header("HX-Redirect", next_url)
                 .body(Body::from("".to_string()))
-                .context(ResponseBuilderSnafu)?);
+                .context(ResponseBuilderSnafu);
         }
         Err(err) => {
             let error_info = ErrorInfo::from(&err);
@@ -182,10 +182,10 @@ pub async fn post_new_client_handler(
     tpl.payload.active = payload.active.clone();
 
     // Will only arrive here on error
-    Ok(Response::builder()
+    Response::builder()
         .status(status)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[derive(Template)]
@@ -217,10 +217,10 @@ pub async fn client_page_handler(
         updated: false,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[derive(Template)]
@@ -239,7 +239,7 @@ pub async fn edit_client_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Client, Action::Update)?;
+    enforce_policy(actor, Resource::Client, Action::Update)?;
 
     let token = create_csrf_token(&client.id, &config.jwt_secret)?;
 
@@ -256,10 +256,10 @@ pub async fn edit_client_handler(
         error_message: None,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 pub async fn post_edit_client_handler(
@@ -271,7 +271,7 @@ pub async fn post_edit_client_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Client, Action::Update)?;
+    enforce_policy(actor, Resource::Client, Action::Update)?;
 
     let token = create_csrf_token(&client.id, &config.jwt_secret)?;
 
@@ -342,7 +342,7 @@ pub async fn edit_client_controls_handler(
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Client, Action::Update)?;
+    enforce_policy(actor, Resource::Client, Action::Update)?;
 
     let tpl = EditClientControlsTemplate {
         client,
@@ -351,10 +351,10 @@ pub async fn edit_client_controls_handler(
         can_delete: actor.has_permissions(&vec![Permission::ClientsDelete]),
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[derive(Template)]
@@ -373,7 +373,7 @@ pub async fn delete_client_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Client, Action::Delete)?;
+    enforce_policy(actor, Resource::Client, Action::Delete)?;
 
     let token = create_csrf_token(&client.id, &config.jwt_secret)?;
 
@@ -383,10 +383,10 @@ pub async fn delete_client_handler(
         error_message: None,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 pub async fn post_delete_client_handler(
@@ -398,7 +398,7 @@ pub async fn post_delete_client_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Client, Action::Delete)?;
+    enforce_policy(actor, Resource::Client, Action::Delete)?;
 
     let token = create_csrf_token(&client.id, &config.jwt_secret)?;
 
@@ -423,11 +423,11 @@ pub async fn post_delete_client_handler(
                 },
                 error_message: None,
             };
-            return Ok(Response::builder()
+            Response::builder()
                 .status(200)
                 .header("HX-Redirect", "/clients")
                 .body(Body::from(tpl.render().context(TemplateSnafu)?))
-                .context(ResponseBuilderSnafu)?);
+                .context(ResponseBuilderSnafu)
         }
         Err(err) => {
             let error_info = ErrorInfo::from(&err);
@@ -443,18 +443,18 @@ pub async fn post_delete_client_handler(
 }
 
 fn build_response(tpl: ClientsTemplate) -> Result<Response<Body>> {
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 fn build_error_response(mut tpl: ClientsTemplate, error: Error) -> Result<Response<Body>> {
     let error_info = ErrorInfo::from(&error);
     tpl.error_message = Some(error_info.message);
 
-    Ok(Response::builder()
+    Response::builder()
         .status(error_info.status_code)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }

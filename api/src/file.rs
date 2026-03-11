@@ -79,12 +79,13 @@ pub async fn create_file(
     }
 
     // Name must be unique for the dir (not filename)
-    if let Some(_) = state
+    if state
         .db
         .files
         .find_by_name(&dir.id, &data.name)
         .await
         .context(DbSnafu)?
+        .is_some()
     {
         cleanup(data, None);
 
@@ -97,17 +98,11 @@ pub async fn create_file(
     }
 
     if file_dto.is_image {
-        let exif_info = match parse_exif_info(&data.path) {
-            Ok(info) => info,
-            Err(_) => {
-                // It's okay to continue without exif info
-                PhotoExif::default()
-            }
-        };
+        let exif_info = parse_exif_info(&data.path).unwrap_or_default();
 
         match create_versions(data, &exif_info) {
             Ok(versions) => {
-                if versions.len() > 0 {
+                if !versions.is_empty() {
                     file_dto.img_versions = Some(versions);
                 }
             }
@@ -179,7 +174,7 @@ fn cleanup_temp_uploads(data: &FilePayload, file: Option<&FileDto>) -> Result<()
                     }
                 }
 
-                if errors.len() > 0 {
+                if !errors.is_empty() {
                     return Err(errors.join(", ").as_str().into());
                 }
             }
@@ -243,19 +238,19 @@ fn read_image(path: &PathBuf) -> Result<DynamicImage> {
             Ok(format_img) => match format_img.decode() {
                 Ok(img) => Ok(img),
                 Err(e) => {
-                    let msg = format!("Unable to decode image: {}", e.to_string());
+                    let msg = format!("Unable to decode image: {}", e);
                     error!("{}", msg);
                     Err(msg.as_str().into())
                 }
             },
             Err(e) => {
-                let msg = format!("Unable to guess image format: {}", e.to_string());
+                let msg = format!("Unable to guess image format: {}", e);
                 error!("{}", msg);
                 Err(msg.as_str().into())
             }
         },
         Err(e) => {
-            let msg = format!("Unable to read image: {}", e.to_string());
+            let msg = format!("Unable to read image: {}", e);
             error!("{}", msg);
             Err(msg.as_str().into())
         }
@@ -409,10 +404,7 @@ fn parse_exif_info(path: &PathBuf) -> Result<PhotoExif> {
 
     // Default to 1 if cannot identify orientation
     let orientation = match exif.get_field(Tag::Orientation, In::PRIMARY) {
-        Some(orientation) => match orientation.value.get_uint(0) {
-            Some(v @ 1..=8) => v,
-            _ => 1,
-        },
+        Some(orientation) => orientation.value.get_uint(0).unwrap_or(1),
         None => 1,
     };
 

@@ -1,27 +1,10 @@
 {
-  "name": "frontend",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "npm run build:clean && npm run build:config && npm run build:css && npm run build:js",
-    "build:clean": "rimraf ./public/assets/bundles && mkdirp ./public/assets/bundles/css && mkdirp ./public/assets/bundles/js",
-    "build:config": "node scripts/update-config.js",
-    "build:css": "node scripts/bundle-css.js",
-    "build:js": "node scripts/bundle-js.js",
-    "format": "biome check --write"
+    "build:assets": "vite build",
+    "watch:assets": "vite build --watch"
   },
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@biomejs/biome": "^1.9.0",
-    "@swc/cli": "^0.4.0",
-    "@swc/core": "^1.7.26",
-    "lightningcss": "^1.27.0",
-    "lightningcss-cli": "^1.27.0",
-    "mkdirp": "^3.0.1",
-    "rimraf": "^6.0.1",
-    "uuid": "^10.0.0"
+  "devDependencies": {
+    "@types/node": "^25.0.9",
+    "vite": "^7.3.1"
   }
 }

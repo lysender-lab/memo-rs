@@ -46,14 +46,13 @@ pub async fn auth_middleware(
         // Validate token
         let result = authenticate_token(&state, &token).await;
 
-        let _ = match result {
+        match result {
             Ok(actor) => {
                 ctx = Ctx::new(Some(CtxValue::new(token, actor)));
             }
             Err(err) => match err {
                 Error::LoginRequired => {
                     // Allow passing through
-                    ()
                 }
                 _ => return handle_error(&state, None, &pref, ErrorInfo::from(&err), full_page),
             },
@@ -91,7 +90,7 @@ pub async fn dir_middleware(
     next: Next,
 ) -> Result<Response> {
     let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::Album, Action::Read)?;
+    enforce_policy(actor, Resource::Album, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
     let dir = get_dir(&state, token, &bucket.client_id, &bucket.id, &params.dir_id).await?;
@@ -110,7 +109,7 @@ pub async fn file_middleware(
     next: Next,
 ) -> Result<Response> {
     let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::Photo, Action::Read)?;
+    enforce_policy(actor, Resource::Photo, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
     let photo = get_photo(
@@ -135,7 +134,7 @@ pub async fn client_middleware(
     next: Next,
 ) -> Result<Response> {
     let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::Client, Action::Read)?;
+    enforce_policy(actor, Resource::Client, Action::Read)?;
 
     // Regular users cannot view clients admin pages
     ensure!(
@@ -161,7 +160,7 @@ pub async fn user_middleware(
     next: Next,
 ) -> Result<Response> {
     let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::User, Action::Read)?;
+    enforce_policy(actor, Resource::User, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
 
@@ -179,7 +178,7 @@ pub async fn bucket_middleware(
     next: Next,
 ) -> Result<Response> {
     let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::Bucket, Action::Read)?;
+    enforce_policy(actor, Resource::Bucket, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
 
@@ -197,7 +196,7 @@ pub async fn my_bucket_middleware(
     next: Next,
 ) -> Result<Response> {
     let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::Bucket, Action::Read)?;
+    enforce_policy(actor, Resource::Bucket, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
 

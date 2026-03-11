@@ -5,6 +5,7 @@ node_modules/
 
 # production
 dist/
+public/assets/bundles
 
 bundles.json
 public/assets/bundles/css/
@@ -18,3 +19,5 @@ yarn-debug.log*
 yarn-error.log*
 
 .dccache
+
+newrelic_agent.log

@@ -56,8 +56,8 @@ pub fn verify_auth_token(token: &str, secret: &str) -> Result<ActorPayload> {
         return InvalidAuthTokenSnafu {}.fail();
     };
 
-    ensure!(decoded.claims.sub.len() > 0, InvalidAuthTokenSnafu {});
-    ensure!(decoded.claims.scope.len() > 0, InvalidAuthTokenSnafu {});
+    ensure!(!decoded.claims.sub.is_empty(), InvalidAuthTokenSnafu {});
+    ensure!(!decoded.claims.scope.is_empty(), InvalidAuthTokenSnafu {});
 
     Ok(ActorPayload {
         id: decoded.claims.sub,

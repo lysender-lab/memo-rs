@@ -39,8 +39,8 @@ pub async fn my_bucket_page_handler(
         query_params: query.to_string(),
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }

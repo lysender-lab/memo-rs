@@ -6,7 +6,7 @@ use crate::config::Config;
 use crate::web::server::run_web_server;
 
 pub async fn run_command(args: CliArgs) -> Result<()> {
-    let config = Config::build(&args.config)?;
+    let config = Config::build_from_env()?;
     match args.command {
         Commands::Server => run_web_server(&config).await,
         Commands::Setup => run_setup(&config).await,

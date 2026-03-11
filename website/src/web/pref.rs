@@ -56,9 +56,9 @@ async fn theme_handler(
         },
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .header("HX-Trigger", event)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }

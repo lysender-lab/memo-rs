@@ -32,7 +32,7 @@ pub async fn index_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::Bucket, Action::Read)?;
+    enforce_policy(actor, Resource::Bucket, Action::Read)?;
 
     if actor.is_system_admin() {
         // Redirect to clients page
@@ -47,8 +47,8 @@ pub async fn index_handler(
 
     let tpl = IndexTemplate { t, buckets };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }

@@ -124,7 +124,7 @@ pub async fn update_client(
     form: &ClientFormSubmitData,
 ) -> Result<ClientDto> {
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
-    ensure!(&csrf_result == client_id, CsrfTokenSnafu);
+    ensure!(csrf_result == client_id, CsrfTokenSnafu);
 
     let url = format!("{}/clients/{}", &state.config.api_url, client_id);
     let data = ClientSubmitData {
@@ -165,7 +165,7 @@ pub async fn delete_client(
     client_id: &str,
     csrf_token: &str,
 ) -> Result<()> {
-    let csrf_result = verify_csrf_token(&csrf_token, &state.config.jwt_secret)?;
+    let csrf_result = verify_csrf_token(csrf_token, &state.config.jwt_secret)?;
     ensure!(csrf_result == client_id, CsrfTokenSnafu);
 
     let url = format!("{}/clients/{}", &state.config.api_url, client_id);

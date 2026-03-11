@@ -75,7 +75,7 @@ impl TryFrom<FileDto> for Photo {
         let thumb = versions.iter().find(|v| v.version == ImgVersion::Thumbnail);
 
         if preview.is_none() && orig.is_some() {
-            preview = orig.clone();
+            preview = orig;
         }
 
         if orig.is_none() || preview.is_none() || thumb.is_none() {
@@ -244,7 +244,7 @@ pub async fn delete_photo(
     photo_id: &str,
     csrf_token: &str,
 ) -> Result<()> {
-    let csrf_result = verify_csrf_token(&csrf_token, &state.config.jwt_secret)?;
+    let csrf_result = verify_csrf_token(csrf_token, &state.config.jwt_secret)?;
     ensure!(csrf_result == photo_id, CsrfTokenSnafu);
     let url = format!(
         "{}/clients/{}/buckets/{}/dirs/{}/files/{}",

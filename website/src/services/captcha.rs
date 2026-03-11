@@ -68,16 +68,39 @@ struct TokenProperties {
     invalid_reason: String,
 }
 
+#[derive(Deserialize)]
+struct CaptchaError {
+    code: u16,
+    message: String,
+    status: String,
+}
+
+#[derive(Deserialize)]
+struct CaptchaErrorResponse {
+    error: CaptchaError,
+}
+
 pub async fn validate_catpcha(state: &AppState, response: &str) -> Result<()> {
+    let site_key = state
+        .config
+        .captcha_site_key
+        .as_deref()
+        .ok_or_else(|| "Captcha site key is not configured".to_string())?;
+    let api_key = state
+        .config
+        .captcha_api_key
+        .as_deref()
+        .ok_or_else(|| "Captcha API key is not configured".to_string())?;
+
     let post_body = CaptchaPayload {
         event: CaptchaEvent {
             token: response.to_string(),
             expected_token: "login".to_string(),
-            site_key: state.config.captcha_site_key.clone(),
+            site_key: site_key.to_string(),
         },
     };
 
-    let url = format!("{}{}", VERIFY_URL, &state.config.captcha_api_key);
+    let url = format!("{}{}", VERIFY_URL, api_key);
     let response = state
         .client
         .post(url)
@@ -88,12 +111,18 @@ pub async fn validate_catpcha(state: &AppState, response: &str) -> Result<()> {
             msg: "Unable to validate captcha".to_string(),
         })?;
 
-    if response.status().is_success() {
-        Ok(())
-    } else {
-        let err_str = response.text().await.context(HttpResponseParseSnafu {
-            msg: "Unable to parse captcha error response",
-        })?;
-        Err(format!("Unable to validate captcha: {}", err_str).into())
+    if !response.status().is_success() {
+        // Try to parse error response as JSON
+        let err_json =
+            response
+                .json::<CaptchaErrorResponse>()
+                .await
+                .context(HttpResponseParseSnafu {
+                    msg: "Unable to parse captcha error response",
+                })?;
+
+        return Err(format!("Unable to validate captcha: {}", err_json.error.message).into());
     }
+
+    Ok(())
 }

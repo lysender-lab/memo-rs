@@ -1,14 +1,16 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.9.0/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.3.10/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
   "files": {
-    "ignore": [
-      "node_modules",
-      "package-lock.json",
-      "package.json",
-      "bundles.json",
-      "public/assets/bundles",
-      "public/assets/vendors",
-      "*.min.js"
+    "includes": [
+      "**",
+      "!**/public/assets/vendors/**",
+      "!**/*.min.js",
+      "!**/*.min.css"
     ]
   },
   "formatter": {
@@ -20,8 +22,22 @@
     "lineWidth": 80,
     "attributePosition": "auto"
   },
-  "organizeImports": { "enabled": true },
-  "linter": { "enabled": false, "rules": { "recommended": true } },
+  "css": {
+    "formatter": {
+      "enabled": true
+    }
+  },
+  "html": {
+    "formatter": {
+      "enabled": true
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  },
   "javascript": {
     "formatter": {
       "jsxQuoteStyle": "double",
@@ -36,6 +52,14 @@
     },
     "parser": {
       "unsafeParameterDecoratorsEnabled": true
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
     }
   }
 }

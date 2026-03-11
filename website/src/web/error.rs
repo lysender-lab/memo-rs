@@ -40,7 +40,6 @@ pub async fn error_handler(State(state): State<AppState>) -> Response<Body> {
             status_code: StatusCode::NOT_FOUND,
             title: String::from("Not Found"),
             message: String::from("The page you are looking for cannot be found."),
-            backtrace: None,
         },
         true,
     )
@@ -58,7 +57,7 @@ pub fn handle_error(
         let title = error.title.as_str();
         let status_code = error.status_code;
 
-        let mut t = TemplateData::new(&state, actor, pref);
+        let mut t = TemplateData::new(state, actor, pref);
         t.title = String::from(title);
 
         let tpl = ErrorPageData { t, error };

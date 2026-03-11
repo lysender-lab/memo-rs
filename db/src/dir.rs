@@ -128,12 +128,12 @@ impl DirRepo {
             .interact(move |conn| {
                 let mut query = dsl::dirs.into_boxed();
                 query = query.filter(dsl::bucket_id.eq(bid.as_str()));
-                if let Some(keyword) = params_copy.keyword {
-                    if keyword.len() > 0 {
-                        let pattern = format!("%{}%", keyword);
-                        query = query
-                            .filter(dsl::name.like(pattern.clone()).or(dsl::label.like(pattern)));
-                    }
+                if let Some(keyword) = params_copy.keyword
+                    && !keyword.is_empty()
+                {
+                    let pattern = format!("%{}%", keyword);
+                    query =
+                        query.filter(dsl::name.like(pattern.clone()).or(dsl::label.like(pattern)));
                 }
                 query.select(count_star()).get_result::<i64>(conn)
             })
@@ -168,10 +168,11 @@ impl DirStore for DirRepo {
         let mut per_page: i32 = MAX_PER_PAGE;
         let mut offset: i64 = 0;
 
-        if let Some(per_page_param) = params.per_page {
-            if per_page_param > 0 && per_page_param <= MAX_PER_PAGE {
-                per_page = per_page_param;
-            }
+        if let Some(per_page_param) = params.per_page
+            && per_page_param > 0
+            && per_page_param <= MAX_PER_PAGE
+        {
+            per_page = per_page_param;
         }
 
         let total_pages: i64 = (total_records as f64 / per_page as f64).ceil() as i64;
@@ -195,12 +196,12 @@ impl DirStore for DirRepo {
                 let mut query = dsl::dirs.into_boxed();
                 query = query.filter(dsl::bucket_id.eq(bid.as_str()));
 
-                if let Some(keyword) = params_copy.keyword {
-                    if keyword.len() > 0 {
-                        let pattern = format!("%{}%", keyword);
-                        query = query
-                            .filter(dsl::name.like(pattern.clone()).or(dsl::label.like(pattern)));
-                    }
+                if let Some(keyword) = params_copy.keyword
+                    && !keyword.is_empty()
+                {
+                    let pattern = format!("%{}%", keyword);
+                    query =
+                        query.filter(dsl::name.like(pattern.clone()).or(dsl::label.like(pattern)));
                 }
                 query
                     .limit(per_page as i64)

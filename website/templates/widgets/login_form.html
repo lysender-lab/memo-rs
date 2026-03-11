@@ -34,9 +34,11 @@
         </div>
     </div>
 
-    <div class="field">
-        <div id="g-recaptcha" class="g-recaptcha" data-sitekey="{{ captcha_key }}" data-action="LOGIN"></div>
-    </div>
+    {% if captcha_enabled %}
+        <div class="field">
+            <div id="g-recaptcha" class="g-recaptcha" data-sitekey="{{ captcha_key }}" data-action="LOGIN"></div>
+        </div>
+    {% endif %}
 
     <div class="field is-grouped">
         <div class="control">

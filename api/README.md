@@ -297,6 +297,8 @@ GOOGLE_PROJECT_ID=value
 GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
 ```
 
+See `api/.env.example` for a ready-to-copy template.
+
 ## Build binary
 
 ```
@@ -314,7 +316,7 @@ File: `/data/scripts/memo-rs/run-api.sh`
 
 ```bash
 #!/bin/sh
-/data/www/html/sites/memo-rs/target/release/api -c /data/www/html/sites/memo-rs/api/config.toml server
+/data/www/html/sites/memo-rs/target/release/api server
 ```
 
 Edit systemd service file:

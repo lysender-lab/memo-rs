@@ -80,10 +80,7 @@ pub async fn create_bucket(
     let data = NewBucketData {
         name: form.name.clone(),
         label: form.label.clone(),
-        images_only: match form.images_only {
-            Some(_) => true,
-            None => false,
-        },
+        images_only: form.images_only.is_some(),
     };
 
     let response = state
@@ -196,7 +193,7 @@ pub async fn delete_bucket(
     bucket_id: &str,
     csrf_token: &str,
 ) -> Result<()> {
-    let csrf_result = verify_csrf_token(&csrf_token, &state.config.jwt_secret)?;
+    let csrf_result = verify_csrf_token(csrf_token, &state.config.jwt_secret)?;
     ensure!(csrf_result == bucket_id, CsrfTokenSnafu);
     let url = format!(
         "{}/clients/{}/buckets/{}",

@@ -4,28 +4,34 @@
 
 ## Configuration
 
-```
+Use environment variables (see `website/.env.example`):
+
+```bash
 PORT=11000
 SSL=false
 FRONTEND_DIR=/path/to/frontend
-CAPTCHA_SITE_KEY=key
-CAPTCHA_SITE_SECRET=secret
+# Optional: captcha is enabled only when both keys are set
+CAPTCHA_SITE_KEY=
+CAPTCHA_API_KEY=
 JWT_SECRET=secret
 API_URL=http://localhost:11001
+GA_TAG_ID=
 ```
+
+Load env vars before running (for example, `set -a; source .env; set +a`).
 
 ## Build
 
 Development:
 
-```
-cargo run -- -c config.toml
+```bash
+cargo run
 ```
 
 With auto-rebuild:
 
-```
-bacon run -- -- -c config.toml
+```bash
+bacon run
 ```
 
 Release:
@@ -69,7 +75,7 @@ Environment="PORT=11000"
 Environment="SSL=false"
 Environment="FRONTEND_DIR=/data/www/html/sites/memo-rs/website/frontend"
 Environment="CAPTCHA_SITE_KEY=key"
-Environment="CAPTCHA_SITE_SECRET=secret"
+Environment="CAPTCHA_API_KEY=secret"
 Environment="JWT_SECRET=secret"
 Environment="API_URL=http://localhost:11001"
 

@@ -173,7 +173,7 @@ pub async fn create_client_handler(
     })?;
 
     let created = create_client(&state, &data, false).await?;
-    let dto: ClientDto = created.into();
+    let dto: ClientDto = created;
     Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
 }
 
@@ -245,7 +245,7 @@ pub async fn delete_client_handler(
         }
     );
 
-    let _ = delete_client(&state, &client.id).await?;
+    delete_client(&state, &client.id).await?;
 
     Ok(JsonResponse::with_status(
         StatusCode::NO_CONTENT,
@@ -361,7 +361,7 @@ pub async fn delete_bucket_handler(
         }
     );
 
-    let _ = delete_bucket(&state, bucket.id.as_str()).await?;
+    delete_bucket(&state, bucket.id.as_str()).await?;
 
     Ok(JsonResponse::with_status(
         StatusCode::NO_CONTENT,
@@ -408,8 +408,7 @@ pub async fn list_users_handler(
         }
     );
     let users = state.db.users.list(&client.id).await.context(DbSnafu)?;
-    let dto: Vec<UserDto> = users.into_iter().map(|x| x.into()).collect();
-    Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
+    Ok(JsonResponse::new(serde_json::to_string(&users).unwrap()))
 }
 
 pub async fn create_user_handler(
@@ -469,7 +468,7 @@ pub async fn update_user_status_handler(
 
     // Do not allow updating your own user
     ensure!(
-        &actor.user.id != &user.id,
+        actor.user.id != user.id,
         ForbiddenSnafu {
             msg: "Updating your own user account not allowed"
         }
@@ -493,7 +492,7 @@ pub async fn update_user_status_handler(
             msg: "Unable to re-query user information.",
         })?;
 
-    let dto: UserDto = updated_user.into();
+    let dto: UserDto = updated_user;
 
     Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
 }
@@ -514,7 +513,7 @@ pub async fn update_user_roles_handler(
 
     // Do not allow updating your own user
     ensure!(
-        &actor.user.id != &user.id,
+        actor.user.id != user.id,
         ForbiddenSnafu {
             msg: "Updating your own user account not allowed"
         }
@@ -538,7 +537,7 @@ pub async fn update_user_roles_handler(
             msg: "Unable to re-query user information.",
         })?;
 
-    let dto: UserDto = updated_user.into();
+    let dto: UserDto = updated_user;
 
     Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
 }
@@ -559,7 +558,7 @@ pub async fn reset_user_password_handler(
 
     // Do not allow updating your own user
     ensure!(
-        &actor.user.id != &user.id,
+        actor.user.id != user.id,
         ForbiddenSnafu {
             msg: "Updating your own user account not allowed"
         }
@@ -582,7 +581,7 @@ pub async fn reset_user_password_handler(
             msg: "Unable to re-query user information.",
         })?;
 
-    let dto: UserDto = updated_user.into();
+    let dto: UserDto = updated_user;
 
     Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
 }
@@ -602,13 +601,13 @@ pub async fn delete_user_handler(
 
     // Do not allow deleting your own user account
     ensure!(
-        &actor.user.id != &user.id,
+        actor.user.id != user.id,
         ForbiddenSnafu {
             msg: "Deleting your own user account not allowed"
         }
     );
 
-    let _ = state.db.users.delete(&user.id).await.context(DbSnafu)?;
+    state.db.users.delete(&user.id).await.context(DbSnafu)?;
 
     Ok(JsonResponse::with_status(
         StatusCode::NO_CONTENT,
@@ -720,7 +719,7 @@ pub async fn delete_dir_handler(
     );
 
     let dir_id = params.dir_id.clone().expect("dir_id is required");
-    let _ = delete_dir(&state, &dir_id).await?;
+    delete_dir(&state, &dir_id).await?;
     Ok(JsonResponse::with_status(
         StatusCode::NO_CONTENT,
         "".to_string(),
@@ -796,7 +795,7 @@ pub async fn create_file_handler(
             .clone()
             .join(ImgVersion::Original.to_string());
 
-        let _ = create_dir_all(orig_dir.clone())
+        create_dir_all(orig_dir.clone())
             .await
             .context(UploadDirSnafu)?;
 
@@ -830,7 +829,7 @@ pub async fn create_file_handler(
 
     let storage_client = state.storage_client.clone();
     let file = create_file(state, &bucket, &dir, &payload).await?;
-    let file_dto: FileDto = file.into();
+    let file_dto: FileDto = file;
     let file_dto = storage_client
         .format_file(&bucket.name, &dir.name, file_dto)
         .await
@@ -873,11 +872,11 @@ pub async fn delete_file_handler(
     );
 
     // Delete record
-    let _ = state.db.files.delete(&file.id).await.context(DbSnafu)?;
+    state.db.files.delete(&file.id).await.context(DbSnafu)?;
 
     // Delete file(s) from storage
     let storage_client = state.storage_client.clone();
-    let _ = storage_client
+    storage_client
         .delete_file_object(&bucket.name, &dir.name, &file)
         .await
         .context(StorageSnafu)?;

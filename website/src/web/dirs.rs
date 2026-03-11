@@ -40,7 +40,7 @@ pub async fn search_dirs_handler(
     Query(query): Query<SearchDirsParams>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::Album, Action::Read)?;
+    enforce_policy(actor, Resource::Album, Action::Read)?;
 
     let cid = bucket.client_id.clone();
     let bid = bucket.id.clone();
@@ -58,7 +58,7 @@ pub async fn search_dirs_handler(
         Ok(dirs) => {
             let mut keyword_param: String = "".to_string();
             if let Some(keyword) = &query.keyword {
-                keyword_param = format!("&keyword={}", encode(keyword).to_string());
+                keyword_param = format!("&keyword={}", encode(keyword));
             }
             tpl.dirs = dirs.data;
             tpl.pagination = Some(PaginationLinks::new(&dirs.meta, "", &keyword_param));
@@ -106,12 +106,12 @@ pub async fn new_dir_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Album, Action::Create)?;
+    enforce_policy(actor, Resource::Album, Action::Create)?;
 
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
-    t.title = String::from(match &bucket.images_only {
-        &true => "Create New Album",
-        &false => "Create New Directory",
+    t.title = String::from(match bucket.images_only {
+        true => "Create New Album",
+        false => "Create New Directory",
     });
 
     let token = create_csrf_token("new_dir", &config.jwt_secret)?;
@@ -127,10 +127,10 @@ pub async fn new_dir_handler(
         error_message: None,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 pub async fn post_new_dir_handler(
@@ -142,7 +142,7 @@ pub async fn post_new_dir_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Album, Action::Create)?;
+    enforce_policy(actor, Resource::Album, Action::Create)?;
 
     let token = create_csrf_token("new_dir", &config.jwt_secret)?;
     let cid = bucket.client_id.clone();
@@ -216,13 +216,10 @@ pub async fn dir_page_handler(
     Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
-    let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
 
     t.title = format!("Photos - {}", &dir.label);
-    t.styles = vec![config.assets.gallery_css.clone()];
-    t.scripts = vec![config.assets.gallery_js.clone()];
 
     let tpl = DirTemplate {
         t,
@@ -235,10 +232,10 @@ pub async fn dir_page_handler(
         can_delete_files: enforce_policy(actor, Resource::Photo, Action::Delete).is_ok(),
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[derive(Template)]
@@ -260,7 +257,7 @@ pub async fn edit_dir_controls_handler(
     Extension(dir): Extension<DirDto>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor().expect("actor is required");
-    let _ = enforce_policy(actor, Resource::Album, Action::Update)?;
+    enforce_policy(actor, Resource::Album, Action::Update)?;
 
     let tpl = EditDirControlsTemplate {
         bucket,
@@ -272,10 +269,10 @@ pub async fn edit_dir_controls_handler(
         can_delete_files: enforce_policy(actor, Resource::Photo, Action::Delete).is_ok(),
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 #[derive(Template)]
@@ -297,7 +294,7 @@ pub async fn edit_dir_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Album, Action::Update)?;
+    enforce_policy(actor, Resource::Album, Action::Update)?;
 
     let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
 
@@ -309,10 +306,10 @@ pub async fn edit_dir_handler(
         error_message: None,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 /// Handles the edit album submission
@@ -329,7 +326,7 @@ pub async fn post_edit_dir_handler(
     let dir_id = dir.id.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Album, Action::Update)?;
+    enforce_policy(actor, Resource::Album, Action::Update)?;
 
     let token = create_csrf_token(&dir_id, &config.jwt_secret)?;
 
@@ -407,7 +404,7 @@ pub async fn get_delete_dir_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Album, Action::Delete)?;
+    enforce_policy(actor, Resource::Album, Action::Delete)?;
     let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
 
     let tpl = DeleteDirTemplate {
@@ -417,10 +414,10 @@ pub async fn get_delete_dir_handler(
         error_message: None,
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(StatusCode::OK)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)?)
+        .context(ResponseBuilderSnafu)
 }
 
 /// Deletes album then redirect or show error
@@ -434,7 +431,7 @@ pub async fn post_delete_dir_handler(
     let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
 
-    let _ = enforce_policy(actor, Resource::Album, Action::Delete)?;
+    enforce_policy(actor, Resource::Album, Action::Delete)?;
 
     let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
 

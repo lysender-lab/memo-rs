@@ -5,46 +5,24 @@ use axum::response::IntoResponse;
 use axum::{body::Body, http::StatusCode, response::Response};
 use memo::role::{InvalidPermissionsError, InvalidRolesError};
 use serde::{Deserialize, Serialize};
-use snafu::{Backtrace, ErrorCompat, Snafu};
+use snafu::Snafu;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
 pub enum Error {
-    #[snafu(display("Error reading config file: {}", source))]
-    ConfigFile {
-        source: std::io::Error,
-        backtrace: Backtrace,
-    },
-
-    #[snafu(display("Error parsing config file: {}", source))]
-    ConfigParse {
-        source: toml::de::Error,
-        backtrace: Backtrace,
-    },
-
     #[snafu(display("Unable to create upload dir: {}", source))]
-    UploadDir {
-        source: std::io::Error,
-        backtrace: Backtrace,
-    },
+    UploadDir { source: std::io::Error },
 
     #[snafu(display("Config error: {}", msg))]
     Config { msg: String },
 
     #[snafu(display("{}", source))]
-    Db {
-        source: db::Error,
-        backtrace: Backtrace,
-    },
+    Db { source: db::Error },
 
     #[snafu(display("{} - {}", msg, source))]
-    PasswordPrompt {
-        msg: String,
-        source: std::io::Error,
-        backtrace: Backtrace,
-    },
+    PasswordPrompt { msg: String, source: std::io::Error },
 
     #[snafu(display("{}", msg))]
     Validation { msg: String },
@@ -74,11 +52,7 @@ pub enum Error {
     Forbidden { msg: String },
 
     #[snafu(display("{}", msg))]
-    JsonRejection {
-        msg: String,
-        source: JsonRejection,
-        backtrace: Backtrace,
-    },
+    JsonRejection { msg: String, source: JsonRejection },
 
     #[snafu(display("{}", msg))]
     MissingUploadFile { msg: String },
@@ -87,7 +61,6 @@ pub enum Error {
     CreateFile {
         path: PathBuf,
         source: std::io::Error,
-        backtrace: Backtrace,
     },
 
     #[snafu(display("File type not allowed"))]
@@ -127,34 +100,19 @@ pub enum Error {
     UserNotFound,
 
     #[snafu(display("{}", source))]
-    InvalidRoles {
-        source: InvalidRolesError,
-        backtrace: Backtrace,
-    },
+    InvalidRoles { source: InvalidRolesError },
 
     #[snafu(display("{}", source))]
-    InvalidPermissions {
-        source: InvalidPermissionsError,
-        backtrace: Backtrace,
-    },
+    InvalidPermissions { source: InvalidPermissionsError },
 
     #[snafu(display("Upload error: {}", source))]
-    UploadFile {
-        source: std::io::Error,
-        backtrace: Backtrace,
-    },
+    UploadFile { source: std::io::Error },
 
     #[snafu(display("Exif error: {}", source))]
-    ExifInfo {
-        source: exif::Error,
-        backtrace: Backtrace,
-    },
+    ExifInfo { source: exif::Error },
 
     #[snafu(display("Storage error: {}", source))]
-    Storage {
-        source: storage::Error,
-        backtrace: Backtrace,
-    },
+    Storage { source: storage::Error },
 
     #[snafu(display("{}", msg))]
     Whatever { msg: String },
@@ -212,10 +170,6 @@ impl IntoResponse for Error {
     fn into_response(self) -> Response<Body> {
         let status_code = StatusCode::from(&self);
         let message = format!("{}", self);
-        let mut backtrace: Option<String> = None;
-        if let Some(bt) = ErrorCompat::backtrace(&self) {
-            backtrace = Some(format!("{}", bt));
-        }
 
         // Build a dummy response
         let mut res = Response::builder()
@@ -226,7 +180,6 @@ impl IntoResponse for Error {
         res.extensions_mut().insert(ErrorInfo {
             status_code,
             message,
-            backtrace,
         });
 
         res
@@ -237,7 +190,6 @@ impl IntoResponse for Error {
 pub struct ErrorInfo {
     pub status_code: StatusCode,
     pub message: String,
-    pub backtrace: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
