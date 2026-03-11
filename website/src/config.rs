@@ -14,8 +14,8 @@ pub struct Config {
     pub port: u16,
     pub ssl: bool,
     pub frontend_dir: PathBuf,
-    pub captcha_site_key: String,
-    pub captcha_api_key: String,
+    pub captcha_site_key: Option<String>,
+    pub captcha_api_key: Option<String>,
     pub api_url: String,
     pub jwt_secret: String,
     pub ga_tag_id: Option<String>,
@@ -36,12 +36,16 @@ pub struct AssetManifest {
 }
 
 impl Config {
+    pub fn captcha_enabled(&self) -> bool {
+        self.captcha_site_key.is_some() && self.captcha_api_key.is_some()
+    }
+
     pub fn build_from_env() -> Result<Config> {
         let port = required_env_parse::<u16>("PORT")?;
         let ssl = required_env_parse::<bool>("SSL")?;
         let frontend_dir = PathBuf::from(required_env("FRONTEND_DIR")?);
-        let captcha_site_key = required_env("CAPTCHA_SITE_KEY")?;
-        let captcha_api_key = required_env("CAPTCHA_API_KEY")?;
+        let captcha_site_key = optional_env("CAPTCHA_SITE_KEY");
+        let captcha_api_key = optional_env("CAPTCHA_API_KEY");
         let api_url = required_env("API_URL")?;
         let jwt_secret = required_env("JWT_SECRET")?;
         let ga_tag_id = optional_env("GA_TAG_ID");
@@ -51,18 +55,6 @@ impl Config {
             !jwt_secret.is_empty(),
             ConfigSnafu {
                 msg: "JWT secret is required.".to_string()
-            }
-        );
-        ensure!(
-            !captcha_api_key.is_empty(),
-            ConfigSnafu {
-                msg: "Captcha API key is required.".to_string()
-            }
-        );
-        ensure!(
-            !captcha_site_key.is_empty(),
-            ConfigSnafu {
-                msg: "Captcha site key is required.".to_string()
             }
         );
         ensure!(
