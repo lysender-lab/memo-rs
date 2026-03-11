@@ -1,12 +1,11 @@
 use clap::{Parser, Subcommand};
-use serde::Deserialize;
 use snafu::{ResultExt, ensure};
-use std::{fs, path::PathBuf};
+use std::{env, path::PathBuf};
 
 use crate::Result;
-use crate::error::{ConfigFileSnafu, ConfigParseSnafu, ConfigSnafu, UploadDirSnafu};
+use crate::error::{ConfigSnafu, UploadDirSnafu};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Config {
     pub jwt_secret: String,
     pub upload_dir: PathBuf,
@@ -15,26 +14,38 @@ pub struct Config {
     pub db: DbConfig,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct CloudConfig {
     pub project_id: String,
     pub credentials: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ServerConfig {
     pub port: u16,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DbConfig {
     pub url: String,
 }
 
 impl Config {
-    pub fn build(filename: &PathBuf) -> Result<Self> {
-        let toml_string = fs::read_to_string(filename).context(ConfigFileSnafu)?;
-        let config: Config = toml::from_str(toml_string.as_str()).context(ConfigParseSnafu)?;
+    pub fn build_from_env() -> Result<Self> {
+        let config = Config {
+            jwt_secret: required_env("JWT_SECRET")?,
+            upload_dir: PathBuf::from(required_env("UPLOAD_DIR")?),
+            cloud: CloudConfig {
+                project_id: required_env("GOOGLE_PROJECT_ID")?,
+                credentials: required_env("GOOGLE_APPLICATION_CREDENTIALS")?,
+            },
+            server: ServerConfig {
+                port: required_env_parse::<u16>("PORT")?,
+            },
+            db: DbConfig {
+                url: required_env("DATABASE_URL")?,
+            },
+        };
 
         // Validate config values
         ensure!(
@@ -86,15 +97,32 @@ impl Config {
     }
 }
 
+fn required_env(name: &str) -> Result<String> {
+    match env::var(name) {
+        Ok(val) => Ok(val),
+        Err(_) => ConfigSnafu {
+            msg: format!("{} is required.", name),
+        }
+        .fail(),
+    }
+}
+
+fn required_env_parse<T>(name: &str) -> Result<T>
+where
+    T: std::str::FromStr,
+{
+    let value = required_env(name)?;
+    value.parse::<T>().map_err(|_| crate::Error::Config {
+        msg: format!("{} is invalid.", name),
+    })
+}
+
 /// File Management in the cloud
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 pub struct CliArgs {
     #[command(subcommand)]
     pub command: Commands,
-
-    #[arg(short, long, value_name = "config.toml")]
-    pub config: PathBuf,
 }
 
 #[derive(Subcommand, Debug)]

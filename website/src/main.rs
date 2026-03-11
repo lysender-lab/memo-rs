@@ -30,7 +30,7 @@ async fn main() {
     }
 }
 
-async fn run_command(arg: Args) -> Result<()> {
-    let config = Config::build(&arg.config)?;
+async fn run_command(_arg: Args) -> Result<()> {
+    let config = Config::build_from_env()?;
     run(config).await
 }

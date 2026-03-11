@@ -25,8 +25,8 @@ Guide for autonomous coding agents working in `memo-rs`.
 - `cargo build -p website`
 
 ### Run Services
-- API: `cargo run -p api -- --config api/config-example.toml server`
-- Website: `cargo run -p website -- --config website/config-example.toml`
+- API: `cargo run -p api -- server`
+- Website: `cargo run -p website`
 - Root README also shows: `cargo run -- server`
 
 ### Frontend (`website/frontend`)
@@ -142,8 +142,8 @@ These conventions are already present in the codebase; follow them for new code.
   - `npm run build`
 
 ## Known Config Inputs
-- API example config: `api/config-example.toml`
-- Website example config: `website/config-example.toml`
+- API env example: `api/.env.example`
+- Website env example: `website/.env.example`
 - Common required values: JWT secret, captcha keys, DB URL, cloud credentials.
 
 ## Scope and Safety

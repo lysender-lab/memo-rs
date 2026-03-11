@@ -4,28 +4,33 @@
 
 ## Configuration
 
-```
+Use environment variables (see `website/.env.example`):
+
+```bash
 PORT=11000
 SSL=false
 FRONTEND_DIR=/path/to/frontend
 CAPTCHA_SITE_KEY=key
-CAPTCHA_SITE_SECRET=secret
+CAPTCHA_API_KEY=secret
 JWT_SECRET=secret
 API_URL=http://localhost:11001
+GA_TAG_ID=
 ```
+
+Load env vars before running (for example, `set -a; source .env; set +a`).
 
 ## Build
 
 Development:
 
-```
-cargo run -- -c config.toml
+```bash
+cargo run
 ```
 
 With auto-rebuild:
 
-```
-bacon run -- -- -c config.toml
+```bash
+bacon run
 ```
 
 Release:
