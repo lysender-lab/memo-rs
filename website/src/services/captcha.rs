@@ -68,6 +68,18 @@ struct TokenProperties {
     invalid_reason: String,
 }
 
+#[derive(Deserialize)]
+struct CaptchaError {
+    code: u16,
+    message: String,
+    status: String,
+}
+
+#[derive(Deserialize)]
+struct CaptchaErrorResponse {
+    error: CaptchaError,
+}
+
 pub async fn validate_catpcha(state: &AppState, response: &str) -> Result<()> {
     let post_body = CaptchaPayload {
         event: CaptchaEvent {
@@ -88,12 +100,18 @@ pub async fn validate_catpcha(state: &AppState, response: &str) -> Result<()> {
             msg: "Unable to validate captcha".to_string(),
         })?;
 
-    if response.status().is_success() {
-        Ok(())
-    } else {
-        let err_str = response.text().await.context(HttpResponseParseSnafu {
-            msg: "Unable to parse captcha error response",
-        })?;
-        Err(format!("Unable to validate captcha: {}", err_str).into())
+    if !response.status().is_success() {
+        // Try to parse error response as JSON
+        let err_json =
+            response
+                .json::<CaptchaErrorResponse>()
+                .await
+                .context(HttpResponseParseSnafu {
+                    msg: "Unable to parse captcha error response",
+                })?;
+
+        return Err(format!("Unable to validate captcha: {}", err_json.error.message).into());
     }
+
+    Ok(())
 }

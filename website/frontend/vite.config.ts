@@ -22,7 +22,6 @@ export default defineConfig({
         // 4 explicit entrypoints:
         'main.min': resolve(__dirname, 'bundles/main.js'),
         'main.min.css': resolve(__dirname, 'bundles/main.css'),
-        'gallery.min.css': resolve(__dirname, 'bundles/gallery.css'),
       },
       output: {
         // JS outputs

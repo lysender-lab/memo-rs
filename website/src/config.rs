@@ -45,10 +45,7 @@ type BundleConfigMap = HashMap<String, BundleEntry>;
 #[derive(Clone, Deserialize)]
 pub struct AssetManifest {
     pub main_js: String,
-    pub gallery_js: String,
-    pub upload_js: String,
     pub main_css: String,
-    pub gallery_css: String,
 }
 
 impl Config {
@@ -121,28 +118,13 @@ impl AssetManifest {
             .get("bundles/main.css")
             .expect("main.css bundle is required");
 
-        let gallery_css = config_map
-            .get("bundles/gallery.css")
-            .expect("gallery.css bundle is required");
-
         let main_js = config_map
             .get("bundles/main.js")
             .expect("main.js bundle is required");
 
-        let upload_js = config_map
-            .get("bundles/upload.js")
-            .expect("upload.js bundle is required");
-
-        let gallery_js = config_map
-            .get("bundles/gallery.js")
-            .expect("gallery.js bundle is required");
-
         Ok(AssetManifest {
             main_js: format!("/assets/bundles/{}", main_js.file),
-            gallery_js: format!("/assets/bundles/{}", gallery_js.file),
-            upload_js: format!("/assets/bundles/{}", upload_js.file),
             main_css: format!("/assets/bundles/{}", main_css.file),
-            gallery_css: format!("/assets/bundles/{}", gallery_css.file),
         })
     }
 }

@@ -216,13 +216,10 @@ pub async fn dir_page_handler(
     Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
-    let config = state.config.clone();
     let actor = ctx.actor().expect("actor is required");
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
 
     t.title = format!("Photos - {}", &dir.label);
-    t.styles = vec![config.assets.gallery_css.clone()];
-    t.scripts = vec![config.assets.gallery_js.clone()];
 
     let tpl = DirTemplate {
         t,

@@ -9,6 +9,7 @@ use axum::{
 };
 use snafu::ResultExt;
 use tower_cookies::{Cookie, Cookies, cookie::time::Duration};
+use tracing::info;
 use validator::Validate;
 
 use crate::{
@@ -76,6 +77,7 @@ pub async fn post_login_handler(
     State(state): State<AppState>,
     Form(login_payload): Form<LoginFormPayload>,
 ) -> impl IntoResponse {
+    info!("Login attempt for user: {}", login_payload.username);
     // Validate data
     if let Err(err) = login_payload.validate() {
         let errors: Vec<String> = err
@@ -122,6 +124,8 @@ pub async fn post_login_handler(
 
     cookies.add(auth_cookie);
 
+    info!("User logged in successfully");
+
     Redirect::to("/").into_response()
 }
 
@@ -129,5 +133,6 @@ fn handle_error(error: Error) -> Response<Body> {
     let error_info = ErrorInfo::from(&error);
 
     let url = format!("/login?error={}", error_info.message);
+    info!("Login error: {}", error_info.message);
     Redirect::to(url.as_str()).into_response()
 }

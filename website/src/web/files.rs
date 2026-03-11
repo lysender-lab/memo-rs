@@ -129,7 +129,6 @@ pub async fn upload_page_handler(
     let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
 
     t.title = format!("Photos - {} - Upload Photos", &dir.label);
-    t.scripts = vec![config.assets.upload_js.clone()];
 
     let tpl = UploadPageTemplate {
         t,
