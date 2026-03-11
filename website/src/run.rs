@@ -20,7 +20,7 @@ pub struct AppState {
 }
 
 pub async fn run(config: Config) -> Result<()> {
-    let port = config.port;
+    let server_address = config.server_address.clone();
     let frontend_dir = config.frontend_dir.clone();
     let client = ClientBuilder::new()
         .timeout(Duration::from_secs(30))
@@ -44,11 +44,11 @@ pub async fn run(config: Config) -> Result<()> {
         );
 
     // Setup the server
-    let ip = "127.0.0.1";
-    let addr = format!("{}:{}", ip, port);
-    info!("HTTP Server runnung on {}", addr);
+    info!("HTTP Server runnung on {}", server_address);
 
-    let listener = TcpListener::bind(addr).await.expect("Failed to bind");
+    let listener = TcpListener::bind(server_address)
+        .await
+        .expect("Failed to bind");
     axum::serve(listener, routes_all.into_make_service())
         .with_graceful_shutdown(shutdown_signal())
         .await

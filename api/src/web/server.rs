@@ -14,7 +14,7 @@ use crate::web::routes::all_routes;
 use axum_test::TestServer;
 
 pub async fn run_web_server(config: &Config) -> Result<()> {
-    let port = config.server.port;
+    let server_address = config.server.address.clone();
     let state = create_app_state(config).await?;
 
     let routes_all = Router::new()
@@ -29,11 +29,9 @@ pub async fn run_web_server(config: &Config) -> Result<()> {
         );
 
     // Setup the server
-    let ip = "127.0.0.1";
-    let addr = format!("{}:{}", ip, port);
-    info!("HTTP server running on {}", addr);
+    info!("HTTP server running on {}", server_address);
 
-    let listener = TcpListener::bind(addr).await.unwrap();
+    let listener = TcpListener::bind(server_address).await.unwrap();
     axum::serve(listener, routes_all.into_make_service())
         .with_graceful_shutdown(shutdown_signal())
         .await
