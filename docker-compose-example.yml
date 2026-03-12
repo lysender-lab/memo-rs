@@ -5,9 +5,9 @@ services:
     build:
       context: api
     volumes:
-      - ./build/bin/api:/app/bin/api:ro
+      - ./build/bin:/app/bin
       - ./build/db:/app/db
-      - ./build/certs/google-service-account.json:/app/certs/google-service-account.json:ro
+      - ./build/certs:/app/certs
     ports:
       - "127.0.0.1:11001:80"
     environment:
@@ -25,13 +25,14 @@ services:
     build:
       context: website
     volumes:
-      - ./build/bin/website:/app/bin/website:ro
+      - ./build/bin:/app/bin
+      - ./build/html/public:/app/html/public
     ports:
       - "127.0.0.1:11000:80"
     environment:
       SERVER_ADDRESS: "0.0.0.0:80"
       SSL: "false"
-      FRONTEND_DIR: "/app/frontend"
+      FRONTEND_DIR: "/app/html"
       CAPTCHA_SITE_KEY: ""
       CAPTCHA_API_KEY: ""
       API_URL: "http://api"
