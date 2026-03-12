@@ -21,7 +21,7 @@ sqlite3 "$TARGET_DIR/db.sqlite3" "PRAGMA integrity_check;"
 
 # Compress directory
 cd "$DB_BACKUP_PATH/memo-rs"
-tar cvf "$BACKUP_FILE" "$CURRENT_DATE"
+tar czf "$BACKUP_FILE" "$CURRENT_DATE"
 
 # Upload to S3
 aws s3 cp "$BACKUP_FILE" "s3://$S3_BUCKET/db-backups/memo-rs/$BACKUP_FILE"
