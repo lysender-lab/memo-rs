@@ -3,7 +3,7 @@
 # env vars required
 # DB_BACKUP_PATH=/path/to/db-backups
 # MEMO_DB_PATH=/path/to/db
-# S3_BUCKET=your-s3-bucket-name
+# BACKUP_S3_BUCKET=your-s3-bucket-name
 
 CURRENT_DATE=$(date +"%Y-%m-%d-%H-%M-%S")
 TARGET_DIR="$DB_BACKUP_PATH/memo-rs/$CURRENT_DATE"
@@ -24,7 +24,7 @@ cd "$DB_BACKUP_PATH/memo-rs"
 tar czf "$BACKUP_FILE" "$CURRENT_DATE"
 
 # Upload to S3
-aws s3 cp "$BACKUP_FILE" "s3://$S3_BUCKET/db-backups/memo-rs/$BACKUP_FILE"
+aws s3 cp "$BACKUP_FILE" "s3://$BACKUP_S3_BUCKET/db-backups/memo-rs/$BACKUP_FILE"
 
 # Cleanup
 rm -rf $TARGET_DIR
