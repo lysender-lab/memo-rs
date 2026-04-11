@@ -8,7 +8,7 @@ use crate::error::{DbPrepareSnafu, DbStatementSnafu};
 use crate::turso_decode::{
     FromTursoRow, collect_count, collect_row, collect_rows, row_integer, row_text,
 };
-use crate::turso_params::{integer_param, new_query_params, text_param};
+use crate::turso_params::{integer_param, new_query_params, opt_integer_param, text_param};
 use memo::{bucket::BucketDto, utils::generate_id};
 
 #[derive(Debug, Clone, Serialize)]
@@ -112,9 +112,10 @@ impl BucketRepo {
                 name,
                 label,
                 images_only,
-                created_at
+                created_at,
+                updated_at
             FROM buckets
-            WHERE client_id = :client_id
+            WHERE client_id = :client_id AND deleted_at IS NULL
             ORDER BY name ASC
         "#
         .to_string();
@@ -140,7 +141,9 @@ impl BucketRepo {
                 name,
                 label,
                 images_only,
-                created_at
+                created_at,
+                updated_at,
+                deleted_at
             )
             VALUES
             (
@@ -149,12 +152,14 @@ impl BucketRepo {
                 :name,
                 :label,
                 :images_only,
-                :created_at
+                :created_at,
+                NULL
             )
         "#;
 
         let id = generate_id();
         let images_only: i64 = if data.images_only { 1 } else { 0 };
+
         let mut params = new_query_params();
         params.push(text_param(":id", id.clone()));
         params.push(text_param(":client_id", client_id.to_owned()));
@@ -162,6 +167,7 @@ impl BucketRepo {
         params.push(text_param(":label", data.label.clone()));
         params.push(integer_param(":images_only", images_only));
         params.push(integer_param(":created_at", today));
+        params.push(integer_param(":updated_at", today));
 
         let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
         stmt.execute(params).await.context(DbStatementSnafu)?;
@@ -184,9 +190,10 @@ impl BucketRepo {
                 name,
                 label,
                 images_only,
-                created_at
+                created_at,
+                updated_at
             FROM buckets
-            WHERE id = :id
+            WHERE id = :id AND deleted_at IS NULL
             LIMIT 1
         "#
         .to_string();
@@ -208,9 +215,13 @@ impl BucketRepo {
                 name,
                 label,
                 images_only,
-                created_at
+                created_at,
+                updated_at
             FROM buckets
-            WHERE client_id = :client_id AND name = :name
+            WHERE
+                client_id = :client_id
+                AND name = :name
+                AND deleted_at IS NULL
             LIMIT 1
         "#
         .to_string();
@@ -229,7 +240,7 @@ impl BucketRepo {
         let query = r#"
             SELECT COUNT(*) AS total_count
             FROM buckets
-            WHERE client_id = :client_id
+            WHERE client_id = :client_id AND deleted_at IS NULL
         "#
         .to_string();
 
@@ -250,7 +261,7 @@ impl BucketRepo {
         let query = r#"
             UPDATE buckets
             SET label = :label
-            WHERE id = :id
+            WHERE id = :id AND deleted_at IS NULL
         "#;
 
         let mut q_params = new_query_params();
@@ -264,8 +275,16 @@ impl BucketRepo {
     }
 
     pub async fn delete(&self, id: &str) -> Result<()> {
-        let query = "DELETE FROM buckets WHERE id = :id".to_string();
+        let today = chrono::Utc::now().timestamp();
+
+        let query = r#"
+            UPDATE buckets
+            SET deleted_at = :deleted_at
+            WHERE id = :id AND deleted_at IS NULL
+        "#;
+
         let mut q_params = new_query_params();
+        q_params.push(opt_integer_param(":deleted_at", Some(today)));
         q_params.push(text_param(":id", id.to_owned()));
 
         let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
@@ -282,7 +301,8 @@ impl BucketRepo {
                 name,
                 label,
                 images_only,
-                created_at
+                created_at,
+                updated_at
             FROM buckets
             LIMIT 1
         "#

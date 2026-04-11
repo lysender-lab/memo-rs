@@ -8,7 +8,7 @@ use crate::error::{DbPrepareSnafu, DbStatementSnafu, ValidationSnafu};
 use crate::turso_decode::{
     FromTursoRow, collect_count, collect_row, collect_rows, row_integer, row_text,
 };
-use crate::turso_params::{integer_param, new_query_params, text_param};
+use crate::turso_params::{integer_param, new_query_params, opt_integer_param, text_param};
 use memo::dir::DirDto;
 use memo::pagination::Paginated;
 use memo::utils::generate_id;
@@ -109,8 +109,17 @@ impl DirRepo {
     }
 
     async fn listing_count(&self, bucket_id: &str, params: &ListDirsParams) -> Result<i64> {
-        let mut query =
-            "SELECT COUNT(*) AS total_count FROM dirs WHERE bucket_id = :bucket_id".to_string();
+        let mut query = r#"
+            SELECT
+                COUNT(*) AS total_count
+            FROM
+                dirs
+            WHERE
+                bucket_id = :bucket_id
+                AND deleted_at IS NULL
+        "#
+        .to_string();
+
         let mut q_params = new_query_params();
         q_params.push(text_param(":bucket_id", bucket_id.to_owned()));
 
@@ -175,7 +184,7 @@ impl DirRepo {
                 created_at,
                 updated_at
             FROM dirs
-            WHERE bucket_id = :bucket_id
+            WHERE bucket_id = :bucket_id AND deleted_at IS NULL
         "#
         .to_string();
 
@@ -204,7 +213,7 @@ impl DirRepo {
         let query = r#"
             SELECT COUNT(*) AS total_count
             FROM dirs
-            WHERE bucket_id = :bucket_id
+            WHERE bucket_id = :bucket_id AND deleted_at IS NULL
         "#
         .to_string();
 
@@ -229,7 +238,8 @@ impl DirRepo {
                 label,
                 file_count,
                 created_at,
-                updated_at
+                updated_at,
+                deleted_at
             )
             VALUES
             (
@@ -239,7 +249,8 @@ impl DirRepo {
                 :label,
                 :file_count,
                 :created_at,
-                :updated_at
+                :updated_at,
+                NULL
             )
         "#;
 
@@ -277,7 +288,7 @@ impl DirRepo {
                 created_at,
                 updated_at
             FROM dirs
-            WHERE id = :id
+            WHERE id = :id AND deleted_at IS NULL
             LIMIT 1
         "#
         .to_string();
@@ -301,8 +312,12 @@ impl DirRepo {
                 file_count,
                 created_at,
                 updated_at
-            FROM dirs
-            WHERE bucket_id = :bucket_id AND name = :name
+            FROM
+                dirs
+            WHERE
+                bucket_id = :bucket_id
+                AND name = :name
+                AND deleted_at IS NULL
             LIMIT 1
         "#
         .to_string();
@@ -325,7 +340,7 @@ impl DirRepo {
         let query = r#"
             UPDATE dirs
             SET label = :label
-            WHERE id = :id
+            WHERE id = :id AND deleted_at IS NULL
         "#;
 
         let mut q_params = new_query_params();
@@ -341,7 +356,7 @@ impl DirRepo {
         let query = r#"
             UPDATE dirs
             SET updated_at = :updated_at
-            WHERE id = :id
+            WHERE id = :id AND deleted_at IS NULL
         "#;
 
         let mut q_params = new_query_params();
@@ -354,8 +369,14 @@ impl DirRepo {
     }
 
     pub async fn delete(&self, id: &str) -> Result<()> {
-        let query = "DELETE FROM dirs WHERE id = :id".to_string();
+        let today = chrono::Utc::now().timestamp();
+        let query = r#"
+            UPDATE dirs
+            SET deleted_at = :deleted_at
+            WHERE id = :id AND deleted_at IS NULL
+        "#;
         let mut q_params = new_query_params();
+        q_params.push(opt_integer_param(":deleted_at", Some(today)));
         q_params.push(text_param(":id", id.to_owned()));
 
         let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
