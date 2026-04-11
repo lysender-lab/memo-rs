@@ -6,7 +6,6 @@ CREATE TABLE files (
     content_type TEXT NOT NULL,
     size INTEGER NOT NULL,
     is_image INTEGER NOT NULL,
-    img_dimension TEXT NULL DEFAULT NULL,
     img_versions TEXT NULL DEFAULT NULL,
     img_taken_at INTEGER NULL DEFAULT NULL,
     created_at INTEGER NOT NULL,
