@@ -1,0 +1,35 @@
+[package]
+name = "api"
+version = "0.2.0"
+edition = "2024"
+
+[dependencies]
+async-trait.workspace = true
+axum.workspace = true
+axum-test.workspace = true
+chrono.workspace = true
+clap.workspace = true
+image.workspace = true
+infer.workspace = true
+jsonwebtoken.workspace = true
+kamadak-exif.workspace = true
+multer.workspace = true
+rpassword.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+snafu.workspace = true
+text_io.workspace = true
+tokio.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+validator.workspace = true
+db = { path = "../db" }
+memo = { path = "../memo" }
+password = { path = "../password" }
+storage = { path = "../storage" }
+
+[dev-dependencies]
+db = { path = "../db", features = ["test"]}
+storage = { path = "../storage", features = ["test"]}
