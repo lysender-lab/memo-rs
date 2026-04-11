@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use db2::create_db_mapper;
-use db2::turso_decode::{FromTursoRow, row_integer, row_text};
-use db2::turso_params::{
+use db::create_db_mapper;
+use db::turso_decode::{FromTursoRow, row_integer, row_text};
+use db::turso_params::{
     integer_param, new_query_params, opt_integer_param, opt_text_param, text_param,
 };
 use memo::bucket::BucketDto;
@@ -29,7 +29,7 @@ struct LegacyUserRow {
 }
 
 impl FromTursoRow for LegacyUserRow {
-    fn from_row(row: &Row) -> db2::Result<Self> {
+    fn from_row(row: &Row) -> db::Result<Self> {
         Ok(Self {
             id: row_text(row, 0)?,
             client_id: row_text(row, 1)?,
@@ -44,8 +44,8 @@ impl FromTursoRow for LegacyUserRow {
 }
 
 pub struct State {
-    source_db: Arc<db2::DbMapper>,
-    target_db: Arc<db2::DbMapper>,
+    source_db: Arc<db::DbMapper>,
+    target_db: Arc<db::DbMapper>,
 }
 
 pub async fn run() -> Result<()> {

@@ -9,7 +9,7 @@ pub enum Error {
     Config { msg: String },
 
     #[snafu(display("{}", source))]
-    Db { source: db2::Error },
+    Db { source: db::Error },
 
     #[snafu(display("{}", msg))]
     Validation { msg: String },

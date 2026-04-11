@@ -7,8 +7,8 @@ use crate::client::create_client;
 use crate::config::Config;
 use crate::error::{DbSnafu, PasswordPromptSnafu};
 use crate::state::create_app_state;
-use db2::client::NewClient;
-use db2::user::NewUser;
+use db::client::NewClient;
+use db::user::NewUser;
 
 pub async fn run_setup(config: &Config) -> Result<()> {
     print!("Enter username for the admin user: ");

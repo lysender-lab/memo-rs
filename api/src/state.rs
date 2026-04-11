@@ -9,7 +9,7 @@ use crate::{
 };
 use storage::{CloudStorable, StorageClient};
 
-use db2::{DbMapper, create_db_mapper};
+use db::{DbMapper, create_db_mapper};
 
 #[derive(Clone, FromRef)]
 pub struct AppState {

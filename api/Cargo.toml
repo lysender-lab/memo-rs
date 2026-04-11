@@ -25,7 +25,7 @@ tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 validator.workspace = true
-db2 = { path = "../db2" }
+db = { path = "../db" }
 memo = { path = "../memo" }
 password = { path = "../password" }
 storage = { path = "../storage" }

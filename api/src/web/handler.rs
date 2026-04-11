@@ -29,11 +29,11 @@ use crate::{
     state::AppState,
     web::{params::Params, response::JsonResponse},
 };
-use db2::bucket::{NewBucket, UpdateBucket};
-use db2::client::{ClientDefaultBucket, NewClient, UpdateClient};
-use db2::dir::{ListDirsParams, NewDir, UpdateDir};
-use db2::file::{FilePayload, ListFilesParams};
-use db2::user::{
+use db::bucket::{NewBucket, UpdateBucket};
+use db::client::{ClientDefaultBucket, NewClient, UpdateClient};
+use db::dir::{ListDirsParams, NewDir, UpdateDir};
+use db::file::{FilePayload, ListFilesParams};
+use db::user::{
     ChangeCurrentPassword, NewUser, UpdateUserPassword, UpdateUserRoles, UpdateUserStatus,
 };
 use memo::{

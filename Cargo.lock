@@ -167,7 +167,7 @@ dependencies = [
  "axum-test",
  "chrono",
  "clap",
- "db2",
+ "db",
  "image",
  "infer",
  "jsonwebtoken",
@@ -1008,7 +1008,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "db2"
+name = "db"
 version = "0.1.0"
 dependencies = [
  "async-trait",
@@ -2252,7 +2252,7 @@ name = "migrate_turso"
 version = "0.2.0"
 dependencies = [
  "chrono",
- "db2",
+ "db",
  "memo",
  "serde",
  "serde_json",

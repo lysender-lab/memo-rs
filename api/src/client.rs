@@ -5,7 +5,7 @@ use validator::Validate;
 use crate::Result;
 use crate::error::{DbSnafu, MaxClientsReachedSnafu, ValidationSnafu};
 use crate::state::AppState;
-use db2::client::{MAX_CLIENTS, NewClient, UpdateClient};
+use db::client::{MAX_CLIENTS, NewClient, UpdateClient};
 use memo::validators::flatten_errors;
 
 pub async fn create_client(state: &AppState, data: NewClient, admin: bool) -> Result<ClientDto> {

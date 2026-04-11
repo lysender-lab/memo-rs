@@ -13,8 +13,8 @@ use crate::error::DbSnafu;
 use crate::error::{ExifInfoSnafu, StorageSnafu, UploadFileSnafu, ValidationSnafu};
 
 use crate::state::AppState;
-use db2::file::FilePayload;
-use db2::file::MAX_FILES;
+use db::file::FilePayload;
+use db::file::MAX_FILES;
 use memo::bucket::BucketDto;
 use memo::dir::DirDto;
 use memo::file::{
