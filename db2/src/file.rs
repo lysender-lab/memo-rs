@@ -1,5 +1,3 @@
-use async_trait::async_trait;
-
 use deadpool_diesel::sqlite::Pool;
 use diesel::dsl::count_star;
 use diesel::prelude::*;
@@ -8,12 +6,16 @@ use memo::dir::DirDto;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use std::path::PathBuf;
+use turso::{Connection, Row};
 use validator::Validate;
 
 use crate::Result;
-use crate::error::{DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, ValidationSnafu};
-
+use crate::error::{DbPrepareSnafu, DbStatementSnafu};
 use crate::schema::files::{self, dsl};
+use crate::turso_decode::{
+    FromTursoRow, collect_count, collect_row, collect_rows, row_integer, row_text,
+};
+use crate::turso_params::{integer_param, new_query_params, text_param};
 use memo::file::{FileDto, ImgVersionDto};
 use memo::pagination::Paginated;
 use memo::validators::flatten_errors;
@@ -127,27 +129,12 @@ impl From<FileObject> for FileDto {
 pub const MAX_PER_PAGE: i32 = 50;
 pub const MAX_FILES: i32 = 1000;
 
-#[async_trait]
-pub trait FileStore: Send + Sync {
-    async fn list(&self, dir: &DirDto, params: &ListFilesParams) -> Result<Paginated<FileDto>>;
-
-    async fn create(&self, file_dto: FileDto) -> Result<FileDto>;
-
-    async fn get(&self, id: &str) -> Result<Option<FileDto>>;
-
-    async fn find_by_name(&self, dir_id: &str, name: &str) -> Result<Option<FileDto>>;
-
-    async fn count_by_dir(&self, dir_id: &str) -> Result<i64>;
-
-    async fn delete(&self, id: &str) -> Result<()>;
-}
-
 pub struct FileRepo {
-    db_pool: Pool,
+    db_pool: Connection,
 }
 
 impl FileRepo {
-    pub fn new(db_pool: Pool) -> Self {
+    pub fn new(db_pool: Connection) -> Self {
         Self { db_pool }
     }
 
@@ -178,11 +165,8 @@ impl FileRepo {
 
         Ok(count)
     }
-}
 
-#[async_trait]
-impl FileStore for FileRepo {
-    async fn list(&self, dir: &DirDto, params: &ListFilesParams) -> Result<Paginated<FileDto>> {
+    pub async fn list(&self, dir: &DirDto, params: &ListFilesParams) -> Result<Paginated<FileDto>> {
         let errors = params.validate();
         ensure!(
             errors.is_ok(),
@@ -253,7 +237,7 @@ impl FileStore for FileRepo {
         Ok(Paginated::new(items, page, per_page, total_records))
     }
 
-    async fn create(&self, file_dto: FileDto) -> Result<FileDto> {
+    pub async fn create(&self, file_dto: FileDto) -> Result<FileDto> {
         let file_db_pool = self.db_pool.clone();
         let db = file_db_pool.get().await.context(DbPoolSnafu)?;
 
@@ -276,7 +260,7 @@ impl FileStore for FileRepo {
         Ok(file.into())
     }
 
-    async fn get(&self, id: &str) -> Result<Option<FileDto>> {
+    pub async fn get(&self, id: &str) -> Result<Option<FileDto>> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let fid = id.to_string();
@@ -298,7 +282,7 @@ impl FileStore for FileRepo {
         Ok(item.map(|x| x.into()))
     }
 
-    async fn find_by_name(&self, dir_id: &str, name: &str) -> Result<Option<FileDto>> {
+    pub async fn find_by_name(&self, dir_id: &str, name: &str) -> Result<Option<FileDto>> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let did = dir_id.to_string();
@@ -322,7 +306,7 @@ impl FileStore for FileRepo {
         Ok(item.map(|x| x.into()))
     }
 
-    async fn count_by_dir(&self, dir_id: &str) -> Result<i64> {
+    pub async fn count_by_dir(&self, dir_id: &str) -> Result<i64> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let did = dir_id.to_string();
@@ -343,7 +327,7 @@ impl FileStore for FileRepo {
         Ok(count)
     }
 
-    async fn delete(&self, id: &str) -> Result<()> {
+    pub async fn delete(&self, id: &str) -> Result<()> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let fid = id.to_string();
@@ -356,37 +340,6 @@ impl FileStore for FileRepo {
             table: "files".to_string(),
         })?;
 
-        Ok(())
-    }
-}
-
-#[cfg(feature = "test")]
-pub struct FileTestRepo {}
-
-#[cfg(feature = "test")]
-#[async_trait]
-impl FileStore for FileTestRepo {
-    async fn list(&self, _dir: &DirDto, _params: &ListFilesParams) -> Result<Paginated<FileDto>> {
-        Ok(Paginated::new(vec![], 1, 10, 0))
-    }
-
-    async fn create(&self, _file_dto: FileDto) -> Result<FileDto> {
-        Err("Not supported".into())
-    }
-
-    async fn get(&self, _id: &str) -> Result<Option<FileDto>> {
-        Ok(None)
-    }
-
-    async fn find_by_name(&self, _dir_id: &str, _name: &str) -> Result<Option<FileDto>> {
-        Ok(None)
-    }
-
-    async fn count_by_dir(&self, _dir_id: &str) -> Result<i64> {
-        Ok(0)
-    }
-
-    async fn delete(&self, _id: &str) -> Result<()> {
         Ok(())
     }
 }
