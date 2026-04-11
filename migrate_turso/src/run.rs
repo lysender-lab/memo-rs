@@ -2,10 +2,13 @@ use std::sync::Arc;
 
 use db2::create_db_mapper;
 use db2::turso_decode::{FromTursoRow, row_integer, row_text};
-use db2::turso_params::{integer_param, new_query_params, opt_text_param, text_param};
+use db2::turso_params::{
+    integer_param, new_query_params, opt_integer_param, opt_text_param, text_param,
+};
 use memo::bucket::BucketDto;
 use memo::client::ClientDto;
 use memo::dir::DirDto;
+use memo::file::FileDto;
 use snafu::ResultExt;
 use tracing::info;
 use turso::Row;
@@ -458,5 +461,123 @@ async fn migrate_dirs(state: &State) -> Result<()> {
 }
 
 async fn migrate_files(state: &State) -> Result<()> {
+    info!("Migrating files...");
+
+    let mut migrated_count: usize = 0;
+    let limit: i64 = 100;
+    let mut offset: i64 = 0;
+
+    let insert_query = r#"
+        INSERT INTO files (
+            id,
+            dir_id,
+            name,
+            filename,
+            content_type,
+            size,
+            is_image,
+            img_versions,
+            img_taken_at,
+            created_at,
+            updated_at
+        ) VALUES (
+            :id,
+            :dir_id,
+            :name,
+            :filename,
+            :content_type,
+            :size,
+            :is_image,
+            :img_versions,
+            :img_taken_at,
+            :created_at,
+            :updated_at
+        )
+    "#
+    .to_string();
+
+    loop {
+        let query = r#"
+            SELECT
+                id,
+                dir_id,
+                name,
+                filename,
+                content_type,
+                size,
+                is_image,
+                img_versions,
+                img_taken_at,
+                created_at,
+                updated_at
+            FROM
+                files
+            ORDER BY
+                created_at ASC,
+                id ASC
+            LIMIT :limit OFFSET :offset
+        "#
+        .to_string();
+
+        let mut q_params = new_query_params();
+        q_params.push(integer_param(":limit", limit));
+        q_params.push(integer_param(":offset", offset));
+
+        let files: Vec<FileDto> = state
+            .source_db
+            .any
+            .query(query, q_params)
+            .await
+            .context(DbSnafu)?;
+
+        let page_len = files.len();
+        if page_len == 0 {
+            break;
+        }
+
+        for file in files.into_iter() {
+            let mut insert_params = new_query_params();
+            insert_params.push(text_param(":id", file.id));
+            insert_params.push(text_param(":dir_id", file.dir_id));
+            insert_params.push(text_param(":name", file.name));
+            insert_params.push(text_param(":filename", file.filename));
+            insert_params.push(text_param(":content_type", file.content_type));
+            insert_params.push(integer_param(":size", file.size));
+            insert_params.push(integer_param(
+                ":is_image",
+                match file.is_image {
+                    true => 1,
+                    false => 0,
+                },
+            ));
+
+            let img_versions = file
+                .img_versions
+                .map(|versions| versions.into_iter().map(|x| x.to_string()).collect::<Vec<String>>().join(","));
+
+            insert_params.push(opt_text_param(":img_versions", img_versions));
+            insert_params.push(opt_integer_param(":img_taken_at", file.img_taken_at));
+            insert_params.push(integer_param(":created_at", file.created_at));
+            insert_params.push(integer_param(":updated_at", file.updated_at));
+
+            state
+                .target_db
+                .any
+                .execute(insert_query.clone(), insert_params)
+                .await
+                .context(DbSnafu)?;
+        }
+
+        migrated_count += page_len;
+
+        if page_len < limit as usize {
+            break;
+        }
+
+        offset += limit;
+    }
+
+    info!("Migrated {} files...", migrated_count);
+
     Ok(())
 }
