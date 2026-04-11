@@ -3,6 +3,7 @@ use std::sync::Arc;
 use db2::create_db_mapper;
 use db2::turso_decode::{FromTursoRow, row_integer, row_text};
 use db2::turso_params::{integer_param, new_query_params, opt_text_param, text_param};
+use memo::bucket::BucketDto;
 use memo::client::ClientDto;
 use snafu::ResultExt;
 use tracing::info;
@@ -289,6 +290,74 @@ async fn migrate_users(state: &State) -> Result<()> {
 }
 
 async fn migrate_buckets(state: &State) -> Result<()> {
+    info!("Migrating buckets...");
+
+    let buckets_query = r#"
+        SELECT
+            id,
+            client_id,
+            name,
+            label,
+            images_only,
+            created_at
+        FROM
+            buckets
+    "#
+    .to_string();
+
+    let buckets: Vec<BucketDto> = state
+        .source_db
+        .any
+        .query(buckets_query, Vec::new())
+        .await
+        .context(DbSnafu)?;
+
+    let buckets_count = buckets.len();
+
+    let insert_query = r#"
+        INSERT INTO buckets (
+            id,
+            client_id,
+            name,
+            label,
+            images_only,
+            created_at
+        ) VALUES (
+            :id,
+            :client_id,
+            :name,
+            :label,
+            :images_only,
+            :created_at
+        )
+    "#
+    .to_string();
+
+    for bucket in buckets.into_iter() {
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":id", bucket.id));
+        q_params.push(text_param(":client_id", bucket.client_id));
+        q_params.push(text_param(":name", bucket.name));
+        q_params.push(text_param(":label", bucket.label));
+        q_params.push(integer_param(
+            ":images_only",
+            match bucket.images_only {
+                true => 1,
+                false => 0,
+            },
+        ));
+        q_params.push(integer_param(":created_at", bucket.created_at));
+
+        state
+            .target_db
+            .any
+            .execute(insert_query.clone(), q_params)
+            .await
+            .context(DbSnafu)?;
+    }
+
+    info!("Migrated {} buckets...", buckets_count);
+
     Ok(())
 }
 
