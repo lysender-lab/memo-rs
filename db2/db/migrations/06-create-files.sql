@@ -8,6 +8,7 @@ CREATE TABLE files (
     is_image INTEGER NOT NULL,
     img_dimension TEXT NOT NULL,
     img_versions TEXT NOT NULL,
+    img_taken_at INTEGER NULL DEFAULT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     FOREIGN KEY (dir_id) REFERENCES dirs(id)
