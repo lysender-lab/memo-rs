@@ -325,14 +325,16 @@ async fn migrate_buckets(state: &State) -> Result<()> {
             name,
             label,
             images_only,
-            created_at
+            created_at,
+            updated_at
         ) VALUES (
             :id,
             :client_id,
             :name,
             :label,
             :images_only,
-            :created_at
+            :created_at,
+            :updated_at
         )
     "#
     .to_string();
@@ -351,6 +353,7 @@ async fn migrate_buckets(state: &State) -> Result<()> {
             },
         ));
         q_params.push(integer_param(":created_at", bucket.created_at));
+        q_params.push(integer_param(":updated_at", bucket.created_at));
 
         state
             .target_db
@@ -551,9 +554,13 @@ async fn migrate_files(state: &State) -> Result<()> {
                 },
             ));
 
-            let img_versions = file
-                .img_versions
-                .map(|versions| versions.into_iter().map(|x| x.to_string()).collect::<Vec<String>>().join(","));
+            let img_versions = file.img_versions.map(|versions| {
+                versions
+                    .into_iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",")
+            });
 
             insert_params.push(opt_text_param(":img_versions", img_versions));
             insert_params.push(opt_integer_param(":img_taken_at", file.img_taken_at));
