@@ -4,6 +4,8 @@ pub mod db;
 pub mod dir;
 pub mod error;
 pub mod file;
+#[cfg(test)]
+mod test;
 pub mod turso_decode;
 pub mod turso_params;
 pub mod user;
