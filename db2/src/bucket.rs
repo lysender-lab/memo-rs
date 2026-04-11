@@ -1,21 +1,16 @@
-use async_trait::async_trait;
-
-use deadpool_diesel::sqlite::Pool;
-use diesel::dsl::count_star;
-use diesel::prelude::*;
-use diesel::{QueryDsl, SelectableHelper};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
+use turso::{Connection, Row};
 use validator::Validate;
 
 use crate::Result;
-use crate::error::{DbInteractSnafu, DbPoolSnafu, DbQuerySnafu};
-use crate::schema::buckets::{self, dsl};
+use crate::turso_decode::{
+    FromTursoRow, collect_count, collect_row, collect_rows, opt_row_text, row_integer, row_text,
+};
+use crate::turso_params::{integer_param, new_query_params, text_param};
 use memo::{bucket::BucketDto, utils::generate_id};
 
-#[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
-#[diesel(table_name = crate::schema::buckets)]
-#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+#[derive(Debug, Clone, Serialize)]
 pub struct Bucket {
     pub id: String,
     pub client_id: String,
@@ -37,8 +32,7 @@ pub struct NewBucket {
     pub images_only: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, Validate, AsChangeset)]
-#[diesel(table_name = crate::schema::buckets)]
+#[derive(Debug, Clone, Deserialize, Validate)]
 pub struct UpdateBucket {
     #[validate(length(min = 1, max = 60))]
     pub label: Option<String>,
@@ -84,37 +78,15 @@ impl From<Bucket> for BucketDto {
 
 pub const MAX_BUCKETS_PER_CLIENT: i32 = 50;
 
-#[async_trait]
-pub trait BucketStore: Send + Sync {
-    async fn list(&self, client_id: &str) -> Result<Vec<BucketDto>>;
-
-    async fn create(&self, client_id: &str, data: &NewBucket) -> Result<BucketDto>;
-
-    async fn get(&self, id: &str) -> Result<Option<BucketDto>>;
-
-    async fn find_by_name(&self, client_id: &str, name: &str) -> Result<Option<BucketDto>>;
-
-    async fn count_by_client(&self, client_id: &str) -> Result<i64>;
-
-    async fn update(&self, id: &str, data: &UpdateBucket) -> Result<bool>;
-
-    async fn delete(&self, id: &str) -> Result<()>;
-
-    async fn test_read(&self) -> Result<()>;
-}
-
 pub struct BucketRepo {
-    db_pool: Pool,
+    db_pool: Connection,
 }
 
 impl BucketRepo {
-    pub fn new(db_pool: Pool) -> Self {
+    pub fn new(db_pool: Connection) -> Self {
         Self { db_pool }
     }
-}
 
-#[async_trait]
-impl BucketStore for BucketRepo {
     async fn list(&self, client_id: &str) -> Result<Vec<BucketDto>> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
@@ -297,75 +269,6 @@ impl BucketStore for BucketRepo {
             table: "buckets".to_string(),
         })?;
 
-        Ok(())
-    }
-}
-
-#[cfg(feature = "test")]
-pub const TEST_BUCKET_ID: &'static str = "0196d1bbc22f79c89cdbc8beced0d2f0";
-
-#[cfg(feature = "test")]
-pub fn create_test_bucket() -> BucketDto {
-    use crate::client::TEST_CLIENT_ID;
-    let today = chrono::Utc::now().timestamp();
-
-    BucketDto {
-        id: TEST_BUCKET_ID.to_string(),
-        client_id: TEST_CLIENT_ID.to_string(),
-        name: "test-bucket".to_string(),
-        label: "test-bucket".to_string(),
-        images_only: true,
-        created_at: today,
-    }
-}
-
-#[cfg(feature = "test")]
-pub struct BucketTestRepo {}
-
-#[cfg(feature = "test")]
-#[async_trait]
-impl BucketStore for BucketTestRepo {
-    async fn list(&self, client_id: &str) -> Result<Vec<BucketDto>> {
-        let bucket = create_test_bucket();
-        let buckets = vec![bucket];
-        let filtered = buckets
-            .into_iter()
-            .filter(|x| x.client_id.as_str() == client_id)
-            .collect();
-        Ok(filtered)
-    }
-
-    async fn create(&self, _client_id: &str, _data: &NewBucket) -> Result<BucketDto> {
-        Err("No supported".into())
-    }
-
-    async fn get(&self, id: &str) -> Result<Option<BucketDto>> {
-        let bucket = create_test_bucket();
-        let buckets = vec![bucket];
-        let found = buckets.into_iter().find(|x| x.id.as_str() == id);
-        Ok(found)
-    }
-
-    async fn find_by_name(&self, client_id: &str, name: &str) -> Result<Option<BucketDto>> {
-        let buckets = self.list(client_id).await?;
-        let found = buckets.into_iter().find(|x| x.name.as_str() == name);
-        Ok(found)
-    }
-
-    async fn count_by_client(&self, client_id: &str) -> Result<i64> {
-        let buckets = self.list(client_id).await?;
-        Ok(buckets.len() as i64)
-    }
-
-    async fn update(&self, _id: &str, _data: &UpdateBucket) -> Result<bool> {
-        Ok(false)
-    }
-
-    async fn delete(&self, _id: &str) -> Result<()> {
-        Ok(())
-    }
-
-    async fn test_read(&self) -> Result<()> {
         Ok(())
     }
 }

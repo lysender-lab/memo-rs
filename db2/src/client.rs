@@ -119,9 +119,7 @@ impl ClientRepo {
     pub fn new(db_pool: Connection) -> Self {
         Self { db_pool }
     }
-}
 
-impl ClientRepo {
     pub async fn list(&self, client_id: Option<String>) -> Result<Vec<ClientDto>> {
         let mut query = r#"
             SELECT
@@ -149,7 +147,7 @@ impl ClientRepo {
         Ok(items)
     }
 
-    async fn find_admin(&self) -> Result<Option<ClientDto>> {
+    pub async fn find_admin(&self) -> Result<Option<ClientDto>> {
         let query = r#"
             SELECT
                 id,
@@ -170,7 +168,7 @@ impl ClientRepo {
         Ok(dto)
     }
 
-    async fn create(&self, data: NewClient, admin: bool) -> Result<ClientDto> {
+    pub async fn create(&self, data: NewClient, admin: bool) -> Result<ClientDto> {
         let today = chrono::Utc::now().timestamp();
         let admin: Option<i64> = if admin { Some(1) } else { Some(0) };
 
@@ -220,7 +218,7 @@ impl ClientRepo {
         })
     }
 
-    async fn get(&self, id: &str) -> Result<Option<ClientDto>> {
+    pub async fn get(&self, id: &str) -> Result<Option<ClientDto>> {
         let query = r#"
             SELECT
                 id,
@@ -244,7 +242,7 @@ impl ClientRepo {
         Ok(dto)
     }
 
-    async fn update(&self, id: &str, data: UpdateClient) -> Result<bool> {
+    pub async fn update(&self, id: &str, data: UpdateClient) -> Result<bool> {
         if data.name.is_none() && data.default_bucket_id.is_none() && data.status.is_none() {
             return Ok(false);
         }
@@ -278,7 +276,7 @@ impl ClientRepo {
         Ok(affected > 0)
     }
 
-    async fn find_by_name(&self, name: &str) -> Result<Option<ClientDto>> {
+    pub async fn find_by_name(&self, name: &str) -> Result<Option<ClientDto>> {
         let query = r#"
             SELECT
                 id,
@@ -302,7 +300,7 @@ impl ClientRepo {
         Ok(dto)
     }
 
-    async fn count(&self) -> Result<i64> {
+    pub async fn count(&self) -> Result<i64> {
         let query = r#"
             SELECT COUNT(*) AS total_count
             FROM clients
