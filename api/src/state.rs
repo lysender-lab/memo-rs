@@ -23,7 +23,7 @@ pub async fn create_app_state(config: &Config) -> Result<AppState> {
         .await
         .context(StorageSnafu)?;
 
-    let db_file = config.db.dir.join("default").join("yaas.db");
+    let db_file = config.db.dir.join("default").join("memo.db");
     let db = create_db_mapper(db_file.as_path()).await.context(DbSnafu)?;
 
     Ok(AppState {
