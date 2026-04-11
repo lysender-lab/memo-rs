@@ -4,8 +4,9 @@ use turso::{Connection, Row};
 use validator::Validate;
 
 use crate::Result;
+use crate::error::{DbPrepareSnafu, DbStatementSnafu};
 use crate::turso_decode::{
-    FromTursoRow, collect_count, collect_row, collect_rows, opt_row_text, row_integer, row_text,
+    FromTursoRow, collect_count, collect_row, collect_rows, row_integer, row_text,
 };
 use crate::turso_params::{integer_param, new_query_params, text_param};
 use memo::{bucket::BucketDto, utils::generate_id};
@@ -76,6 +77,22 @@ impl From<Bucket> for BucketDto {
     }
 }
 
+impl FromTursoRow for BucketDto {
+    fn from_row(row: &Row) -> Result<Self> {
+        Ok(Self {
+            id: row_text(row, 0)?,
+            client_id: row_text(row, 1)?,
+            name: row_text(row, 2)?,
+            label: row_text(row, 3)?,
+            images_only: match row_integer(row, 4)? {
+                1 => true,
+                _ => false,
+            },
+            created_at: row_integer(row, 5)?,
+        })
+    }
+}
+
 pub const MAX_BUCKETS_PER_CLIENT: i32 = 50;
 
 pub struct BucketRepo {
@@ -88,186 +105,192 @@ impl BucketRepo {
     }
 
     pub async fn list(&self, client_id: &str) -> Result<Vec<BucketDto>> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+        let query = r#"
+            SELECT
+                id,
+                client_id,
+                name,
+                label,
+                images_only,
+                created_at
+            FROM buckets
+            WHERE client_id = :client_id
+            ORDER BY name ASC
+        "#
+        .to_string();
 
-        let client_id = client_id.to_string();
-        let select_res = db
-            .interact(move |conn| {
-                dsl::buckets
-                    .filter(dsl::client_id.eq(&client_id))
-                    .select(Bucket::as_select())
-                    .order(dsl::name.asc())
-                    .load::<Bucket>(conn)
-            })
-            .await
-            .context(DbInteractSnafu)?;
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":client_id", client_id.to_owned()));
 
-        let items = select_res.context(DbQuerySnafu {
-            table: "buckets".to_string(),
-        })?;
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let mut rows = stmt.query(q_params).await.context(DbStatementSnafu)?;
+        let items: Vec<BucketDto> = collect_rows(&mut rows).await?;
 
-        let dtos: Vec<BucketDto> = items.into_iter().map(|item| item.into()).collect();
-        Ok(dtos)
+        Ok(items)
     }
 
     pub async fn create(&self, client_id: &str, data: &NewBucket) -> Result<BucketDto> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-        let data_copy = data.clone();
         let today = chrono::Utc::now().timestamp();
-        let bucket = Bucket {
-            id: generate_id(),
-            client_id: client_id.to_string(),
-            name: data_copy.name,
-            label: data_copy.label,
-            images_only: if data_copy.images_only { 1 } else { 0 },
+
+        let query = r#"
+            INSERT INTO buckets
+            (
+                id,
+                client_id,
+                name,
+                label,
+                images_only,
+                created_at
+            )
+            VALUES
+            (
+                :id,
+                :client_id,
+                :name,
+                :label,
+                :images_only,
+                :created_at
+            )
+        "#;
+
+        let id = generate_id();
+        let images_only: i64 = if data.images_only { 1 } else { 0 };
+        let mut params = new_query_params();
+        params.push(text_param(":id", id.clone()));
+        params.push(text_param(":client_id", client_id.to_owned()));
+        params.push(text_param(":name", data.name.clone()));
+        params.push(text_param(":label", data.label.clone()));
+        params.push(integer_param(":images_only", images_only));
+        params.push(integer_param(":created_at", today));
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        stmt.execute(params).await.context(DbStatementSnafu)?;
+
+        Ok(BucketDto {
+            id,
+            client_id: client_id.to_owned(),
+            name: data.name.clone(),
+            label: data.label.clone(),
+            images_only: data.images_only,
             created_at: today,
-        };
-
-        let bucket_copy = bucket.clone();
-        let insert_res = db
-            .interact(move |conn| {
-                diesel::insert_into(buckets::table)
-                    .values(&bucket_copy)
-                    .execute(conn)
-            })
-            .await
-            .context(DbInteractSnafu)?;
-
-        let _ = insert_res.context(DbQuerySnafu {
-            table: "buckets".to_string(),
-        })?;
-
-        Ok(bucket.into())
+        })
     }
 
     pub async fn get(&self, id: &str) -> Result<Option<BucketDto>> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+        let query = r#"
+            SELECT
+                id,
+                client_id,
+                name,
+                label,
+                images_only,
+                created_at
+            FROM buckets
+            WHERE id = :id
+            LIMIT 1
+        "#
+        .to_string();
 
-        let bid = id.to_string();
-        let select_res = db
-            .interact(move |conn| {
-                dsl::buckets
-                    .find(bid)
-                    .select(Bucket::as_select())
-                    .first::<Bucket>(conn)
-                    .optional()
-            })
-            .await
-            .context(DbInteractSnafu)?;
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":id", id.to_owned()));
 
-        let item = select_res.context(DbQuerySnafu {
-            table: "buckets".to_string(),
-        })?;
-
-        Ok(item.map(|item| item.into()))
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let row_result = stmt.query_row(q_params).await;
+        let dto: Option<BucketDto> = collect_row(row_result)?;
+        Ok(dto)
     }
 
     pub async fn find_by_name(&self, client_id: &str, name: &str) -> Result<Option<BucketDto>> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+        let query = r#"
+            SELECT
+                id,
+                client_id,
+                name,
+                label,
+                images_only,
+                created_at
+            FROM buckets
+            WHERE client_id = :client_id AND name = :name
+            LIMIT 1
+        "#
+        .to_string();
 
-        let cid = client_id.to_string();
-        let name_copy = name.to_string();
-        let select_res = db
-            .interact(move |conn| {
-                dsl::buckets
-                    .filter(dsl::client_id.eq(cid.as_str()))
-                    .filter(dsl::name.eq(name_copy.as_str()))
-                    .select(Bucket::as_select())
-                    .first::<Bucket>(conn)
-                    .optional()
-            })
-            .await
-            .context(DbInteractSnafu)?;
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":client_id", client_id.to_owned()));
+        q_params.push(text_param(":name", name.to_owned()));
 
-        let item = select_res.context(DbQuerySnafu {
-            table: "buckets".to_string(),
-        })?;
-
-        Ok(item.map(|item| item.into()))
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let row_result = stmt.query_row(q_params).await;
+        let dto: Option<BucketDto> = collect_row(row_result)?;
+        Ok(dto)
     }
 
     pub async fn count_by_client(&self, client_id: &str) -> Result<i64> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+        let query = r#"
+            SELECT COUNT(*) AS total_count
+            FROM buckets
+            WHERE client_id = :client_id
+        "#
+        .to_string();
 
-        let cid = client_id.to_string();
-        let count_res = db
-            .interact(move |conn| {
-                dsl::buckets
-                    .filter(dsl::client_id.eq(cid.as_str()))
-                    .select(count_star())
-                    .get_result::<i64>(conn)
-            })
-            .await
-            .context(DbInteractSnafu)?;
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":client_id", client_id.to_owned()));
 
-        let count = count_res.context(DbQuerySnafu {
-            table: "buckets".to_string(),
-        })?;
-
-        Ok(count)
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let row_result = stmt.query_row(q_params).await;
+        collect_count(row_result)
     }
 
     pub async fn update(&self, id: &str, data: &UpdateBucket) -> Result<bool> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-
         // Do not update if there is no data to update
-        if data.label.is_none() {
+        let Some(label) = data.label.clone() else {
             return Ok(false);
-        }
+        };
 
-        let data_copy = data.clone();
-        let bid = id.to_string();
-        let update_res = db
-            .interact(move |conn| {
-                diesel::update(dsl::buckets)
-                    .filter(dsl::id.eq(bid.as_str()))
-                    .set(data_copy)
-                    .execute(conn)
-            })
-            .await
-            .context(DbInteractSnafu)?;
+        let query = r#"
+            UPDATE buckets
+            SET label = :label
+            WHERE id = :id
+        "#;
 
-        let item = update_res.context(DbQuerySnafu {
-            table: "buckets".to_string(),
-        })?;
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":label", label));
+        q_params.push(text_param(":id", id.to_owned()));
 
-        Ok(item > 0)
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let affected = stmt.execute(q_params).await.context(DbStatementSnafu)?;
+
+        Ok(affected > 0)
     }
 
     pub async fn delete(&self, id: &str) -> Result<()> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+        let query = "DELETE FROM buckets WHERE id = :id".to_string();
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":id", id.to_owned()));
 
-        let bucket_id = id.to_string();
-        let delete_res = db
-            .interact(move |conn| {
-                diesel::delete(dsl::buckets.filter(dsl::id.eq(bucket_id.as_str()))).execute(conn)
-            })
-            .await
-            .context(DbInteractSnafu)?;
-
-        let _ = delete_res.context(DbQuerySnafu {
-            table: "buckets".to_string(),
-        })?;
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        stmt.execute(q_params).await.context(DbStatementSnafu)?;
 
         Ok(())
     }
 
     async fn test_read(&self) -> Result<()> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+        let query = r#"
+            SELECT
+                id,
+                client_id,
+                name,
+                label,
+                images_only,
+                created_at
+            FROM buckets
+            LIMIT 1
+        "#
+        .to_string();
 
-        let selected_res = db
-            .interact(move |conn| {
-                dsl::buckets
-                    .select(Bucket::as_select())
-                    .first::<Bucket>(conn)
-                    .optional()
-            })
-            .await
-            .context(DbInteractSnafu)?;
-
-        let _ = selected_res.context(DbQuerySnafu {
-            table: "buckets".to_string(),
-        })?;
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let row_result = stmt.query_row({}).await;
+        let _: Option<BucketDto> = collect_row(row_result)?;
 
         Ok(())
     }

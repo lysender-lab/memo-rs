@@ -3,6 +3,7 @@ use std::path::Path;
 use snafu::ResultExt;
 use turso::{Builder, Connection};
 
+use crate::bucket::BucketRepo;
 use crate::client::ClientRepo;
 use crate::error::{DbBuilderSnafu, DbConnectSnafu};
 
@@ -24,12 +25,14 @@ pub async fn create_db_pool(filename: &Path) -> Result<Connection> {
 }
 
 pub struct DbMapper {
+    pub buckets: BucketRepo,
     pub clients: ClientRepo,
 }
 
 pub async fn create_db_mapper(filename: &Path) -> Result<DbMapper> {
     let pool = create_db_pool(filename).await?;
     Ok(DbMapper {
+        buckets: BucketRepo::new(pool.clone()),
         clients: ClientRepo::new(pool.clone()),
     })
 }
