@@ -5,6 +5,7 @@ use db2::turso_decode::{FromTursoRow, row_integer, row_text};
 use db2::turso_params::{integer_param, new_query_params, opt_text_param, text_param};
 use memo::bucket::BucketDto;
 use memo::client::ClientDto;
+use memo::dir::DirDto;
 use snafu::ResultExt;
 use tracing::info;
 use turso::Row;
@@ -362,6 +363,97 @@ async fn migrate_buckets(state: &State) -> Result<()> {
 }
 
 async fn migrate_dirs(state: &State) -> Result<()> {
+    info!("Migrating dirs...");
+
+    let mut migrated_count: usize = 0;
+    let limit: i64 = 100;
+    let mut offset: i64 = 0;
+
+    let insert_query = r#"
+        INSERT INTO dirs (
+            id,
+            bucket_id,
+            name,
+            label,
+            file_count,
+            created_at,
+            updated_at
+        ) VALUES (
+            :id,
+            :bucket_id,
+            :name,
+            :label,
+            :file_count,
+            :created_at,
+            :updated_at
+        )
+    "#
+    .to_string();
+
+    loop {
+        let query = r#"
+            SELECT
+                id,
+                bucket_id,
+                name,
+                label,
+                file_count,
+                created_at,
+                updated_at
+            FROM
+                dirs
+            ORDER BY
+                created_at ASC,
+                id ASC
+            LIMIT :limit OFFSET :offset
+        "#
+        .to_string();
+
+        let mut q_params = new_query_params();
+        q_params.push(integer_param(":limit", limit));
+        q_params.push(integer_param(":offset", offset));
+
+        let dirs: Vec<DirDto> = state
+            .source_db
+            .any
+            .query(query, q_params)
+            .await
+            .context(DbSnafu)?;
+
+        let page_len = dirs.len();
+        if page_len == 0 {
+            break;
+        }
+
+        for dir in dirs.into_iter() {
+            let mut insert_params = new_query_params();
+            insert_params.push(text_param(":id", dir.id));
+            insert_params.push(text_param(":bucket_id", dir.bucket_id));
+            insert_params.push(text_param(":name", dir.name));
+            insert_params.push(text_param(":label", dir.label));
+            insert_params.push(integer_param(":file_count", dir.file_count as i64));
+            insert_params.push(integer_param(":created_at", dir.created_at));
+            insert_params.push(integer_param(":updated_at", dir.updated_at));
+
+            state
+                .target_db
+                .any
+                .execute(insert_query.clone(), insert_params)
+                .await
+                .context(DbSnafu)?;
+        }
+
+        migrated_count += page_len;
+
+        if page_len < limit as usize {
+            break;
+        }
+
+        offset += limit;
+    }
+
+    info!("Migrated {} dirs...", migrated_count);
+
     Ok(())
 }
 
