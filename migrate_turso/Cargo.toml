@@ -1,5 +1,5 @@
 [package]
-name = "api"
+name = "migrate_turso"
 version = "0.2.0"
 edition = "2024"
 
@@ -27,6 +27,7 @@ tracing-subscriber.workspace = true
 validator.workspace = true
 db = { path = "../db" }
 memo = { path = "../memo" }
+migrate_turso = { path = "../migrate_turso" }
 password = { path = "../password" }
 storage = { path = "../storage" }
 
