@@ -19,7 +19,7 @@ const MIGRATIONS: &[&str] = &[
 ];
 
 pub struct TestCtx {
-    pub db_dir: PathBuf,
+    db_dir: PathBuf,
     pub db: Arc<DbMapper>,
 }
 

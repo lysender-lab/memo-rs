@@ -11,9 +11,10 @@ CREATE TABLE files (
     img_taken_at INTEGER NULL DEFAULT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
+    deleted_at INTEGER NULL DEFAULT NULL,
     FOREIGN KEY (dir_id) REFERENCES dirs(id)
 ) STRICT;
 
 CREATE INDEX idx_files_dir_id ON files(dir_id);
-CREATE UNIQUE INDEX idx_files_dir_id_name ON files(dir_id, name);
-CREATE INDEX idx_files_dir_id_created_at ON files(dir_id, created_at);
+CREATE UNIQUE INDEX idx_files_dir_id_name_deleted_at ON files(dir_id, name, deleted_at);
+CREATE INDEX idx_files_dir_id_created_at_deleted_at ON files(dir_id, created_at, deleted_at);
