@@ -27,7 +27,7 @@ tracing-subscriber.workspace = true
 validator.workspace = true
 db = { path = "../db" }
 memo = { path = "../memo" }
-migrate_turso = { path = "../migrate_turso" }
+db2 = { path = "../db2" }
 password = { path = "../password" }
 storage = { path = "../storage" }
 

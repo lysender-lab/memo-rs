@@ -3,6 +3,7 @@ use std::path::Path;
 use snafu::ResultExt;
 use turso::{Builder, Connection};
 
+use crate::any::AnyRepo;
 use crate::bucket::BucketRepo;
 use crate::client::ClientRepo;
 use crate::dir::DirRepo;
@@ -28,6 +29,7 @@ pub struct DbMapper {
     pub dirs: DirRepo,
     pub files: FileRepo,
     pub users: UserRepo,
+    pub any: AnyRepo,
 }
 
 pub async fn create_db_mapper(filename: &Path) -> Result<DbMapper> {
@@ -38,5 +40,6 @@ pub async fn create_db_mapper(filename: &Path) -> Result<DbMapper> {
         dirs: DirRepo::new(pool.clone()),
         files: FileRepo::new(pool.clone()),
         users: UserRepo::new(pool.clone()),
+        any: AnyRepo::new(pool.clone()),
     })
 }
