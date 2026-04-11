@@ -1,4 +1,3 @@
-use deadpool_diesel::{InteractError, PoolError};
 use memo::role::InvalidRolesError;
 use snafu::Snafu;
 
@@ -7,17 +6,29 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
 pub enum Error {
-    #[snafu(display("Error getting db connection: {}", source))]
-    DbPool { source: PoolError },
+    #[snafu(display("{}", source))]
+    DbBuilder { source: turso::Error },
 
-    #[snafu(display("Error using the db connection: {}", source))]
-    DbInteract { source: InteractError },
+    #[snafu(display("{}", source))]
+    DbConnect { source: turso::Error },
 
-    #[snafu(display("Error querying {}: {}", table, source))]
-    DbQuery {
-        table: String,
-        source: diesel::result::Error,
-    },
+    #[snafu(display("{}", source))]
+    DbExecute { source: turso::Error },
+
+    #[snafu(display("{}", source))]
+    DbPrepare { source: turso::Error },
+
+    #[snafu(display("{}", source))]
+    DbStatement { source: turso::Error },
+
+    #[snafu(display("{}", source))]
+    DbRow { source: turso::Error },
+
+    #[snafu(display("{}", source))]
+    DbValue { source: turso::Error },
+
+    #[snafu(display("{}", source))]
+    DbTransaction { source: turso::Error },
 
     #[snafu(display("{}", msg))]
     Validation { msg: String },

@@ -5,7 +5,7 @@ CREATE TABLE buckets (
     label TEXT NOT NULL,
     images_only INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
+    updated_at INTEGER NULL DEFAULT NULL,
     deleted_at INTEGER NULL DEFAULT NULL,
     FOREIGN KEY (client_id) REFERENCES clients(id)
 ) STRICT;
