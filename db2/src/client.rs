@@ -7,7 +7,8 @@ use validator::Validate;
 use crate::Result;
 use crate::error::{DbPrepareSnafu, DbStatementSnafu};
 use crate::turso_decode::{
-    FromTursoRow, collect_count, collect_row, collect_rows, opt_row_text, row_integer, row_text,
+    FromTursoRow, collect_count, collect_row, collect_rows, opt_row_integer, opt_row_text,
+    row_integer, row_text,
 };
 use crate::turso_params::{
     integer_param, new_query_params, opt_integer_param, opt_text_param, text_param,
@@ -97,13 +98,13 @@ impl FromTursoRow for ClientDto {
         Ok(Self {
             id: row_text(row, 0)?,
             name: row_text(row, 1)?,
-            default_bucket_id: opt_row_text(row, 4)?,
-            status: row_text(row, 2)?,
-            admin: match row_integer(row, 3)? {
+            default_bucket_id: opt_row_text(row, 2)?,
+            status: row_text(row, 3)?,
+            admin: match row_integer(row, 4)? {
                 1 => true,
                 _ => false,
             },
-            created_at: row_integer(row, 6)?,
+            created_at: row_integer(row, 5)?,
         })
     }
 }
@@ -137,7 +138,7 @@ impl ClientRepo {
 
         if let Some(cid) = client_id {
             query.push_str(" WHERE id = :id");
-            q_params.push(text_param("id", cid));
+            q_params.push(text_param(":id", cid));
         }
 
         let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;

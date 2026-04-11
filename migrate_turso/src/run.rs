@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use db2::create_db_mapper;
+use db2::turso_params::{integer_param, new_query_params, opt_text_param, text_param};
+use memo::client::ClientDto;
 use snafu::ResultExt;
 use tracing::info;
 
@@ -110,6 +112,77 @@ async fn check_target_tables(state: &State) -> Result<()> {
 }
 
 async fn migrate_clients(state: &State) -> Result<()> {
+    info!("Migrating clients...");
+    // There are only a couple of clients, so just fetch them all
+    let clients_query = r#"
+        SELECT
+            id,
+            name,
+            default_bucket_id,
+            status,
+            admin,
+            created_at
+        FROM
+            clients
+    "#
+    .to_string();
+
+    let clients: Vec<ClientDto> = state
+        .source_db
+        .any
+        .query(clients_query, Vec::new())
+        .await
+        .context(DbSnafu)?;
+
+    let clients_count = clients.len();
+
+    let insert_query = r#"
+        INSERT INTO clients (
+            id,
+            name,
+            default_bucket_id,
+            status,
+            admin,
+            created_at
+        ) VALUES (
+            :id,
+            :name,
+            :default_bucket_id,
+            :status,
+            :admin,
+            :created_at
+        )
+    "#
+    .to_string();
+
+    for client in clients.into_iter() {
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":id", client.id));
+        q_params.push(text_param(":name", client.name));
+        q_params.push(opt_text_param(
+            ":default_bucket_id",
+            client.default_bucket_id,
+        ));
+        q_params.push(text_param(":status", client.status));
+        q_params.push(integer_param(
+            ":admin",
+            match client.admin {
+                true => 1,
+                false => 0,
+            },
+        ));
+        q_params.push(integer_param(":created_at", client.created_at));
+
+        state
+            .target_db
+            .any
+            .execute(insert_query.clone(), q_params)
+            .await
+            .context(DbSnafu)?;
+    }
+
+    info!("Migrated {} clients...", clients_count);
+
     Ok(())
 }
 
