@@ -6,7 +6,7 @@ use snafu::ResultExt;
 use tracing::error;
 
 use crate::{Result, config::Config, error::StorageSnafu};
-use db::DbMapper;
+use db2::DbMapper;
 use storage::storage::{create_storage_client, test_list_hmac_keys};
 
 #[derive(Serialize)]

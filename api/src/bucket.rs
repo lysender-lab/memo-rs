@@ -4,7 +4,7 @@ use validator::Validate;
 use crate::Result;
 use crate::error::{DbSnafu, MaxBucketsReachedSnafu, StorageSnafu, ValidationSnafu};
 use crate::state::AppState;
-use db::bucket::{MAX_BUCKETS_PER_CLIENT, NewBucket, UpdateBucket};
+use db2::bucket::{MAX_BUCKETS_PER_CLIENT, NewBucket, UpdateBucket};
 use memo::{bucket::BucketDto, validators::flatten_errors};
 
 pub async fn create_bucket(

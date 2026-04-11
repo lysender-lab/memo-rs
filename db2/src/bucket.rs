@@ -293,7 +293,7 @@ impl BucketRepo {
         Ok(())
     }
 
-    async fn test_read(&self) -> Result<()> {
+    pub async fn test_read(&self) -> Result<()> {
         let query = r#"
             SELECT
                 id,

@@ -313,7 +313,7 @@ impl ClientRepo {
         collect_count(row_result)
     }
 
-    async fn delete(&self, id: &str) -> Result<()> {
+    pub async fn delete(&self, id: &str) -> Result<()> {
         let query = "DELETE clients WHERE id = :id".to_string();
         let mut q_params = new_query_params();
         q_params.push(text_param(":id", id.to_owned()));

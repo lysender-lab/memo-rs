@@ -4,7 +4,7 @@ use validator::Validate;
 use crate::Result;
 use crate::error::{DbSnafu, MaxDirsReachedSnafu, ValidationSnafu};
 use crate::state::AppState;
-use db::dir::{MAX_DIRS, NewDir, UpdateDir};
+use db2::dir::{MAX_DIRS, NewDir, UpdateDir};
 use memo::dir::DirDto;
 use memo::validators::flatten_errors;
 

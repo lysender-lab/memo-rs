@@ -6,7 +6,7 @@ use crate::error::{
 };
 use crate::state::AppState;
 use crate::{Error, Result};
-use db::user::{
+use db2::user::{
     ChangeCurrentPassword, MAX_USERS_PER_CLIENT, NewUser, UpdateUserPassword, UpdateUserRoles,
     UpdateUserStatus,
 };

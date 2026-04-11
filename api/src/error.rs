@@ -19,7 +19,7 @@ pub enum Error {
     Config { msg: String },
 
     #[snafu(display("{}", source))]
-    Db { source: db::Error },
+    Db { source: db2::Error },
 
     #[snafu(display("{} - {}", msg, source))]
     PasswordPrompt { msg: String, source: std::io::Error },
