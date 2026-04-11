@@ -36,4 +36,8 @@ async fn main() {
         }
         process::exit(1);
     }
+
+    // Create schema first before running the migration
+    // For each tables from the original database, copy each row to the new database
+    // from sqlite (diesel) to tursodb
 }
