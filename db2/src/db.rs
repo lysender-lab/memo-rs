@@ -5,6 +5,7 @@ use turso::{Builder, Connection};
 
 use crate::bucket::BucketRepo;
 use crate::client::ClientRepo;
+use crate::dir::DirRepo;
 use crate::error::{DbBuilderSnafu, DbConnectSnafu};
 use crate::user::UserRepo;
 
@@ -28,6 +29,7 @@ pub async fn create_db_pool(filename: &Path) -> Result<Connection> {
 pub struct DbMapper {
     pub buckets: BucketRepo,
     pub clients: ClientRepo,
+    pub dirs: DirRepo,
     pub users: UserRepo,
 }
 
@@ -36,6 +38,7 @@ pub async fn create_db_mapper(filename: &Path) -> Result<DbMapper> {
     Ok(DbMapper {
         buckets: BucketRepo::new(pool.clone()),
         clients: ClientRepo::new(pool.clone()),
+        dirs: DirRepo::new(pool.clone()),
         users: UserRepo::new(pool.clone()),
     })
 }
