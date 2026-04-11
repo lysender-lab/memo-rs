@@ -87,7 +87,7 @@ impl BucketRepo {
         Self { db_pool }
     }
 
-    async fn list(&self, client_id: &str) -> Result<Vec<BucketDto>> {
+    pub async fn list(&self, client_id: &str) -> Result<Vec<BucketDto>> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let client_id = client_id.to_string();
@@ -110,7 +110,7 @@ impl BucketRepo {
         Ok(dtos)
     }
 
-    async fn create(&self, client_id: &str, data: &NewBucket) -> Result<BucketDto> {
+    pub async fn create(&self, client_id: &str, data: &NewBucket) -> Result<BucketDto> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
         let data_copy = data.clone();
         let today = chrono::Utc::now().timestamp();
@@ -140,7 +140,7 @@ impl BucketRepo {
         Ok(bucket.into())
     }
 
-    async fn get(&self, id: &str) -> Result<Option<BucketDto>> {
+    pub async fn get(&self, id: &str) -> Result<Option<BucketDto>> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let bid = id.to_string();
@@ -162,7 +162,7 @@ impl BucketRepo {
         Ok(item.map(|item| item.into()))
     }
 
-    async fn find_by_name(&self, client_id: &str, name: &str) -> Result<Option<BucketDto>> {
+    pub async fn find_by_name(&self, client_id: &str, name: &str) -> Result<Option<BucketDto>> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let cid = client_id.to_string();
@@ -186,7 +186,7 @@ impl BucketRepo {
         Ok(item.map(|item| item.into()))
     }
 
-    async fn count_by_client(&self, client_id: &str) -> Result<i64> {
+    pub async fn count_by_client(&self, client_id: &str) -> Result<i64> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let cid = client_id.to_string();
@@ -207,7 +207,7 @@ impl BucketRepo {
         Ok(count)
     }
 
-    async fn update(&self, id: &str, data: &UpdateBucket) -> Result<bool> {
+    pub async fn update(&self, id: &str, data: &UpdateBucket) -> Result<bool> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         // Do not update if there is no data to update
@@ -234,7 +234,7 @@ impl BucketRepo {
         Ok(item > 0)
     }
 
-    async fn delete(&self, id: &str) -> Result<()> {
+    pub async fn delete(&self, id: &str) -> Result<()> {
         let db = self.db_pool.get().await.context(DbPoolSnafu)?;
 
         let bucket_id = id.to_string();
