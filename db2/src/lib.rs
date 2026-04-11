@@ -4,7 +4,6 @@ pub mod db;
 pub mod dir;
 pub mod error;
 pub mod file;
-pub mod schema;
 pub mod turso_decode;
 pub mod turso_params;
 pub mod user;

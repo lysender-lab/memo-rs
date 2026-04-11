@@ -7,6 +7,7 @@ use crate::bucket::BucketRepo;
 use crate::client::ClientRepo;
 use crate::dir::DirRepo;
 use crate::error::{DbBuilderSnafu, DbConnectSnafu};
+use crate::file::FileRepo;
 use crate::user::UserRepo;
 
 use crate::Result;
@@ -30,6 +31,7 @@ pub struct DbMapper {
     pub buckets: BucketRepo,
     pub clients: ClientRepo,
     pub dirs: DirRepo,
+    pub files: FileRepo,
     pub users: UserRepo,
 }
 
@@ -39,6 +41,7 @@ pub async fn create_db_mapper(filename: &Path) -> Result<DbMapper> {
         buckets: BucketRepo::new(pool.clone()),
         clients: ClientRepo::new(pool.clone()),
         dirs: DirRepo::new(pool.clone()),
+        files: FileRepo::new(pool.clone()),
         users: UserRepo::new(pool.clone()),
     })
 }
