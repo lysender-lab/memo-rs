@@ -1,15 +1,19 @@
-use async_trait::async_trait;
 use deadpool_diesel::sqlite::Pool;
 use diesel::dsl::count_star;
 use diesel::prelude::*;
 use diesel::{QueryDsl, SelectableHelper};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
+use turso::{Connection, Row};
 use validator::Validate;
 
 use crate::Result;
-use crate::error::{DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, ValidationSnafu};
+use crate::error::{DbPrepareSnafu, DbStatementSnafu};
 use crate::schema::dirs::{self, dsl};
+use crate::turso_decode::{
+    FromTursoRow, collect_count, collect_row, collect_rows, row_integer, row_text,
+};
+use crate::turso_params::{integer_param, new_query_params, text_param};
 use memo::dir::DirDto;
 use memo::pagination::Paginated;
 use memo::utils::generate_id;
@@ -89,25 +93,6 @@ pub struct ListDirsParams {
 
 pub const MAX_DIRS: i32 = 1000;
 pub const MAX_PER_PAGE: i32 = 50;
-
-#[async_trait]
-pub trait DirStore: Send + Sync {
-    async fn list(&self, bucket_id: &str, params: &ListDirsParams) -> Result<Paginated<DirDto>>;
-
-    async fn count(&self, bucket_id: &str) -> Result<i64>;
-
-    async fn create(&self, bucket_id: &str, data: &NewDir) -> Result<DirDto>;
-
-    async fn get(&self, id: &str) -> Result<Option<DirDto>>;
-
-    async fn find_by_name(&self, bucket_id: &str, name: &str) -> Result<Option<DirDto>>;
-
-    async fn update(&self, id: &str, data: &UpdateDir) -> Result<bool>;
-
-    async fn update_timestamp(&self, id: &str, timestamp: i64) -> Result<bool>;
-
-    async fn delete(&self, id: &str) -> Result<()>;
-}
 
 pub struct DirRepo {
     db_pool: Pool,
