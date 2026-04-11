@@ -11,6 +11,7 @@ snafu.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+turso.workspace = true
 validator.workspace = true
 memo = { path = "../memo" }
 db2 = { path = "../db2" }

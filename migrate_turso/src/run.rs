@@ -1,14 +1,42 @@
 use std::sync::Arc;
 
 use db2::create_db_mapper;
+use db2::turso_decode::{FromTursoRow, row_integer, row_text};
 use db2::turso_params::{integer_param, new_query_params, opt_text_param, text_param};
 use memo::client::ClientDto;
 use snafu::ResultExt;
 use tracing::info;
+use turso::Row;
 
 use crate::Result;
 use crate::config::Config;
 use crate::error::DbSnafu;
+
+struct LegacyUserRow {
+    id: String,
+    client_id: String,
+    username: String,
+    password: String,
+    status: String,
+    roles: String,
+    created_at: i64,
+    updated_at: i64,
+}
+
+impl FromTursoRow for LegacyUserRow {
+    fn from_row(row: &Row) -> db2::Result<Self> {
+        Ok(Self {
+            id: row_text(row, 0)?,
+            client_id: row_text(row, 1)?,
+            username: row_text(row, 2)?,
+            password: row_text(row, 3)?,
+            status: row_text(row, 4)?,
+            roles: row_text(row, 5)?,
+            created_at: row_integer(row, 6)?,
+            updated_at: row_integer(row, 7)?,
+        })
+    }
+}
 
 pub struct State {
     source_db: Arc<db2::DbMapper>,
@@ -187,6 +215,76 @@ async fn migrate_clients(state: &State) -> Result<()> {
 }
 
 async fn migrate_users(state: &State) -> Result<()> {
+    info!("Migrating users...");
+
+    let users_query = r#"
+        SELECT
+            id,
+            client_id,
+            username,
+            password,
+            status,
+            roles,
+            created_at,
+            updated_at
+        FROM
+            users
+    "#
+    .to_string();
+
+    let users: Vec<LegacyUserRow> = state
+        .source_db
+        .any
+        .query(users_query, Vec::new())
+        .await
+        .context(DbSnafu)?;
+
+    let users_count = users.len();
+
+    let insert_query = r#"
+        INSERT INTO users (
+            id,
+            client_id,
+            username,
+            password,
+            status,
+            roles,
+            created_at,
+            updated_at
+        ) VALUES (
+            :id,
+            :client_id,
+            :username,
+            :password,
+            :status,
+            :roles,
+            :created_at,
+            :updated_at
+        )
+    "#
+    .to_string();
+
+    for user in users.into_iter() {
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":id", user.id));
+        q_params.push(text_param(":client_id", user.client_id));
+        q_params.push(text_param(":username", user.username));
+        q_params.push(text_param(":password", user.password));
+        q_params.push(text_param(":status", user.status));
+        q_params.push(text_param(":roles", user.roles));
+        q_params.push(integer_param(":created_at", user.created_at));
+        q_params.push(integer_param(":updated_at", user.updated_at));
+
+        state
+            .target_db
+            .any
+            .execute(insert_query.clone(), q_params)
+            .await
+            .context(DbSnafu)?;
+    }
+
+    info!("Migrated {} users...", users_count);
+
     Ok(())
 }
 
