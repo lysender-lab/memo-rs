@@ -8,7 +8,7 @@ use crate::state::AppState;
 use db::client::{MAX_CLIENTS, NewClient, UpdateClient};
 use memo::validators::flatten_errors;
 
-pub async fn create_client(state: &AppState, data: &NewClient, admin: bool) -> Result<ClientDto> {
+pub async fn create_client(state: &AppState, data: NewClient, admin: bool) -> Result<ClientDto> {
     let valid_res = data.validate();
     ensure!(
         valid_res.is_ok(),
@@ -39,7 +39,7 @@ pub async fn create_client(state: &AppState, data: &NewClient, admin: bool) -> R
     state.db.clients.create(data, admin).await.context(DbSnafu)
 }
 
-pub async fn update_client(state: &AppState, id: &str, data: &UpdateClient) -> Result<bool> {
+pub async fn update_client(state: &AppState, id: &str, data: UpdateClient) -> Result<bool> {
     let valid_res = data.validate();
     ensure!(
         valid_res.is_ok(),

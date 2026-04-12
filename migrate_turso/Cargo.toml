@@ -1,0 +1,13 @@
+[package]
+name = "migrate_turso"
+version = "0.2.0"
+edition = "2024"
+
+[dependencies]
+snafu.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+turso.workspace = true
+memo = { path = "../memo" }
+db = { path = "../db" }

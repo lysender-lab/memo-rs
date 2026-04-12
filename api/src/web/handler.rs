@@ -172,7 +172,7 @@ pub async fn create_client_handler(
         msg: "Invalid request payload",
     })?;
 
-    let created = create_client(&state, &data, false).await?;
+    let created = create_client(&state, data.0, false).await?;
     let dto: ClientDto = created;
     Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
 }
@@ -204,7 +204,7 @@ pub async fn update_client_handler(
         return Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()));
     }
 
-    let updated = update_client(&state, client.id.as_str(), &data).await?;
+    let updated = update_client(&state, client.id.as_str(), data.0).await?;
     if !updated {
         // No changes, just return the client
         return Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()));
@@ -277,7 +277,7 @@ pub async fn update_default_bucket_handler(
         default_bucket_id: Some(data.default_bucket_id.clone()),
     };
 
-    let updated = update_client(&state, &client.id, &data).await?;
+    let updated = update_client(&state, &client.id, data).await?;
     if !updated {
         // No changes, just return the client
         return Ok(JsonResponse::new(serde_json::to_string(&client).unwrap()));

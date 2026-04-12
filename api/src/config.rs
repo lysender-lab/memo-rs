@@ -27,11 +27,20 @@ pub struct ServerConfig {
 
 #[derive(Debug, Clone)]
 pub struct DbConfig {
-    pub url: String,
+    pub dir: PathBuf,
 }
 
 impl Config {
     pub fn build_from_env() -> Result<Self> {
+        let db_dir = PathBuf::from(required_env("DATABASE_DIR")?);
+
+        ensure!(
+            db_dir.exists(),
+            ConfigSnafu {
+                msg: "Database directory does not exist.".to_string()
+            }
+        );
+
         let config = Config {
             jwt_secret: required_env("JWT_SECRET")?,
             upload_dir: PathBuf::from(required_env("UPLOAD_DIR")?),
@@ -42,9 +51,7 @@ impl Config {
             server: ServerConfig {
                 address: required_env("SERVER_ADDRESS")?,
             },
-            db: DbConfig {
-                url: required_env("DATABASE_URL")?,
-            },
+            db: DbConfig { dir: db_dir },
         };
 
         // Validate config values
@@ -66,13 +73,6 @@ impl Config {
             !config.cloud.credentials.is_empty(),
             ConfigSnafu {
                 msg: "Google Cloud credentials file is required.".to_string()
-            }
-        );
-
-        ensure!(
-            !config.db.url.is_empty(),
-            ConfigSnafu {
-                msg: "Database URL is required.".to_string()
             }
         );
 

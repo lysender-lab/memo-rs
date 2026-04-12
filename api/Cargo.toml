@@ -4,9 +4,7 @@ version = "0.2.0"
 edition = "2024"
 
 [dependencies]
-async-trait.workspace = true
 axum.workspace = true
-axum-test.workspace = true
 chrono.workspace = true
 clap.workspace = true
 image.workspace = true
@@ -29,7 +27,3 @@ db = { path = "../db" }
 memo = { path = "../memo" }
 password = { path = "../password" }
 storage = { path = "../storage" }
-
-[dev-dependencies]
-db = { path = "../db", features = ["test"]}
-storage = { path = "../storage", features = ["test"]}

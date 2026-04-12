@@ -1,21 +1,17 @@
-use async_trait::async_trait;
-
-use deadpool_diesel::sqlite::Pool;
-use diesel::dsl::count_star;
-use diesel::prelude::*;
-use diesel::{QueryDsl, SelectableHelper};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
+use turso::{Connection, Row};
 use validator::Validate;
 
 use crate::Result;
-use crate::error::{DbInteractSnafu, DbPoolSnafu, DbQuerySnafu};
-use crate::schema::buckets::{self, dsl};
+use crate::error::{DbPrepareSnafu, DbStatementSnafu};
+use crate::turso_decode::{
+    FromTursoRow, collect_count, collect_row, collect_rows, row_integer, row_text,
+};
+use crate::turso_params::{integer_param, new_query_params, opt_integer_param, text_param};
 use memo::{bucket::BucketDto, utils::generate_id};
 
-#[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize)]
-#[diesel(table_name = crate::schema::buckets)]
-#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+#[derive(Debug, Clone, Serialize)]
 pub struct Bucket {
     pub id: String,
     pub client_id: String,
@@ -37,8 +33,7 @@ pub struct NewBucket {
     pub images_only: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, Validate, AsChangeset)]
-#[diesel(table_name = crate::schema::buckets)]
+#[derive(Debug, Clone, Deserialize, Validate)]
 pub struct UpdateBucket {
     #[validate(length(min = 1, max = 60))]
     pub label: Option<String>,
@@ -82,290 +77,241 @@ impl From<Bucket> for BucketDto {
     }
 }
 
-pub const MAX_BUCKETS_PER_CLIENT: i32 = 50;
-
-#[async_trait]
-pub trait BucketStore: Send + Sync {
-    async fn list(&self, client_id: &str) -> Result<Vec<BucketDto>>;
-
-    async fn create(&self, client_id: &str, data: &NewBucket) -> Result<BucketDto>;
-
-    async fn get(&self, id: &str) -> Result<Option<BucketDto>>;
-
-    async fn find_by_name(&self, client_id: &str, name: &str) -> Result<Option<BucketDto>>;
-
-    async fn count_by_client(&self, client_id: &str) -> Result<i64>;
-
-    async fn update(&self, id: &str, data: &UpdateBucket) -> Result<bool>;
-
-    async fn delete(&self, id: &str) -> Result<()>;
-
-    async fn test_read(&self) -> Result<()>;
+impl FromTursoRow for BucketDto {
+    fn from_row(row: &Row) -> Result<Self> {
+        Ok(Self {
+            id: row_text(row, 0)?,
+            client_id: row_text(row, 1)?,
+            name: row_text(row, 2)?,
+            label: row_text(row, 3)?,
+            images_only: match row_integer(row, 4)? {
+                1 => true,
+                _ => false,
+            },
+            created_at: row_integer(row, 5)?,
+        })
+    }
 }
 
+pub const MAX_BUCKETS_PER_CLIENT: i32 = 50;
+
 pub struct BucketRepo {
-    db_pool: Pool,
+    db_pool: Connection,
 }
 
 impl BucketRepo {
-    pub fn new(db_pool: Pool) -> Self {
+    pub fn new(db_pool: Connection) -> Self {
         Self { db_pool }
     }
-}
 
-#[async_trait]
-impl BucketStore for BucketRepo {
-    async fn list(&self, client_id: &str) -> Result<Vec<BucketDto>> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+    pub async fn list(&self, client_id: &str) -> Result<Vec<BucketDto>> {
+        let query = r#"
+            SELECT
+                id,
+                client_id,
+                name,
+                label,
+                images_only,
+                created_at,
+                updated_at
+            FROM buckets
+            WHERE client_id = :client_id AND deleted_at IS NULL
+            ORDER BY name ASC
+        "#
+        .to_string();
 
-        let client_id = client_id.to_string();
-        let select_res = db
-            .interact(move |conn| {
-                dsl::buckets
-                    .filter(dsl::client_id.eq(&client_id))
-                    .select(Bucket::as_select())
-                    .order(dsl::name.asc())
-                    .load::<Bucket>(conn)
-            })
-            .await
-            .context(DbInteractSnafu)?;
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":client_id", client_id.to_owned()));
 
-        let items = select_res.context(DbQuerySnafu {
-            table: "buckets".to_string(),
-        })?;
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let mut rows = stmt.query(q_params).await.context(DbStatementSnafu)?;
+        let items: Vec<BucketDto> = collect_rows(&mut rows).await?;
 
-        let dtos: Vec<BucketDto> = items.into_iter().map(|item| item.into()).collect();
-        Ok(dtos)
+        Ok(items)
     }
 
-    async fn create(&self, client_id: &str, data: &NewBucket) -> Result<BucketDto> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-        let data_copy = data.clone();
+    pub async fn create(&self, client_id: &str, data: &NewBucket) -> Result<BucketDto> {
         let today = chrono::Utc::now().timestamp();
-        let bucket = Bucket {
-            id: generate_id(),
-            client_id: client_id.to_string(),
-            name: data_copy.name,
-            label: data_copy.label,
-            images_only: if data_copy.images_only { 1 } else { 0 },
+
+        let query = r#"
+            INSERT INTO buckets
+            (
+                id,
+                client_id,
+                name,
+                label,
+                images_only,
+                created_at,
+                updated_at,
+                deleted_at
+            )
+            VALUES
+            (
+                :id,
+                :client_id,
+                :name,
+                :label,
+                :images_only,
+                :created_at,
+                NULL
+            )
+        "#;
+
+        let id = generate_id();
+        let images_only: i64 = if data.images_only { 1 } else { 0 };
+
+        let mut params = new_query_params();
+        params.push(text_param(":id", id.clone()));
+        params.push(text_param(":client_id", client_id.to_owned()));
+        params.push(text_param(":name", data.name.clone()));
+        params.push(text_param(":label", data.label.clone()));
+        params.push(integer_param(":images_only", images_only));
+        params.push(integer_param(":created_at", today));
+        params.push(integer_param(":updated_at", today));
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        stmt.execute(params).await.context(DbStatementSnafu)?;
+
+        Ok(BucketDto {
+            id,
+            client_id: client_id.to_owned(),
+            name: data.name.clone(),
+            label: data.label.clone(),
+            images_only: data.images_only,
             created_at: today,
+        })
+    }
+
+    pub async fn get(&self, id: &str) -> Result<Option<BucketDto>> {
+        let query = r#"
+            SELECT
+                id,
+                client_id,
+                name,
+                label,
+                images_only,
+                created_at,
+                updated_at
+            FROM buckets
+            WHERE id = :id AND deleted_at IS NULL
+            LIMIT 1
+        "#
+        .to_string();
+
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":id", id.to_owned()));
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let row_result = stmt.query_row(q_params).await;
+        let dto: Option<BucketDto> = collect_row(row_result)?;
+        Ok(dto)
+    }
+
+    pub async fn find_by_name(&self, client_id: &str, name: &str) -> Result<Option<BucketDto>> {
+        let query = r#"
+            SELECT
+                id,
+                client_id,
+                name,
+                label,
+                images_only,
+                created_at,
+                updated_at
+            FROM buckets
+            WHERE
+                client_id = :client_id
+                AND name = :name
+                AND deleted_at IS NULL
+            LIMIT 1
+        "#
+        .to_string();
+
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":client_id", client_id.to_owned()));
+        q_params.push(text_param(":name", name.to_owned()));
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let row_result = stmt.query_row(q_params).await;
+        let dto: Option<BucketDto> = collect_row(row_result)?;
+        Ok(dto)
+    }
+
+    pub async fn count_by_client(&self, client_id: &str) -> Result<i64> {
+        let query = r#"
+            SELECT COUNT(*) AS total_count
+            FROM buckets
+            WHERE client_id = :client_id AND deleted_at IS NULL
+        "#
+        .to_string();
+
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":client_id", client_id.to_owned()));
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let row_result = stmt.query_row(q_params).await;
+        collect_count(row_result)
+    }
+
+    pub async fn update(&self, id: &str, data: &UpdateBucket) -> Result<bool> {
+        // Do not update if there is no data to update
+        let Some(label) = data.label.clone() else {
+            return Ok(false);
         };
 
-        let bucket_copy = bucket.clone();
-        let insert_res = db
-            .interact(move |conn| {
-                diesel::insert_into(buckets::table)
-                    .values(&bucket_copy)
-                    .execute(conn)
-            })
-            .await
-            .context(DbInteractSnafu)?;
+        let query = r#"
+            UPDATE buckets
+            SET label = :label
+            WHERE id = :id AND deleted_at IS NULL
+        "#;
 
-        let _ = insert_res.context(DbQuerySnafu {
-            table: "buckets".to_string(),
-        })?;
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":label", label));
+        q_params.push(text_param(":id", id.to_owned()));
 
-        Ok(bucket.into())
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let affected = stmt.execute(q_params).await.context(DbStatementSnafu)?;
+
+        Ok(affected > 0)
     }
 
-    async fn get(&self, id: &str) -> Result<Option<BucketDto>> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+    pub async fn delete(&self, id: &str) -> Result<()> {
+        let today = chrono::Utc::now().timestamp();
 
-        let bid = id.to_string();
-        let select_res = db
-            .interact(move |conn| {
-                dsl::buckets
-                    .find(bid)
-                    .select(Bucket::as_select())
-                    .first::<Bucket>(conn)
-                    .optional()
-            })
-            .await
-            .context(DbInteractSnafu)?;
+        let query = r#"
+            UPDATE buckets
+            SET deleted_at = :deleted_at
+            WHERE id = :id AND deleted_at IS NULL
+        "#;
 
-        let item = select_res.context(DbQuerySnafu {
-            table: "buckets".to_string(),
-        })?;
+        let mut q_params = new_query_params();
+        q_params.push(opt_integer_param(":deleted_at", Some(today)));
+        q_params.push(text_param(":id", id.to_owned()));
 
-        Ok(item.map(|item| item.into()))
-    }
-
-    async fn find_by_name(&self, client_id: &str, name: &str) -> Result<Option<BucketDto>> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-
-        let cid = client_id.to_string();
-        let name_copy = name.to_string();
-        let select_res = db
-            .interact(move |conn| {
-                dsl::buckets
-                    .filter(dsl::client_id.eq(cid.as_str()))
-                    .filter(dsl::name.eq(name_copy.as_str()))
-                    .select(Bucket::as_select())
-                    .first::<Bucket>(conn)
-                    .optional()
-            })
-            .await
-            .context(DbInteractSnafu)?;
-
-        let item = select_res.context(DbQuerySnafu {
-            table: "buckets".to_string(),
-        })?;
-
-        Ok(item.map(|item| item.into()))
-    }
-
-    async fn count_by_client(&self, client_id: &str) -> Result<i64> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-
-        let cid = client_id.to_string();
-        let count_res = db
-            .interact(move |conn| {
-                dsl::buckets
-                    .filter(dsl::client_id.eq(cid.as_str()))
-                    .select(count_star())
-                    .get_result::<i64>(conn)
-            })
-            .await
-            .context(DbInteractSnafu)?;
-
-        let count = count_res.context(DbQuerySnafu {
-            table: "buckets".to_string(),
-        })?;
-
-        Ok(count)
-    }
-
-    async fn update(&self, id: &str, data: &UpdateBucket) -> Result<bool> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-
-        // Do not update if there is no data to update
-        if data.label.is_none() {
-            return Ok(false);
-        }
-
-        let data_copy = data.clone();
-        let bid = id.to_string();
-        let update_res = db
-            .interact(move |conn| {
-                diesel::update(dsl::buckets)
-                    .filter(dsl::id.eq(bid.as_str()))
-                    .set(data_copy)
-                    .execute(conn)
-            })
-            .await
-            .context(DbInteractSnafu)?;
-
-        let item = update_res.context(DbQuerySnafu {
-            table: "buckets".to_string(),
-        })?;
-
-        Ok(item > 0)
-    }
-
-    async fn delete(&self, id: &str) -> Result<()> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-
-        let bucket_id = id.to_string();
-        let delete_res = db
-            .interact(move |conn| {
-                diesel::delete(dsl::buckets.filter(dsl::id.eq(bucket_id.as_str()))).execute(conn)
-            })
-            .await
-            .context(DbInteractSnafu)?;
-
-        let _ = delete_res.context(DbQuerySnafu {
-            table: "buckets".to_string(),
-        })?;
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        stmt.execute(q_params).await.context(DbStatementSnafu)?;
 
         Ok(())
     }
 
-    async fn test_read(&self) -> Result<()> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+    pub async fn test_read(&self) -> Result<()> {
+        let query = r#"
+            SELECT
+                id,
+                client_id,
+                name,
+                label,
+                images_only,
+                created_at,
+                updated_at
+            FROM buckets
+            LIMIT 1
+        "#
+        .to_string();
 
-        let selected_res = db
-            .interact(move |conn| {
-                dsl::buckets
-                    .select(Bucket::as_select())
-                    .first::<Bucket>(conn)
-                    .optional()
-            })
-            .await
-            .context(DbInteractSnafu)?;
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let row_result = stmt.query_row({}).await;
+        let _: Option<BucketDto> = collect_row(row_result)?;
 
-        let _ = selected_res.context(DbQuerySnafu {
-            table: "buckets".to_string(),
-        })?;
-
-        Ok(())
-    }
-}
-
-#[cfg(feature = "test")]
-pub const TEST_BUCKET_ID: &'static str = "0196d1bbc22f79c89cdbc8beced0d2f0";
-
-#[cfg(feature = "test")]
-pub fn create_test_bucket() -> BucketDto {
-    use crate::client::TEST_CLIENT_ID;
-    let today = chrono::Utc::now().timestamp();
-
-    BucketDto {
-        id: TEST_BUCKET_ID.to_string(),
-        client_id: TEST_CLIENT_ID.to_string(),
-        name: "test-bucket".to_string(),
-        label: "test-bucket".to_string(),
-        images_only: true,
-        created_at: today,
-    }
-}
-
-#[cfg(feature = "test")]
-pub struct BucketTestRepo {}
-
-#[cfg(feature = "test")]
-#[async_trait]
-impl BucketStore for BucketTestRepo {
-    async fn list(&self, client_id: &str) -> Result<Vec<BucketDto>> {
-        let bucket = create_test_bucket();
-        let buckets = vec![bucket];
-        let filtered = buckets
-            .into_iter()
-            .filter(|x| x.client_id.as_str() == client_id)
-            .collect();
-        Ok(filtered)
-    }
-
-    async fn create(&self, _client_id: &str, _data: &NewBucket) -> Result<BucketDto> {
-        Err("No supported".into())
-    }
-
-    async fn get(&self, id: &str) -> Result<Option<BucketDto>> {
-        let bucket = create_test_bucket();
-        let buckets = vec![bucket];
-        let found = buckets.into_iter().find(|x| x.id.as_str() == id);
-        Ok(found)
-    }
-
-    async fn find_by_name(&self, client_id: &str, name: &str) -> Result<Option<BucketDto>> {
-        let buckets = self.list(client_id).await?;
-        let found = buckets.into_iter().find(|x| x.name.as_str() == name);
-        Ok(found)
-    }
-
-    async fn count_by_client(&self, client_id: &str) -> Result<i64> {
-        let buckets = self.list(client_id).await?;
-        Ok(buckets.len() as i64)
-    }
-
-    async fn update(&self, _id: &str, _data: &UpdateBucket) -> Result<bool> {
-        Ok(false)
-    }
-
-    async fn delete(&self, _id: &str) -> Result<()> {
-        Ok(())
-    }
-
-    async fn test_read(&self) -> Result<()> {
         Ok(())
     }
 }

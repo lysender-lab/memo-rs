@@ -39,7 +39,7 @@ pub async fn run_setup(config: &Config) -> Result<()> {
             status: "active".to_string(),
             default_bucket_id: None,
         };
-        let client = create_client(&state, &new_client, true).await?;
+        let client = create_client(&state, new_client, true).await?;
         println!("{{ id = {}, name = {} }}", client.id, client.name);
         println!("Created system admin client.");
         client_id = client.id;

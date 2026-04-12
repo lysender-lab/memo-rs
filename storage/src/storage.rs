@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -18,40 +17,6 @@ use memo::bucket::BucketDto;
 use memo::dir::DirDto;
 use memo::file::ORIGINAL_PATH;
 use memo::file::{FileDto, ImgVersionDto};
-
-#[async_trait]
-pub trait CloudStorable: Send + Sync {
-    async fn read_bucket(&self, name: &str) -> Result<String>;
-
-    async fn upload_object(
-        &self,
-        bucket: &BucketDto,
-        dir: &DirDto,
-        source_dir: &PathBuf,
-        file: &FileDto,
-    ) -> Result<()>;
-
-    async fn delete_file_object(
-        &self,
-        bucket_name: &str,
-        dir_name: &str,
-        file: &FileDto,
-    ) -> Result<()>;
-
-    async fn format_files(
-        &self,
-        bucket_name: &str,
-        dir_name: &str,
-        files: Vec<FileDto>,
-    ) -> Result<Vec<FileDto>>;
-
-    async fn format_file(
-        &self,
-        bucket_name: &str,
-        dir_name: &str,
-        file: FileDto,
-    ) -> Result<FileDto>;
-}
 
 pub struct StorageClient {
     client: Arc<Client>,
@@ -204,11 +169,8 @@ impl StorageClient {
             },
         }
     }
-}
 
-#[async_trait]
-impl CloudStorable for StorageClient {
-    async fn read_bucket(&self, name: &str) -> Result<String> {
+    pub async fn read_bucket(&self, name: &str) -> Result<String> {
         let res = self
             .client
             .get_bucket(&GetBucketRequest {
@@ -246,7 +208,7 @@ impl CloudStorable for StorageClient {
         }
     }
 
-    async fn upload_object(
+    pub async fn upload_object(
         &self,
         bucket: &BucketDto,
         dir: &DirDto,
@@ -265,7 +227,7 @@ impl CloudStorable for StorageClient {
         }
     }
 
-    async fn delete_file_object(
+    pub async fn delete_file_object(
         &self,
         bucket_name: &str,
         dir_name: &str,
@@ -287,7 +249,7 @@ impl CloudStorable for StorageClient {
         Ok(())
     }
 
-    async fn format_files(
+    pub async fn format_files(
         &self,
         bucket_name: &str,
         dir_name: &str,
@@ -319,7 +281,7 @@ impl CloudStorable for StorageClient {
         Ok(updated_files)
     }
 
-    async fn format_file(
+    pub async fn format_file(
         &self,
         bucket_name: &str,
         dir_name: &str,
@@ -430,59 +392,4 @@ async fn format_file_single(
     }
 
     Ok(file)
-}
-
-#[cfg(feature = "test")]
-pub struct StorageTestClient {}
-
-#[cfg(feature = "test")]
-impl StorageTestClient {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-#[cfg(feature = "test")]
-#[async_trait]
-impl CloudStorable for StorageTestClient {
-    async fn read_bucket(&self, name: &str) -> Result<String> {
-        Ok(name.to_string())
-    }
-
-    async fn upload_object(
-        &self,
-        _bucket: &BucketDto,
-        _dir: &DirDto,
-        _source_dir: &PathBuf,
-        _file: &FileDto,
-    ) -> Result<()> {
-        Ok(())
-    }
-
-    async fn delete_file_object(
-        &self,
-        _bucket_name: &str,
-        _dir_name: &str,
-        _file: &FileDto,
-    ) -> Result<()> {
-        Ok(())
-    }
-
-    async fn format_files(
-        &self,
-        _bucket_name: &str,
-        _dir_name: &str,
-        files: Vec<FileDto>,
-    ) -> Result<Vec<FileDto>> {
-        Ok(files)
-    }
-
-    async fn format_file(
-        &self,
-        _bucket_name: &str,
-        _dir_name: &str,
-        file: FileDto,
-    ) -> Result<FileDto> {
-        Ok(file)
-    }
 }

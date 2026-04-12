@@ -1,52 +1,45 @@
-use std::sync::Arc;
+use std::path::Path;
 
-use deadpool_diesel::sqlite::{Manager, Pool, Runtime};
+use snafu::ResultExt;
+use turso::{Builder, Connection};
 
-use crate::{
-    bucket::{BucketRepo, BucketStore},
-    client::{ClientRepo, ClientStore},
-    dir::{DirRepo, DirStore},
-    file::{FileRepo, FileStore},
-    user::{UserRepo, UserStore},
-};
+use crate::any::AnyRepo;
+use crate::bucket::BucketRepo;
+use crate::client::ClientRepo;
+use crate::dir::DirRepo;
+use crate::error::{DbBuilderSnafu, DbConnectSnafu};
+use crate::file::FileRepo;
+use crate::user::UserRepo;
 
-pub fn create_db_pool(database_url: &str) -> Pool {
-    let manager = Manager::new(database_url, Runtime::Tokio1);
-    Pool::builder(manager).max_size(8).build().unwrap()
+use crate::Result;
+
+pub async fn create_db_pool(filename: &Path) -> Result<Connection> {
+    let db = Builder::new_local(filename.to_str().expect("DB path is required"))
+        .build()
+        .await
+        .context(DbBuilderSnafu)?;
+    let conn = db.connect().context(DbConnectSnafu)?;
+
+    Ok(conn)
 }
 
 pub struct DbMapper {
-    pub buckets: Arc<dyn BucketStore>,
-    pub clients: Arc<dyn ClientStore>,
-    pub dirs: Arc<dyn DirStore>,
-    pub files: Arc<dyn FileStore>,
-    pub users: Arc<dyn UserStore>,
+    pub buckets: BucketRepo,
+    pub clients: ClientRepo,
+    pub dirs: DirRepo,
+    pub files: FileRepo,
+    pub users: UserRepo,
+    pub any: AnyRepo,
 }
 
-pub fn create_db_mapper(database_url: &str) -> DbMapper {
-    let pool = create_db_pool(database_url);
-    DbMapper {
-        buckets: Arc::new(BucketRepo::new(pool.clone())),
-        clients: Arc::new(ClientRepo::new(pool.clone())),
-        dirs: Arc::new(DirRepo::new(pool.clone())),
-        files: Arc::new(FileRepo::new(pool.clone())),
-        users: Arc::new(UserRepo::new(pool.clone())),
-    }
-}
-
-#[cfg(feature = "test")]
-pub fn create_test_db_mapper() -> DbMapper {
-    use crate::bucket::BucketTestRepo;
-    use crate::client::ClientTestRepo;
-    use crate::dir::DirTestRepo;
-    use crate::file::FileTestRepo;
-    use crate::user::UserTestRepo;
-
-    DbMapper {
-        buckets: Arc::new(BucketTestRepo {}),
-        clients: Arc::new(ClientTestRepo {}),
-        dirs: Arc::new(DirTestRepo {}),
-        files: Arc::new(FileTestRepo {}),
-        users: Arc::new(UserTestRepo {}),
-    }
+pub async fn create_db_mapper(filename: &Path) -> Result<DbMapper> {
+    let pool = create_db_pool(filename).await?;
+    Ok(DbMapper {
+        buckets: BucketRepo::new(pool.clone()),
+        clients: ClientRepo::new(pool.clone()),
+        dirs: DirRepo::new(pool.clone()),
+        files: FileRepo::new(pool.clone()),
+        users: UserRepo::new(pool.clone()),
+        any: AnyRepo::new(pool.clone()),
+    })
 }

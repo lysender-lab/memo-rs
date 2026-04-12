@@ -1,23 +1,21 @@
-use async_trait::async_trait;
-use deadpool_diesel::sqlite::Pool;
-use diesel::dsl::count_star;
-use diesel::prelude::*;
-use diesel::{QueryDsl, SelectableHelper};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
+use turso::Row;
 use validator::Validate;
 
 use crate::Result;
-use crate::error::{DbInteractSnafu, DbPoolSnafu, DbQuerySnafu, ValidationSnafu};
-use crate::schema::dirs::{self, dsl};
+use crate::error::{DbPrepareSnafu, DbStatementSnafu, ValidationSnafu};
+use crate::turso_decode::{
+    FromTursoRow, collect_count, collect_row, collect_rows, row_integer, row_text,
+};
+use crate::turso_params::{integer_param, new_query_params, opt_integer_param, text_param};
 use memo::dir::DirDto;
 use memo::pagination::Paginated;
 use memo::utils::generate_id;
 use memo::validators::flatten_errors;
+use turso::Connection;
 
-#[derive(Debug, Clone, Queryable, Selectable, Insertable, Serialize, Deserialize)]
-#[diesel(table_name = crate::schema::dirs)]
-#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Dir {
     pub id: String,
     pub bucket_id: String,
@@ -28,7 +26,6 @@ pub struct Dir {
     pub updated_at: i64,
 }
 
-/// Convert DirDto to Dir
 impl From<DirDto> for Dir {
     fn from(dto: DirDto) -> Self {
         Self {
@@ -43,7 +40,6 @@ impl From<DirDto> for Dir {
     }
 }
 
-/// Convert Dir to DirDto
 impl From<Dir> for DirDto {
     fn from(dir: Dir) -> Self {
         Self {
@@ -58,6 +54,20 @@ impl From<Dir> for DirDto {
     }
 }
 
+impl FromTursoRow for DirDto {
+    fn from_row(row: &Row) -> Result<Self> {
+        Ok(Self {
+            id: row_text(row, 0)?,
+            bucket_id: row_text(row, 1)?,
+            name: row_text(row, 2)?,
+            label: row_text(row, 3)?,
+            file_count: row_integer(row, 4)? as i32,
+            created_at: row_integer(row, 5)?,
+            updated_at: row_integer(row, 6)?,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct NewDir {
     #[validate(length(min = 1, max = 50))]
@@ -68,8 +78,7 @@ pub struct NewDir {
     pub label: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Validate, AsChangeset)]
-#[diesel(table_name = crate::schema::dirs)]
+#[derive(Debug, Clone, Deserialize, Validate)]
 pub struct UpdateDir {
     #[validate(length(min = 1, max = 60))]
     pub label: Option<String>,
@@ -90,67 +99,47 @@ pub struct ListDirsParams {
 pub const MAX_DIRS: i32 = 1000;
 pub const MAX_PER_PAGE: i32 = 50;
 
-#[async_trait]
-pub trait DirStore: Send + Sync {
-    async fn list(&self, bucket_id: &str, params: &ListDirsParams) -> Result<Paginated<DirDto>>;
-
-    async fn count(&self, bucket_id: &str) -> Result<i64>;
-
-    async fn create(&self, bucket_id: &str, data: &NewDir) -> Result<DirDto>;
-
-    async fn get(&self, id: &str) -> Result<Option<DirDto>>;
-
-    async fn find_by_name(&self, bucket_id: &str, name: &str) -> Result<Option<DirDto>>;
-
-    async fn update(&self, id: &str, data: &UpdateDir) -> Result<bool>;
-
-    async fn update_timestamp(&self, id: &str, timestamp: i64) -> Result<bool>;
-
-    async fn delete(&self, id: &str) -> Result<()>;
-}
-
 pub struct DirRepo {
-    db_pool: Pool,
+    db_pool: Connection,
 }
 
 impl DirRepo {
-    pub fn new(db_pool: Pool) -> Self {
+    pub fn new(db_pool: Connection) -> Self {
         Self { db_pool }
     }
 
     async fn listing_count(&self, bucket_id: &str, params: &ListDirsParams) -> Result<i64> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+        let mut query = r#"
+            SELECT
+                COUNT(*) AS total_count
+            FROM
+                dirs
+            WHERE
+                bucket_id = :bucket_id
+                AND deleted_at IS NULL
+        "#
+        .to_string();
 
-        let bid = bucket_id.to_string();
-        let params_copy = params.clone();
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":bucket_id", bucket_id.to_owned()));
 
-        let count_res = db
-            .interact(move |conn| {
-                let mut query = dsl::dirs.into_boxed();
-                query = query.filter(dsl::bucket_id.eq(bid.as_str()));
-                if let Some(keyword) = params_copy.keyword
-                    && !keyword.is_empty()
-                {
-                    let pattern = format!("%{}%", keyword);
-                    query =
-                        query.filter(dsl::name.like(pattern.clone()).or(dsl::label.like(pattern)));
-                }
-                query.select(count_star()).get_result::<i64>(conn)
-            })
-            .await
-            .context(DbInteractSnafu)?;
+        if let Some(keyword) = &params.keyword
+            && !keyword.is_empty()
+        {
+            query.push_str(" AND (name LIKE :keyword OR label LIKE :keyword)");
+            q_params.push(text_param(":keyword", format!("%{}%", keyword)));
+        }
 
-        let count = count_res.context(DbQuerySnafu {
-            table: "dirs".to_string(),
-        })?;
-
-        Ok(count)
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let row_result = stmt.query_row(q_params).await;
+        collect_count(row_result)
     }
-}
 
-#[async_trait]
-impl DirStore for DirRepo {
-    async fn list(&self, bucket_id: &str, params: &ListDirsParams) -> Result<Paginated<DirDto>> {
+    pub async fn list(
+        &self,
+        bucket_id: &str,
+        params: &ListDirsParams,
+    ) -> Result<Paginated<DirDto>> {
         let valid_res = params.validate();
         ensure!(
             valid_res.is_ok(),
@@ -158,10 +147,6 @@ impl DirStore for DirRepo {
                 msg: flatten_errors(&valid_res.unwrap_err()),
             }
         );
-
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-
-        let bid = bucket_id.to_string();
 
         let total_records = self.listing_count(bucket_id, params).await?;
         let mut page: i32 = 1;
@@ -185,302 +170,217 @@ impl DirStore for DirRepo {
             }
         }
 
-        // Do not query if we already know there are no records
         if total_pages == 0 {
             return Ok(Paginated::new(Vec::new(), page, per_page, total_records));
         }
 
-        let params_copy = params.clone();
-        let select_res = db
-            .interact(move |conn| {
-                let mut query = dsl::dirs.into_boxed();
-                query = query.filter(dsl::bucket_id.eq(bid.as_str()));
+        let mut query = r#"
+            SELECT
+                id,
+                bucket_id,
+                name,
+                label,
+                file_count,
+                created_at,
+                updated_at
+            FROM dirs
+            WHERE bucket_id = :bucket_id AND deleted_at IS NULL
+        "#
+        .to_string();
 
-                if let Some(keyword) = params_copy.keyword
-                    && !keyword.is_empty()
-                {
-                    let pattern = format!("%{}%", keyword);
-                    query =
-                        query.filter(dsl::name.like(pattern.clone()).or(dsl::label.like(pattern)));
-                }
-                query
-                    .limit(per_page as i64)
-                    .offset(offset)
-                    .select(Dir::as_select())
-                    .order(dsl::updated_at.desc())
-                    .load::<Dir>(conn)
-            })
-            .await
-            .context(DbInteractSnafu)?;
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":bucket_id", bucket_id.to_owned()));
 
-        let items = select_res.context(DbQuerySnafu {
-            table: "dirs".to_string(),
-        })?;
+        if let Some(keyword) = &params.keyword
+            && !keyword.is_empty()
+        {
+            query.push_str(" AND (name LIKE :keyword OR label LIKE :keyword)");
+            q_params.push(text_param(":keyword", format!("%{}%", keyword)));
+        }
 
-        let items: Vec<DirDto> = items.into_iter().map(|x| x.into()).collect();
+        query.push_str(" ORDER BY updated_at DESC LIMIT :per_page OFFSET :offset");
+        q_params.push(integer_param(":per_page", per_page as i64));
+        q_params.push(integer_param(":offset", offset));
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let mut rows = stmt.query(q_params).await.context(DbStatementSnafu)?;
+        let items: Vec<DirDto> = collect_rows(&mut rows).await?;
 
         Ok(Paginated::new(items, page, per_page, total_records))
     }
 
-    async fn count(&self, bucket_id: &str) -> Result<i64> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+    pub async fn count(&self, bucket_id: &str) -> Result<i64> {
+        let query = r#"
+            SELECT COUNT(*) AS total_count
+            FROM dirs
+            WHERE bucket_id = :bucket_id AND deleted_at IS NULL
+        "#
+        .to_string();
 
-        let bid = bucket_id.to_string();
-        let count_res = db
-            .interact(move |conn| {
-                dsl::dirs
-                    .filter(dsl::bucket_id.eq(bid.as_str()))
-                    .select(count_star())
-                    .get_result::<i64>(conn)
-            })
-            .await
-            .context(DbInteractSnafu)?;
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":bucket_id", bucket_id.to_owned()));
 
-        let count = count_res.context(DbQuerySnafu {
-            table: "dirs".to_string(),
-        })?;
-
-        Ok(count)
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let row_result = stmt.query_row(q_params).await;
+        collect_count(row_result)
     }
 
-    async fn create(&self, bucket_id: &str, data: &NewDir) -> Result<DirDto> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-
-        let data_copy = data.clone();
+    pub async fn create(&self, bucket_id: &str, data: &NewDir) -> Result<DirDto> {
         let today = chrono::Utc::now().timestamp();
-        let dir = Dir {
-            id: generate_id(),
-            bucket_id: bucket_id.to_string(),
-            name: data_copy.name,
-            label: data_copy.label,
+        let id = generate_id();
+
+        let query = r#"
+            INSERT INTO dirs
+            (
+                id,
+                bucket_id,
+                name,
+                label,
+                file_count,
+                created_at,
+                updated_at,
+                deleted_at
+            )
+            VALUES
+            (
+                :id,
+                :bucket_id,
+                :name,
+                :label,
+                :file_count,
+                :created_at,
+                :updated_at,
+                NULL
+            )
+        "#;
+
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":id", id.clone()));
+        q_params.push(text_param(":bucket_id", bucket_id.to_owned()));
+        q_params.push(text_param(":name", data.name.clone()));
+        q_params.push(text_param(":label", data.label.clone()));
+        q_params.push(integer_param(":file_count", 0));
+        q_params.push(integer_param(":created_at", today));
+        q_params.push(integer_param(":updated_at", today));
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        stmt.execute(q_params).await.context(DbStatementSnafu)?;
+
+        Ok(DirDto {
+            id,
+            bucket_id: bucket_id.to_owned(),
+            name: data.name.clone(),
+            label: data.label.clone(),
             file_count: 0,
             created_at: today,
             updated_at: today,
+        })
+    }
+
+    pub async fn get(&self, id: &str) -> Result<Option<DirDto>> {
+        let query = r#"
+            SELECT
+                id,
+                bucket_id,
+                name,
+                label,
+                file_count,
+                created_at,
+                updated_at
+            FROM dirs
+            WHERE id = :id AND deleted_at IS NULL
+            LIMIT 1
+        "#
+        .to_string();
+
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":id", id.to_owned()));
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let row_result = stmt.query_row(q_params).await;
+        let dto: Option<DirDto> = collect_row(row_result)?;
+        Ok(dto)
+    }
+
+    pub async fn find_by_name(&self, bucket_id: &str, name: &str) -> Result<Option<DirDto>> {
+        let query = r#"
+            SELECT
+                id,
+                bucket_id,
+                name,
+                label,
+                file_count,
+                created_at,
+                updated_at
+            FROM
+                dirs
+            WHERE
+                bucket_id = :bucket_id
+                AND name = :name
+                AND deleted_at IS NULL
+            LIMIT 1
+        "#
+        .to_string();
+
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":bucket_id", bucket_id.to_owned()));
+        q_params.push(text_param(":name", name.to_owned()));
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let row_result = stmt.query_row(q_params).await;
+        let dto: Option<DirDto> = collect_row(row_result)?;
+        Ok(dto)
+    }
+
+    pub async fn update(&self, id: &str, data: &UpdateDir) -> Result<bool> {
+        let Some(label) = data.label.clone() else {
+            return Ok(false);
         };
 
-        let dir_copy = dir.clone();
-        let insert_res = db
-            .interact(move |conn| {
-                diesel::insert_into(dirs::table)
-                    .values(&dir_copy)
-                    .execute(conn)
-            })
-            .await
-            .context(DbInteractSnafu)?;
+        let query = r#"
+            UPDATE dirs
+            SET label = :label
+            WHERE id = :id AND deleted_at IS NULL
+        "#;
 
-        let _ = insert_res.context(DbQuerySnafu {
-            table: "dirs".to_string(),
-        })?;
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":label", label));
+        q_params.push(text_param(":id", id.to_owned()));
 
-        Ok(dir.into())
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let affected = stmt.execute(q_params).await.context(DbStatementSnafu)?;
+        Ok(affected > 0)
     }
 
-    async fn get(&self, id: &str) -> Result<Option<DirDto>> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+    pub async fn update_timestamp(&self, id: &str, timestamp: i64) -> Result<bool> {
+        let query = r#"
+            UPDATE dirs
+            SET updated_at = :updated_at
+            WHERE id = :id AND deleted_at IS NULL
+        "#;
 
-        let did = id.to_string();
-        let select_res = db
-            .interact(move |conn| {
-                dsl::dirs
-                    .find(did)
-                    .select(Dir::as_select())
-                    .first::<Dir>(conn)
-                    .optional()
-            })
-            .await
-            .context(DbInteractSnafu)?;
+        let mut q_params = new_query_params();
+        q_params.push(integer_param(":updated_at", timestamp));
+        q_params.push(text_param(":id", id.to_owned()));
 
-        let item = select_res.context(DbQuerySnafu {
-            table: "dirs".to_string(),
-        })?;
-
-        Ok(item.map(|x| x.into()))
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let affected = stmt.execute(q_params).await.context(DbStatementSnafu)?;
+        Ok(affected > 0)
     }
 
-    async fn find_by_name(&self, bucket_id: &str, name: &str) -> Result<Option<DirDto>> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
+    pub async fn delete(&self, id: &str) -> Result<()> {
+        let today = chrono::Utc::now().timestamp();
+        let query = r#"
+            UPDATE dirs
+            SET deleted_at = :deleted_at
+            WHERE id = :id AND deleted_at IS NULL
+        "#;
+        let mut q_params = new_query_params();
+        q_params.push(opt_integer_param(":deleted_at", Some(today)));
+        q_params.push(text_param(":id", id.to_owned()));
 
-        let bid = bucket_id.to_string();
-        let name_copy = name.to_string();
-        let select_res = db
-            .interact(move |conn| {
-                dsl::dirs
-                    .filter(dsl::bucket_id.eq(bid.as_str()))
-                    .filter(dsl::name.eq(name_copy.as_str()))
-                    .select(Dir::as_select())
-                    .first::<Dir>(conn)
-                    .optional()
-            })
-            .await
-            .context(DbInteractSnafu)?;
-
-        let item = select_res.context(DbQuerySnafu {
-            table: "dirs".to_string(),
-        })?;
-
-        Ok(item.map(|x| x.into()))
-    }
-
-    async fn update(&self, id: &str, data: &UpdateDir) -> Result<bool> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-
-        // Do not update if there is no data to update
-        if data.label.is_none() {
-            return Ok(false);
-        }
-
-        let data_copy = data.clone();
-        let dir_id = id.to_string();
-        let update_res = db
-            .interact(move |conn| {
-                diesel::update(dsl::dirs)
-                    .filter(dsl::id.eq(dir_id.as_str()))
-                    .set(data_copy)
-                    .execute(conn)
-            })
-            .await
-            .context(DbInteractSnafu)?;
-
-        let item = update_res.context(DbQuerySnafu {
-            table: "dirs".to_string(),
-        })?;
-
-        Ok(item > 0)
-    }
-
-    async fn update_timestamp(&self, id: &str, timestamp: i64) -> Result<bool> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-
-        let dir_id = id.to_string();
-        let update_res = db
-            .interact(move |conn| {
-                diesel::update(dsl::dirs)
-                    .filter(dsl::id.eq(dir_id.as_str()))
-                    .set(dsl::updated_at.eq(timestamp))
-                    .execute(conn)
-            })
-            .await
-            .context(DbInteractSnafu)?;
-
-        let item = update_res.context(DbQuerySnafu {
-            table: "dirs".to_string(),
-        })?;
-
-        Ok(item > 0)
-    }
-
-    async fn delete(&self, id: &str) -> Result<()> {
-        let db = self.db_pool.get().await.context(DbPoolSnafu)?;
-
-        let dir_id = id.to_string();
-        let delete_res = db
-            .interact(move |conn| {
-                diesel::delete(dsl::dirs.filter(dsl::id.eq(dir_id.as_str()))).execute(conn)
-            })
-            .await
-            .context(DbInteractSnafu)?;
-
-        let _ = delete_res.context(DbQuerySnafu {
-            table: "dirs".to_string(),
-        })?;
-
-        Ok(())
-    }
-}
-
-#[cfg(feature = "test")]
-pub const TEST_DIR_ID: &'static str = "0196d1c6bdc97ac895e4e141b9f46b3a";
-
-#[cfg(feature = "test")]
-pub fn create_test_dir() -> Dir {
-    use crate::bucket::TEST_BUCKET_ID;
-    let today = chrono::Utc::now().timestamp();
-
-    Dir {
-        id: TEST_DIR_ID.to_string(),
-        bucket_id: TEST_BUCKET_ID.to_string(),
-        name: "test-dir".to_string(),
-        label: "Test Dir".to_string(),
-        file_count: 0,
-        created_at: today.clone(),
-        updated_at: today,
-    }
-}
-
-#[cfg(feature = "test")]
-pub struct DirTestRepo {}
-
-#[cfg(feature = "test")]
-#[async_trait]
-impl DirStore for DirTestRepo {
-    async fn list(&self, bucket_id: &str, _params: &ListDirsParams) -> Result<Paginated<DirDto>> {
-        let dir = create_test_dir();
-        let dirs = vec![dir];
-        let total_records = dirs.len() as i64;
-        let filtered: Vec<DirDto> = dirs
-            .into_iter()
-            .filter(|x| {
-                if x.bucket_id.as_str() == bucket_id {
-                    // Do not apply params for now
-                    return true;
-                }
-                false
-            })
-            .map(|x| x.into())
-            .collect();
-
-        Ok(Paginated::new(filtered, 1, 10, total_records))
-    }
-
-    async fn count(&self, bucket_id: &str) -> Result<i64> {
-        let dirs = self
-            .list(
-                bucket_id,
-                &ListDirsParams {
-                    page: None,
-                    per_page: None,
-                    keyword: None,
-                },
-            )
-            .await?;
-        Ok(dirs.meta.total_records)
-    }
-
-    async fn create(&self, _bucket_id: &str, _data: &NewDir) -> Result<DirDto> {
-        Err("Not supported".into())
-    }
-
-    async fn get(&self, id: &str) -> Result<Option<DirDto>> {
-        let dir = create_test_dir();
-        let dirs = vec![dir];
-        let found = dirs.into_iter().find(|x| x.id.as_str() == id);
-        Ok(found.map(|x| x.into()))
-    }
-
-    async fn find_by_name(&self, bucket_id: &str, name: &str) -> Result<Option<DirDto>> {
-        let dirs = self
-            .list(
-                bucket_id,
-                &ListDirsParams {
-                    page: None,
-                    per_page: None,
-                    keyword: None,
-                },
-            )
-            .await?;
-        let found = dirs.data.into_iter().find(|x| x.name.as_str() == name);
-        Ok(found)
-    }
-
-    async fn update(&self, _id: &str, _data: &UpdateDir) -> Result<bool> {
-        Ok(true)
-    }
-
-    async fn update_timestamp(&self, _id: &str, _timestamp: i64) -> Result<bool> {
-        Ok(true)
-    }
-
-    async fn delete(&self, _id: &str) -> Result<()> {
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        stmt.execute(q_params).await.context(DbStatementSnafu)?;
         Ok(())
     }
 }
