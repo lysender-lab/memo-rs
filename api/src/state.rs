@@ -7,14 +7,14 @@ use crate::{
     config::Config,
     error::{DbSnafu, StorageSnafu},
 };
-use storage::{CloudStorable, StorageClient};
+use storage::StorageClient;
 
 use db::{DbMapper, create_db_mapper};
 
 #[derive(Clone, FromRef)]
 pub struct AppState {
     pub config: Config,
-    pub storage_client: Arc<dyn CloudStorable>,
+    pub storage_client: Arc<StorageClient>,
     pub db: Arc<DbMapper>,
 }
 

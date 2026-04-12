@@ -5,7 +5,6 @@ members = [ "api", "db", "memo", "migrate_turso", "password", "storage", "websit
 
 [workspace.dependencies]
 askama = { version = "0.14.0" }
-async-trait = "0.1.88"
 argon2 = { version = "0.5.3", features = ["std"] }
 axum = { version = "0.8.1", features = ["macros", "multipart"] }
 axum-extra = { version = "0.10.0", features = ["cookie"] }
