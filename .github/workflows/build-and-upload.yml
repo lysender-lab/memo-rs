@@ -25,6 +25,9 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup Rust cache
+        uses: useblacksmith/rust-cache@v3
+
       - name: Build release binary - api
         run: cargo build -p api --release --locked
 
@@ -32,11 +35,11 @@ jobs:
         run: cargo build -p website --release --locked
 
       - name: Setup Node.js 24
-        uses: actions/setup-node@v4
+        uses: useblacksmith/setup-node@v5
         with:
           node-version: '24'
           cache: 'npm'
-          cache-dependency-path: website/frontend/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install website frontend dependencies
         run: npm ci

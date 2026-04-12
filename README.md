@@ -1,6 +1,6 @@
 # memo-rs: A photo gallery app
 
-`memo-rs` (memories) is a photo gallery app and a frontend for [files-rs](https://github.com/lysender/files-rs).
+`memo-rs` (memories) is a photo gallery app.
 
 Written in Rust btw.
 

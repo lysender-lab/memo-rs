@@ -11,7 +11,7 @@ services:
     ports:
       - "127.0.0.1:11001:80"
     environment:
-      DATABASE_URL: "/app/db/db.sqlite3"
+      DATABASE_DIR: "/app/db/env"
       JWT_SECRET: "secret"
       UPLOAD_DIR: "/app/uploads"
       SERVER_ADDRESS: "0.0.0.0:80"
