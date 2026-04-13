@@ -2055,19 +2055,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "migrate_turso"
-version = "0.2.0"
-dependencies = [
- "db",
- "memo",
- "snafu",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "turso",
-]
-
-[[package]]
 name = "mimalloc"
 version = "0.1.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"

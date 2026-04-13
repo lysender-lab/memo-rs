@@ -1,13 +1,14 @@
 [workspace]
 resolver = "2"
 
-members = [ "api", "db", "memo", "migrate_turso", "password", "storage", "website", "yaas" ]
+members = [ "api", "db", "memo", "password", "storage", "website", "yaas" ]
 
 [workspace.dependencies]
 askama = { version = "0.14.0" }
 argon2 = { version = "0.5.3", features = ["std"] }
 axum = { version = "0.8.1", features = ["macros", "multipart"] }
 axum-extra = { version = "0.10.0", features = ["cookie"] }
+base64 = "0.22.1"
 chrono = "0.4.40"
 google-cloud-storage = "0.24.0"
 image = "0.25.6"
