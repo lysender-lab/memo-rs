@@ -7,9 +7,10 @@ use axum::{
     response::Response,
 };
 use snafu::{OptionExt, ResultExt, ensure};
+use yaas::{actor::Actor, role::Permission};
 
 use crate::{
-    Result,
+    Error, Result,
     auth::authenticate_token,
     error::{
         BadRequestSnafu, DbSnafu, ForbiddenSnafu, InsufficientAuthScopeSnafu,
@@ -18,9 +19,7 @@ use crate::{
     state::AppState,
     web::params::Params,
 };
-use memo::{actor::Actor, dir::DirDto, role::Permission, user::UserDto, utils::valid_id};
-
-use super::params::{ClientParams, UserParams};
+use memo::{dir::DirDto, utils::valid_id};
 
 pub async fn auth_middleware(
     State(state): State<AppState>,
@@ -35,7 +34,7 @@ pub async fn auth_middleware(
         .and_then(|header| header.to_str().ok());
 
     // Start with an empty actor
-    let mut actor: Actor = Actor::empty();
+    let mut actor: Actor = Actor::default();
 
     if let Some(auth_header) = auth_header {
         // At this point, authentication must be verified
@@ -62,55 +61,6 @@ pub async fn require_auth_middleware(
     Ok(next.run(request).await)
 }
 
-pub async fn client_middleware(
-    State(state): State<AppState>,
-    Extension(actor): Extension<Actor>,
-    Path(params): Path<ClientParams>,
-    mut request: Request,
-    next: Next,
-) -> Result<Response<Body>> {
-    let permissions = vec![Permission::ClientsView];
-    ensure!(
-        actor.has_permissions(&permissions),
-        ForbiddenSnafu {
-            msg: "Insufficient permissions"
-        }
-    );
-
-    ensure!(
-        valid_id(&params.client_id),
-        BadRequestSnafu {
-            msg: "Invalid client id"
-        }
-    );
-
-    // Ensure regular clients can only view their own clients
-    if !actor.is_system_admin() {
-        ensure!(
-            actor.client_id.as_str() == params.client_id.as_str(),
-            NotFoundSnafu {
-                msg: "Client not found"
-            }
-        )
-    }
-
-    let client = state
-        .db
-        .clients
-        .get(&params.client_id)
-        .await
-        .context(DbSnafu)?;
-
-    let client = client.context(NotFoundSnafu {
-        msg: "Client not found",
-    })?;
-
-    // Forward to the next middleware/handler passing the client information
-    request.extensions_mut().insert(client);
-    let response = next.run(request).await;
-    Ok(response)
-}
-
 pub async fn bucket_middleware(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
@@ -118,14 +68,7 @@ pub async fn bucket_middleware(
     mut request: Request,
     next: Next,
 ) -> Result<Response<Body>> {
-    ensure!(
-        actor.has_files_scope(),
-        ForbiddenSnafu {
-            msg: "Insufficient auth scope"
-        }
-    );
-
-    let permissions = vec![Permission::BucketsList, Permission::BucketsView];
+    let permissions = vec![Permission::BucketsView];
     ensure!(
         actor.has_permissions(&permissions),
         ForbiddenSnafu {
@@ -151,61 +94,19 @@ pub async fn bucket_middleware(
         msg: "Bucket not found",
     })?;
 
-    if !actor.is_system_admin() {
-        ensure!(
-            bucket.client_id == actor.client_id,
-            NotFoundSnafu {
-                msg: "Bucket not found"
-            }
-        );
-    }
+    let Some(actor) = actor.actor.as_ref() else {
+        return Err(Error::InvalidAuthToken);
+    };
+
+    ensure!(
+        bucket.client_id == actor.org_id,
+        NotFoundSnafu {
+            msg: "Bucket not found"
+        }
+    );
 
     // Forward to the next middleware/handler passing the bucket information
     request.extensions_mut().insert(bucket);
-    let response = next.run(request).await;
-    Ok(response)
-}
-
-pub async fn user_middleware(
-    State(state): State<AppState>,
-    Extension(actor): Extension<Actor>,
-    Path(params): Path<UserParams>,
-    mut request: Request,
-    next: Next,
-) -> Result<Response<Body>> {
-    let permissions = vec![Permission::UsersList, Permission::UsersView];
-    ensure!(
-        actor.has_permissions(&permissions),
-        ForbiddenSnafu {
-            msg: "Insufficient permissions"
-        }
-    );
-
-    ensure!(
-        valid_id(&params.user_id),
-        BadRequestSnafu {
-            msg: "Invalid user id"
-        }
-    );
-
-    let user = state.db.users.get(&params.user_id).await.context(DbSnafu)?;
-    let user = user.context(NotFoundSnafu {
-        msg: "User not found",
-    })?;
-
-    if !actor.is_system_admin() {
-        ensure!(
-            user.client_id == actor.client_id,
-            NotFoundSnafu {
-                msg: "User not found"
-            }
-        );
-    }
-
-    let user: UserDto = user;
-
-    // Forward to the next middleware/handler passing the bucket information
-    request.extensions_mut().insert(user);
     let response = next.run(request).await;
     Ok(response)
 }
@@ -217,13 +118,6 @@ pub async fn dir_middleware(
     mut request: Request,
     next: Next,
 ) -> Result<Response<Body>> {
-    ensure!(
-        actor.has_files_scope(),
-        ForbiddenSnafu {
-            msg: "Insufficient auth scope"
-        }
-    );
-
     let permissions = vec![Permission::DirsList, Permission::DirsView];
     ensure!(
         actor.has_permissions(&permissions),

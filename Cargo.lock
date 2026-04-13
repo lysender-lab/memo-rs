@@ -113,6 +113,7 @@ name = "api"
 version = "0.2.0"
 dependencies = [
  "axum",
+ "base64 0.22.1",
  "chrono",
  "db",
  "image",
@@ -123,6 +124,7 @@ dependencies = [
  "moka",
  "multer",
  "password",
+ "reqwest",
  "rpassword",
  "serde",
  "serde_json",

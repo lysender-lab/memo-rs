@@ -4,16 +4,14 @@ use tracing::Level;
 
 mod auth;
 mod bucket;
-mod client;
-mod command;
 mod config;
 mod dir;
 mod error;
 mod file;
 mod health;
-mod oauth;
 mod run;
 mod state;
+mod token;
 mod web;
 
 // Re-export error types for convenience
