@@ -1,4 +1,3 @@
-use clap::{Parser, Subcommand};
 use snafu::{ResultExt, ensure};
 use std::{env, path::PathBuf};
 
@@ -31,7 +30,7 @@ pub struct DbConfig {
 }
 
 impl Config {
-    pub fn build_from_env() -> Result<Self> {
+    pub fn build() -> Result<Self> {
         let db_dir = PathBuf::from(required_env("DATABASE_DIR")?);
 
         ensure!(
@@ -98,21 +97,4 @@ fn required_env(name: &str) -> Result<String> {
         }
         .fail(),
     }
-}
-
-/// File Management in the cloud
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-pub struct CliArgs {
-    #[command(subcommand)]
-    pub command: Commands,
-}
-
-#[derive(Subcommand, Debug)]
-pub enum Commands {
-    /// Runs the API server
-    Server,
-
-    /// Sets up the admin user
-    Setup,
 }

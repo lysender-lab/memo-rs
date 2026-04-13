@@ -6,11 +6,11 @@ edition = "2024"
 [dependencies]
 axum.workspace = true
 chrono.workspace = true
-clap.workspace = true
 image.workspace = true
 infer.workspace = true
 jsonwebtoken.workspace = true
 kamadak-exif.workspace = true
+moka.workspace = true
 multer.workspace = true
 rpassword.workspace = true
 serde.workspace = true

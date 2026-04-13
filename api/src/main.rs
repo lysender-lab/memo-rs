@@ -1,8 +1,6 @@
-use clap::Parser;
-use config::CliArgs;
 use run::run_command;
-use snafu::ErrorCompat;
-use std::process;
+use std::{process, str::FromStr};
+use tracing::Level;
 
 mod auth;
 mod bucket;
@@ -22,18 +20,22 @@ pub use error::{Error, Result};
 
 #[tokio::main]
 async fn main() {
+    let mut max_log = Level::INFO;
+    if let Some(rust_log_max) = std::env::var_os("RUST_LOG_MAX") {
+        max_log = Level::from_str(rust_log_max.to_str().unwrap()).unwrap_or_else(|e| {
+            eprintln!("Error: {}", e);
+            process::exit(1);
+        });
+    }
+
     tracing_subscriber::fmt()
+        .with_max_level(max_log)
         .with_target(false)
         .compact()
         .init();
 
-    let args = CliArgs::parse();
-
-    if let Err(e) = run_command(args).await {
+    if let Err(e) = run_command().await {
         eprintln!("Application error: {}", e);
-        if let Some(bt) = ErrorCompat::backtrace(&e) {
-            println!("{}", bt);
-        }
         process::exit(1);
     }
 }
