@@ -1,8 +1,8 @@
 use std::result::Result as StdResult;
 
 use crate::{Error, Result};
-use memo::actor::Actor;
-use memo::role::Permission;
+use yaas::actor::Actor;
+use yaas::role::Permission;
 
 pub enum Resource {
     Client,
@@ -91,19 +91,19 @@ fn enforce_photo_permissions(actor: &Actor, action: Action) -> StdResult<(), &st
 fn enforce_client_permissions(actor: &Actor, action: Action) -> StdResult<(), &str> {
     let (permissions, message) = match action {
         Action::Create => (
-            vec![Permission::ClientsCreate],
+            vec![Permission::OrgsCreate],
             "You do not have permission to create new clients.",
         ),
         Action::Read => (
-            vec![Permission::ClientsList, Permission::ClientsView],
+            vec![Permission::OrgsList, Permission::OrgsView],
             "You do not have permission to view clients.",
         ),
         Action::Update => (
-            vec![Permission::ClientsEdit],
+            vec![Permission::OrgsEdit],
             "You do not have permission to edit clients.",
         ),
         Action::Delete => (
-            vec![Permission::ClientsDelete],
+            vec![Permission::OrgsDelete],
             "You do not have permission to delete clients.",
         ),
     };
@@ -117,11 +117,11 @@ fn enforce_client_permissions(actor: &Actor, action: Action) -> StdResult<(), &s
 fn enforce_buckets_permissions(actor: &Actor, action: Action) -> StdResult<(), &str> {
     let (permissions, message) = match action {
         Action::Create => (
-            vec![Permission::BucketsCreate],
+            vec![Permission::BucketsEdit],
             "You do not have permission to create new buckets.",
         ),
         Action::Read => (
-            vec![Permission::BucketsList, Permission::BucketsView],
+            vec![Permission::BucketsView],
             "You do not have permission to view buckets.",
         ),
         Action::Update => (
@@ -129,7 +129,7 @@ fn enforce_buckets_permissions(actor: &Actor, action: Action) -> StdResult<(), &
             "You do not have permission to edit buckets.",
         ),
         Action::Delete => (
-            vec![Permission::BucketsDelete],
+            vec![Permission::BucketsEdit],
             "You do not have permission to delete buckets.",
         ),
     };

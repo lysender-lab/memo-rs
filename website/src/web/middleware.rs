@@ -6,20 +6,14 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use memo::{bucket::BucketDto, dir::DirDto};
-use snafu::ensure;
 
 use crate::{
     Error, Result,
     ctx::{Ctx, CtxValue},
-    error::{ErrorInfo, ForbiddenSnafu},
-    models::{
-        BucketParams, ClientParams, MyBucketParams, MyDirParams, MyFileParams, Pref, UserParams,
-    },
+    error::ErrorInfo,
+    models::{BucketParams, MyBucketParams, MyDirParams, MyFileParams, Pref},
     run::AppState,
-    services::{
-        auth::authenticate_token, buckets::get_bucket, clients::get_client, dirs::get_dir,
-        files::get_photo, users::get_user,
-    },
+    services::{auth::authenticate_token, buckets::get_bucket, dirs::get_dir, files::get_photo},
     web::{Action, Resource, enforce_policy, handle_error},
 };
 
@@ -126,50 +120,6 @@ pub async fn file_middleware(
     Ok(next.run(req).await)
 }
 
-pub async fn client_middleware(
-    State(state): State<AppState>,
-    Extension(ctx): Extension<Ctx>,
-    Path(params): Path<ClientParams>,
-    mut req: Request,
-    next: Next,
-) -> Result<Response> {
-    let actor = ctx.actor().expect("actor is required");
-    enforce_policy(actor, Resource::Client, Action::Read)?;
-
-    // Regular users cannot view clients admin pages
-    ensure!(
-        actor.is_system_admin(),
-        ForbiddenSnafu {
-            msg: "Client pages require system admin privileges"
-        }
-    );
-
-    let token = ctx.token().expect("token is required");
-
-    let client = get_client(&state, token, &params.client_id).await?;
-
-    req.extensions_mut().insert(client);
-    Ok(next.run(req).await)
-}
-
-pub async fn user_middleware(
-    State(state): State<AppState>,
-    Extension(ctx): Extension<Ctx>,
-    Path(params): Path<UserParams>,
-    mut req: Request,
-    next: Next,
-) -> Result<Response> {
-    let actor = ctx.actor().expect("actor is required");
-    enforce_policy(actor, Resource::User, Action::Read)?;
-
-    let token = ctx.token().expect("token is required");
-
-    let user = get_user(&state, token, &params.client_id, &params.user_id).await?;
-
-    req.extensions_mut().insert(user);
-    Ok(next.run(req).await)
-}
-
 pub async fn bucket_middleware(
     State(state): State<AppState>,
     Extension(ctx): Extension<Ctx>,
@@ -195,12 +145,16 @@ pub async fn my_bucket_middleware(
     mut req: Request,
     next: Next,
 ) -> Result<Response> {
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx
+        .actor()
+        .expect("actor is required")
+        .actor
+        .expect("actor is required");
+
     enforce_policy(actor, Resource::Bucket, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
-
-    let bucket = get_bucket(&state, token, &actor.client_id, &params.bucket_id).await?;
+    let bucket = get_bucket(&state, token, &actor.org_id, &params.bucket_id).await?;
 
     req.extensions_mut().insert(bucket);
     Ok(next.run(req).await)

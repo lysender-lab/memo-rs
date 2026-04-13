@@ -1,4 +1,4 @@
-use memo::actor::Actor;
+use yaas::actor::Actor;
 
 #[derive(Clone)]
 pub struct Ctx {

@@ -1,8 +1,12 @@
+use base64::prelude::*;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
 use snafu::ensure;
 
+use crate::error::Base64DecodeSnafu;
+use crate::error::JwtClaimsParseSnafu;
 use crate::{Error, Result, error::CsrfTokenSnafu};
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -42,6 +46,29 @@ pub fn verify_csrf_token(token: &str, secret: &str) -> Result<String> {
 
     ensure!(!decoded.claims.sub.is_empty(), CsrfTokenSnafu);
     Ok(decoded.claims.sub)
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AuthClaims {
+    pub sub: String,
+    pub oid: String,
+    pub roles: String,
+    pub scope: String,
+    pub exp: usize,
+}
+
+pub fn decode_auth_token(token: &str) -> Result<AuthClaims> {
+    let chunks: Vec<&str> = token.split('.').collect();
+    if let Some(data_chunk) = chunks.get(1) {
+        let decoded = BASE64_URL_SAFE_NO_PAD
+            .decode(*data_chunk)
+            .context(Base64DecodeSnafu)?;
+
+        let claims: AuthClaims = serde_json::from_slice(&decoded).context(JwtClaimsParseSnafu)?;
+        return Ok(claims);
+    }
+
+    Err("Invalid auth token.".into())
 }
 
 #[cfg(test)]

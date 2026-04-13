@@ -1,5 +1,4 @@
 pub mod buckets;
-pub mod clients;
 pub mod dirs;
 pub mod error;
 pub mod files;

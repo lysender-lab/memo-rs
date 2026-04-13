@@ -7,7 +7,7 @@ use crate::{
     models::{Pref, TemplateData},
     run::AppState,
 };
-use memo::actor::Actor;
+use yaas::actor::Actor;
 
 #[derive(Clone, Template)]
 #[template(path = "pages/error.html")]

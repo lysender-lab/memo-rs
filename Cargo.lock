@@ -4340,6 +4340,7 @@ dependencies = [
  "askama",
  "axum",
  "axum-extra",
+ "base64 0.22.1",
  "chrono",
  "jsonwebtoken",
  "memo",
@@ -4357,6 +4358,7 @@ dependencies = [
  "tracing-subscriber",
  "urlencoding",
  "validator",
+ "yaas",
 ]
 
 [[package]]

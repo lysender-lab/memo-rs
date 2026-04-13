@@ -1,11 +1,9 @@
 pub mod auth;
 pub mod buckets;
 pub mod captcha;
-pub mod clients;
 pub mod dirs;
 pub mod files;
 pub mod token;
-pub mod users;
 
 use reqwest::StatusCode;
 use snafu::ResultExt;

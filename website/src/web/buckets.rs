@@ -2,8 +2,8 @@ use askama::Template;
 use axum::{Extension, Form, body::Body, extract::State, response::Response};
 use memo::bucket::BucketDto;
 use memo::client::ClientDto;
-use memo::role::Permission;
 use snafu::ResultExt;
+use yaas::role::Permission;
 
 use crate::Error;
 use crate::models::tokens::TokenFormData;

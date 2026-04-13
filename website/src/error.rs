@@ -8,8 +8,6 @@ use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::path::PathBuf;
 
-use memo::role::{InvalidPermissionsError, InvalidRolesError};
-
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Snafu)]
@@ -99,12 +97,6 @@ pub enum Error {
     #[snafu(display("User not found"))]
     UserNotFound,
 
-    #[snafu(display("{}", source))]
-    InvalidRoles { source: InvalidRolesError },
-
-    #[snafu(display("{}", source))]
-    InvalidPermissions { source: InvalidPermissionsError },
-
     #[snafu(display("{}: {}", msg, source))]
     HttpClient { msg: String, source: reqwest::Error },
 
@@ -137,6 +129,12 @@ pub enum Error {
 
     #[snafu(display("Failed to initialize form data. Refresh the page and try again."))]
     CsrfInit,
+
+    #[snafu(display("{}", source))]
+    Base64Decode { source: base64::DecodeError },
+
+    #[snafu(display("Failed to parse JWT claims: {}", source))]
+    JwtClaimsParse { source: serde_json::Error },
 
     #[snafu(display("{}", msg))]
     Whatever { msg: String },
@@ -182,8 +180,6 @@ impl From<&Error> for StatusCode {
             Error::InvalidPassword => StatusCode::UNAUTHORIZED,
             Error::InactiveUser => StatusCode::UNAUTHORIZED,
             Error::UserNotFound => StatusCode::NOT_FOUND,
-            Error::InvalidRoles { .. } => StatusCode::BAD_REQUEST,
-            Error::InvalidPermissions { .. } => StatusCode::BAD_REQUEST,
             Error::LoginFailed => StatusCode::UNAUTHORIZED,
             Error::LoginRequired => StatusCode::UNAUTHORIZED,
             Error::FileNotFound => StatusCode::NOT_FOUND,

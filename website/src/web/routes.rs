@@ -14,18 +14,8 @@ use crate::ctx::Ctx;
 use crate::error::ErrorInfo;
 use crate::models::Pref;
 use crate::run::AppState;
-use crate::web::buckets::{edit_bucket_handler, post_edit_bucket_handler};
 use crate::web::{error_handler, index_handler, login_handler, logout_handler, post_login_handler};
 
-use super::buckets::{
-    bucket_controls_handler, bucket_page_handler, buckets_handler, delete_bucket_handler,
-    new_bucket_handler, post_delete_bucket_handler, post_new_bucket_handler,
-};
-use super::clients::{
-    client_page_handler, clients_handler, clients_listing_handler, delete_client_handler,
-    edit_client_controls_handler, edit_client_handler, new_client_handler,
-    post_delete_client_handler, post_edit_client_handler, post_new_client_handler,
-};
 use super::dirs::{
     dir_page_handler, edit_dir_controls_handler, edit_dir_handler, get_delete_dir_handler,
     new_dir_handler, post_delete_dir_handler, post_edit_dir_handler, post_new_dir_handler,
@@ -36,20 +26,11 @@ use super::files::{
     pre_delete_photo_handler, upload_handler, upload_page_handler,
 };
 use super::middleware::{
-    auth_middleware, bucket_middleware, client_middleware, dir_middleware, file_middleware,
-    my_bucket_middleware, pref_middleware, require_auth_middleware, user_middleware,
+    auth_middleware, dir_middleware, file_middleware, my_bucket_middleware, pref_middleware,
+    require_auth_middleware,
 };
 use super::my_bucket::my_bucket_page_handler;
-use super::profile::{
-    change_user_password_handler, post_change_password_handler, profile_controls_handler,
-    profile_page_handler,
-};
-use super::users::{
-    delete_user_handler, new_user_handler, post_delete_user_handler, post_new_user_handler,
-    post_reset_password_handler, post_update_user_role_handler, post_update_user_status_handler,
-    reset_user_password_handler, update_user_role_handler, update_user_status_handler,
-    user_controls_handler, user_page_handler, users_handler,
-};
+use super::profile::profile_page_handler;
 use super::{dark_theme_handler, handle_error, light_theme_handler};
 
 pub fn all_routes(state: AppState, frontend_dir: &Path) -> Router {
@@ -90,12 +71,6 @@ pub fn private_routes(state: AppState) -> Router {
         .route("/prefs/theme/light", post(light_theme_handler))
         .route("/prefs/theme/dark", post(dark_theme_handler))
         .route("/profile", get(profile_page_handler))
-        .route("/profile/profile_controls", get(profile_controls_handler))
-        .route(
-            "/profile/change_password",
-            get(change_user_password_handler).post(post_change_password_handler),
-        )
-        .nest("/clients", client_routes(state.clone()))
         .nest("/buckets/{bucket_id}", my_bucket_routes(state.clone()))
         .layer(middleware::map_response_with_state(
             state.clone(),
@@ -110,104 +85,6 @@ pub fn private_routes(state: AppState) -> Router {
             auth_middleware,
         ))
         .route_layer(middleware::from_fn(pref_middleware))
-        .with_state(state)
-}
-
-fn client_routes(state: AppState) -> Router<AppState> {
-    Router::new()
-        .route("/", get(clients_handler))
-        .route("/listing", get(clients_listing_handler))
-        .route(
-            "/new",
-            get(new_client_handler).post(post_new_client_handler),
-        )
-        .nest("/{client_id}", client_inner_routes(state.clone()))
-        .with_state(state)
-}
-
-fn client_inner_routes(state: AppState) -> Router<AppState> {
-    Router::new()
-        .route("/", get(client_page_handler))
-        .route("/edit_controls", get(edit_client_controls_handler))
-        .route(
-            "/edit",
-            get(edit_client_handler).post(post_edit_client_handler),
-        )
-        .route(
-            "/delete",
-            get(delete_client_handler).post(post_delete_client_handler),
-        )
-        .nest("/users", users_routes(state.clone()))
-        .nest("/buckets", buckets_routes(state.clone()))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            client_middleware,
-        ))
-        .with_state(state)
-}
-
-fn users_routes(state: AppState) -> Router<AppState> {
-    Router::new()
-        .route("/", get(users_handler))
-        .route("/new", get(new_user_handler).post(post_new_user_handler))
-        .nest("/{user_id}", user_inner_routes(state.clone()))
-        .with_state(state)
-}
-
-fn user_inner_routes(state: AppState) -> Router<AppState> {
-    Router::new()
-        .route("/", get(user_page_handler))
-        .route("/edit_controls", get(user_controls_handler))
-        .route(
-            "/update_status",
-            get(update_user_status_handler).post(post_update_user_status_handler),
-        )
-        .route(
-            "/update_role",
-            get(update_user_role_handler).post(post_update_user_role_handler),
-        )
-        .route(
-            "/reset_password",
-            get(reset_user_password_handler).post(post_reset_password_handler),
-        )
-        .route(
-            "/delete",
-            get(delete_user_handler).post(post_delete_user_handler),
-        )
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            user_middleware,
-        ))
-        .with_state(state)
-}
-
-fn buckets_routes(state: AppState) -> Router<AppState> {
-    Router::new()
-        .route("/", get(buckets_handler))
-        .route(
-            "/new",
-            get(new_bucket_handler).post(post_new_bucket_handler),
-        )
-        .nest("/{bucket_id}", bucket_inner_routes(state.clone()))
-        .with_state(state)
-}
-
-fn bucket_inner_routes(state: AppState) -> Router<AppState> {
-    Router::new()
-        .route("/", get(bucket_page_handler))
-        .route("/edit_controls", get(bucket_controls_handler))
-        .route(
-            "/edit",
-            get(edit_bucket_handler).post(post_edit_bucket_handler),
-        )
-        .route(
-            "/delete",
-            get(delete_bucket_handler).post(post_delete_bucket_handler),
-        )
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            bucket_middleware,
-        ))
         .with_state(state)
 }
 

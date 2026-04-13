@@ -1,4 +1,3 @@
-use run::run_command;
 use std::{process, str::FromStr};
 use tracing::Level;
 
@@ -13,6 +12,8 @@ mod run;
 mod state;
 mod token;
 mod web;
+
+use run::run_command;
 
 // Re-export error types for convenience
 pub use error::{Error, Result};
