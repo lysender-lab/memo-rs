@@ -1,4 +1,3 @@
-use memo::role::InvalidRolesError;
 use snafu::Snafu;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -35,9 +34,6 @@ pub enum Error {
 
     #[snafu(display("{}", msg))]
     Validation { msg: String },
-
-    #[snafu(display("{}", source))]
-    InvalidRoles { source: InvalidRolesError },
 
     #[snafu(display("Maximum number of clients reached: 10"))]
     MaxClientsReached,

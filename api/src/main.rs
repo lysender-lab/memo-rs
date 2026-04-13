@@ -11,6 +11,7 @@ mod dir;
 mod error;
 mod file;
 mod health;
+mod oauth;
 mod run;
 mod state;
 mod web;

@@ -1,5 +1,4 @@
 use axum::extract::FromRef;
-use memo::actor::Actor;
 use moka::sync::Cache;
 use snafu::ResultExt;
 use std::sync::Arc;
@@ -11,6 +10,7 @@ use crate::{
     error::{DbSnafu, StorageSnafu},
 };
 use storage::StorageClient;
+use yaas::actor::Actor;
 
 use db::{DbMapper, create_db_mapper};
 
