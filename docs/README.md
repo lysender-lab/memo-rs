@@ -2,7 +2,7 @@
 
 ## Migrate authentication to YAAS
 
-- [ ] Prepare orgs and users in YAAS
+- [x] Prepare orgs and users in YAAS
 - [ ] Do not use clients and users table anymore
 - [ ] Use only one bucket per org
 - [ ] Set bucket IDs to org IDs
