@@ -35,10 +35,10 @@ pub async fn buckets_handler(
     Extension(client): Extension<ClientDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
     enforce_policy(actor, Resource::Bucket, Action::Read)?;
 
-    let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
+    let mut t = TemplateData::new(&state, actor, &pref);
     t.title = String::from("Buckets");
 
     let token = ctx.token().expect("token is required");
@@ -76,11 +76,11 @@ pub async fn new_bucket_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Bucket, Action::Create)?;
 
-    let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
+    let mut t = TemplateData::new(&state, actor, &pref);
     t.title = String::from("Create New Bucket");
 
     let token = create_csrf_token("new_bucket", &config.jwt_secret)?;
@@ -110,7 +110,7 @@ pub async fn post_new_bucket_handler(
     payload: Form<NewBucketFormData>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Bucket, Action::Create)?;
 
@@ -182,8 +182,8 @@ pub async fn bucket_page_handler(
     Extension(bucket): Extension<BucketDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
-    let actor = ctx.actor().expect("actor is required");
-    let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
+    let actor = ctx.actor();
+    let mut t = TemplateData::new(&state, actor, &pref);
 
     t.title = format!("Bucket - {}", &bucket.name);
 
@@ -193,7 +193,7 @@ pub async fn bucket_page_handler(
         bucket,
         updated: false,
         can_edit: actor.has_permissions(&vec![Permission::BucketsEdit]),
-        can_delete: actor.has_permissions(&vec![Permission::BucketsDelete]),
+        can_delete: actor.has_permissions(&vec![Permission::BucketsEdit]),
     };
 
     Response::builder()
@@ -217,7 +217,7 @@ pub async fn bucket_controls_handler(
     Extension(client): Extension<ClientDto>,
     Extension(bucket): Extension<BucketDto>,
 ) -> Result<Response<Body>> {
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Bucket, Action::Update)?;
 
@@ -226,7 +226,7 @@ pub async fn bucket_controls_handler(
         bucket,
         updated: false,
         can_edit: actor.has_permissions(&vec![Permission::BucketsEdit]),
-        can_delete: actor.has_permissions(&vec![Permission::BucketsDelete]),
+        can_delete: actor.has_permissions(&vec![Permission::BucketsEdit]),
     };
 
     Response::builder()
@@ -251,7 +251,7 @@ pub async fn edit_bucket_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Bucket, Action::Update)?;
 
@@ -281,7 +281,7 @@ pub async fn post_edit_bucket_handler(
     let config = state.config.clone();
     let cid = bucket.client_id.clone();
     let bid = bucket.id.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Bucket, Action::Update)?;
 
@@ -356,7 +356,7 @@ pub async fn delete_bucket_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Bucket, Action::Delete)?;
 
@@ -383,7 +383,7 @@ pub async fn post_delete_bucket_handler(
     payload: Form<TokenFormData>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Bucket, Action::Delete)?;
 

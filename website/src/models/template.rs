@@ -17,13 +17,10 @@ pub struct TemplateData {
 }
 
 impl TemplateData {
-    pub fn new(state: &AppState, actor: Option<Actor>, pref: &Pref) -> TemplateData {
+    pub fn new(state: &AppState, actor: &Actor, pref: &Pref) -> TemplateData {
         let config = state.config.clone();
         let assets = config.assets.clone();
-        let actor = match actor {
-            Some(actor) => actor.actor,
-            None => None,
-        };
+        let actor = actor.actor.clone();
 
         TemplateData {
             theme: pref.theme.clone(),

@@ -1,5 +1,5 @@
 use askama::Template;
-use axum::{Extension, Form, body::Body, extract::State, response::Response};
+use axum::{Extension, body::Body, extract::State, response::Response};
 use snafu::ResultExt;
 
 use crate::{
@@ -23,8 +23,8 @@ pub async fn profile_page_handler(
     Extension(pref): Extension<Pref>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
-    let actor = ctx.actor().expect("actor is required");
-    let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
+    let actor = ctx.actor();
+    let mut t = TemplateData::new(&state, actor, &pref);
 
     let actor = actor.clone().actor.expect("actor is required");
     t.title = format!("User - {}", &actor.user.name);

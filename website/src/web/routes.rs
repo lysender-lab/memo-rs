@@ -172,7 +172,7 @@ async fn response_mapper(
         }
 
         let full_page = headers.get("HX-Request").is_none();
-        let actor = ctx.actor().cloned();
+        let actor = ctx.actor();
         return handle_error(&state, actor, &pref, e.clone(), full_page);
     }
     res

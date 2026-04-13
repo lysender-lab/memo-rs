@@ -39,7 +39,7 @@ pub async fn search_dirs_handler(
     State(state): State<AppState>,
     Query(query): Query<SearchDirsParams>,
 ) -> Result<Response<Body>> {
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
     enforce_policy(actor, Resource::Album, Action::Read)?;
 
     let cid = bucket.client_id.clone();
@@ -104,11 +104,11 @@ pub async fn new_dir_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Album, Action::Create)?;
 
-    let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
+    let mut t = TemplateData::new(&state, actor, &pref);
     t.title = String::from(match bucket.images_only {
         true => "Create New Album",
         false => "Create New Directory",
@@ -140,7 +140,7 @@ pub async fn post_new_dir_handler(
     payload: Form<NewDirFormData>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Album, Action::Create)?;
 
@@ -216,8 +216,8 @@ pub async fn dir_page_handler(
     Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
-    let actor = ctx.actor().expect("actor is required");
-    let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
+    let actor = ctx.actor();
+    let mut t = TemplateData::new(&state, actor, &pref);
 
     t.title = format!("Photos - {}", &dir.label);
 
@@ -256,7 +256,7 @@ pub async fn edit_dir_controls_handler(
     Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
 ) -> Result<Response<Body>> {
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
     enforce_policy(actor, Resource::Album, Action::Update)?;
 
     let tpl = EditDirControlsTemplate {
@@ -292,7 +292,7 @@ pub async fn edit_dir_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Album, Action::Update)?;
 
@@ -324,7 +324,7 @@ pub async fn post_edit_dir_handler(
     let cid = bucket.client_id.clone();
     let bid = bucket.id.clone();
     let dir_id = dir.id.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Album, Action::Update)?;
 
@@ -402,7 +402,7 @@ pub async fn get_delete_dir_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Album, Action::Delete)?;
     let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
@@ -429,7 +429,7 @@ pub async fn post_delete_dir_handler(
     payload: Form<TokenFormData>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Album, Action::Delete)?;
 

@@ -28,8 +28,8 @@ pub async fn my_bucket_page_handler(
     State(state): State<AppState>,
     Query(query): Query<ListDirsParams>,
 ) -> Result<Response<Body>> {
-    let actor = ctx.actor().expect("actor is required");
-    let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
+    let actor = ctx.actor();
+    let mut t = TemplateData::new(&state, actor, &pref);
 
     t.title = format!("Bucket - {}", &bucket.name);
 

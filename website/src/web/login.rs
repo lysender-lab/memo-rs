@@ -22,7 +22,7 @@ use crate::{
     },
 };
 use crate::{error::ErrorInfo, models::Pref, run::AppState};
-use memo::actor::Actor;
+use yaas::actor::Actor;
 
 use super::AUTH_TOKEN_COOKIE;
 
@@ -41,8 +41,8 @@ pub async fn login_handler(
 ) -> Result<Response<Body>> {
     // Errors are handled via redirect with query params
     let pref = Pref::new();
-    let actor: Option<Actor> = None;
-    let mut t = TemplateData::new(&state, actor, &pref);
+    let actor = Actor::default();
+    let mut t = TemplateData::new(&state, &actor, &pref);
     t.title = String::from("Login");
     let config = state.config.clone();
     let captcha_enabled = config.captcha_enabled();

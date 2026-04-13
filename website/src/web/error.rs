@@ -29,12 +29,12 @@ struct ErrorMessageData {
 }
 
 pub async fn error_handler(State(state): State<AppState>) -> Response<Body> {
-    let actor = None;
+    let actor = Actor::default();
     let pref = Pref::new();
 
     handle_error(
         &state,
-        actor,
+        &actor,
         &pref,
         ErrorInfo {
             status_code: StatusCode::NOT_FOUND,
@@ -48,7 +48,7 @@ pub async fn error_handler(State(state): State<AppState>) -> Response<Body> {
 /// Render an error page or an error widget
 pub fn handle_error(
     state: &AppState,
-    actor: Option<Actor>,
+    actor: &Actor,
     pref: &Pref,
     error: ErrorInfo,
     full_page: bool,
