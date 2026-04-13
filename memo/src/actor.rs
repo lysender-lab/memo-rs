@@ -4,12 +4,37 @@ use validator::Validate;
 use crate::role::{Permission, Role, roles_permissions, to_permissions};
 use crate::user::UserDto;
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ActorDto {
+    pub id: String,
+    pub org_id: String,
+    pub org_count: i32,
+    pub scopes: Vec<Scope>,
+    pub user: UserDto,
+    pub roles: Vec<Role>,
+    pub permissions: Vec<Permission>,
+}
+
+#[derive(Clone)]
+pub struct ActorPayloadDto {
+    pub id: String,
+    pub org_id: String,
+    pub org_count: i32,
+    pub roles: Vec<Role>,
+    pub scopes: Vec<Scope>,
+}
+
 #[derive(Clone)]
 pub struct ActorPayload {
     pub id: String,
     pub client_id: String,
     pub default_bucket_id: Option<String>,
     pub scope: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Actor {
+    pub actor: Option<ActorDto>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
