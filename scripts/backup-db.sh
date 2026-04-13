@@ -15,9 +15,7 @@ echo "Creating backup for memo-rs database at $CURRENT_DATE"
 mkdir -p "$TARGET_DIR"
 
 # Backup the database
-sqlite3 "$MEMO_DB_PATH/db.sqlite3" ".backup $TARGET_DIR/db.sqlite3"
-# Verify backup
-sqlite3 "$TARGET_DIR/db.sqlite3" "PRAGMA integrity_check;"
+tursodb --readonly "$MEMO_DB_PATH/memo.db" ".dump" >"$TARGET_DIR/memo.sql"
 
 # Compress directory
 cd "$DB_BACKUP_PATH/memo-rs"
