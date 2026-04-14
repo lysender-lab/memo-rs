@@ -12,8 +12,6 @@ use crate::error::{ConfigSnafu, ManifestParseSnafu, ManifestReadSnafu};
 pub struct Config {
     pub server: ServerConfig,
     pub frontend_dir: PathBuf,
-    pub captcha_site_key: Option<String>,
-    pub captcha_api_key: Option<String>,
     pub api_url: String,
     pub jwt_secret: String,
     pub ga_tag_id: Option<String>,
@@ -50,14 +48,8 @@ pub struct AssetManifest {
 }
 
 impl Config {
-    pub fn captcha_enabled(&self) -> bool {
-        self.captcha_site_key.is_some() && self.captcha_api_key.is_some()
-    }
-
     pub fn build_from_env() -> Result<Config> {
         let frontend_dir = PathBuf::from(required_env("FRONTEND_DIR")?);
-        let captcha_site_key = optional_env("CAPTCHA_SITE_KEY");
-        let captcha_api_key = optional_env("CAPTCHA_API_KEY");
         let api_url = required_env("API_URL")?;
         let jwt_secret = required_env("JWT_SECRET")?;
         let ga_tag_id = optional_env("GA_TAG_ID");
@@ -91,8 +83,6 @@ impl Config {
                 https: required_env("HTTPS")? == "1",
             },
             frontend_dir,
-            captcha_site_key,
-            captcha_api_key,
             api_url,
             jwt_secret,
             ga_tag_id,

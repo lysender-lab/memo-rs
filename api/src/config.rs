@@ -33,10 +33,7 @@ pub struct DbConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct AuthConfig {
-    pub auth_url: String,
     pub api_url: String,
-    pub client_id: String,
-    pub client_secret: String,
 }
 
 impl Config {
@@ -62,10 +59,7 @@ impl Config {
             },
             db: DbConfig { dir: db_dir },
             auth: AuthConfig {
-                auth_url: required_env("AUTH_PUBLIC_BASE_URL")?,
                 api_url: required_env("AUTH_API_BASE_URL")?,
-                client_id: required_env("AUTH_CLIENT_ID")?,
-                client_secret: required_env("AUTH_CLIENT_SECRET")?,
             },
         };
 

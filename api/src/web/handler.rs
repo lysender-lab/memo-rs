@@ -8,7 +8,6 @@ use core::result::Result as CoreResult;
 use serde::Serialize;
 use snafu::{OptionExt, ResultExt, ensure};
 use tokio::{fs::File, fs::create_dir_all, io::AsyncWriteExt};
-use tracing::info;
 
 use crate::{
     bucket::update_bucket,
