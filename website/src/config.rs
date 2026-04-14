@@ -1,4 +1,3 @@
-use clap::Parser;
 use serde::Deserialize;
 use snafu::{ResultExt, ensure};
 use std::collections::HashMap;
@@ -11,15 +10,28 @@ use crate::error::{ConfigSnafu, ManifestParseSnafu, ManifestReadSnafu};
 
 #[derive(Clone)]
 pub struct Config {
-    pub server_address: String,
-    pub ssl: bool,
+    pub server: ServerConfig,
     pub frontend_dir: PathBuf,
-    pub captcha_site_key: Option<String>,
-    pub captcha_api_key: Option<String>,
     pub api_url: String,
     pub jwt_secret: String,
     pub ga_tag_id: Option<String>,
     pub assets: AssetManifest,
+    pub auth: AuthConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ServerConfig {
+    pub address: String,
+    pub https: bool,
+    pub public_url: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AuthConfig {
+    pub auth_url: String,
+    pub api_url: String,
+    pub client_id: String,
+    pub client_secret: String,
 }
 
 #[derive(Deserialize)]
@@ -36,16 +48,8 @@ pub struct AssetManifest {
 }
 
 impl Config {
-    pub fn captcha_enabled(&self) -> bool {
-        self.captcha_site_key.is_some() && self.captcha_api_key.is_some()
-    }
-
     pub fn build_from_env() -> Result<Config> {
-        let server_address = required_env("SERVER_ADDRESS")?;
-        let ssl = required_env_parse::<bool>("SSL")?;
         let frontend_dir = PathBuf::from(required_env("FRONTEND_DIR")?);
-        let captcha_site_key = optional_env("CAPTCHA_SITE_KEY");
-        let captcha_api_key = optional_env("CAPTCHA_API_KEY");
         let api_url = required_env("API_URL")?;
         let jwt_secret = required_env("JWT_SECRET")?;
         let ga_tag_id = optional_env("GA_TAG_ID");
@@ -73,15 +77,22 @@ impl Config {
         let assets = AssetManifest::build(&frontend_dir)?;
 
         Ok(Config {
-            server_address,
-            ssl,
+            server: ServerConfig {
+                address: required_env("SERVER_ADDRESS")?,
+                public_url: required_env("SERVER_PUBLIC_URL")?,
+                https: required_env("HTTPS")? == "1",
+            },
             frontend_dir,
-            captcha_site_key,
-            captcha_api_key,
             api_url,
             jwt_secret,
             ga_tag_id,
             assets,
+            auth: AuthConfig {
+                auth_url: required_env("AUTH_PUBLIC_BASE_URL")?,
+                api_url: required_env("AUTH_API_BASE_URL")?,
+                client_id: required_env("AUTH_CLIENT_ID")?,
+                client_secret: required_env("AUTH_CLIENT_SECRET")?,
+            },
         })
     }
 }
@@ -134,8 +145,3 @@ impl AssetManifest {
         })
     }
 }
-
-/// memo-webite Make memories
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-pub struct Args {}

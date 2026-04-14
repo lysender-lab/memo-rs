@@ -1,38 +1,34 @@
-use memo::actor::Actor;
+use yaas::actor::Actor;
 
 #[derive(Clone)]
 pub struct Ctx {
-    pub value: Option<CtxValue>,
-}
-
-#[derive(Clone)]
-pub struct CtxValue {
-    token: String,
+    token: Option<String>,
     actor: Actor,
 }
 
 impl Ctx {
-    pub fn new(value: Option<CtxValue>) -> Self {
-        Ctx { value }
+    pub fn new(token: Option<String>, actor: Actor) -> Self {
+        Ctx { token, actor }
     }
 
     pub fn token(&self) -> Option<&str> {
-        if let Some(value) = self.value.as_ref() {
-            return Some(value.token.as_str());
-        }
-        None
+        self.token.as_deref()
     }
 
-    pub fn actor(&self) -> Option<&Actor> {
-        if let Some(value) = self.value.as_ref() {
-            return Some(&value.actor);
-        }
-        None
+    pub fn actor(&self) -> &Actor {
+        &self.actor
+    }
+
+    pub fn is_authenticated(&self) -> bool {
+        self.token.is_some() && self.actor.has_auth_scope()
     }
 }
 
-impl CtxValue {
-    pub fn new(token: String, actor: Actor) -> Self {
-        Self { token, actor }
+impl Default for Ctx {
+    fn default() -> Self {
+        Self {
+            token: None,
+            actor: Actor::default(),
+        }
     }
 }

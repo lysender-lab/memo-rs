@@ -1,0 +1,14 @@
+{% extends "layout/base.html" %}
+
+{% block content %}
+<section class="section">
+    <div class="container">
+        <section class="hero is-danger">
+            <div class="hero-body">
+                <p class="title">OAuth Authorization Error</p>
+                <p class="subtitle">{{ error_message }}</p>
+            </div>
+        </section>
+    </div>
+</section>
+{% endblock %}

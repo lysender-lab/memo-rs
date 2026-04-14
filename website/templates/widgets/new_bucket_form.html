@@ -1,7 +1,7 @@
 <form
     method="post"
-    action="/clients/{{ client.id }}/buckets/new"
-    hx-post="/clients/{{ client.id }}/buckets/new"
+    action="/buckets/new"
+    hx-post="/buckets/new"
 >
     <div class="card">
         <div class="card-content">
@@ -71,7 +71,7 @@
                     <button class="button is-link" type="submit" name="submit">Submit</button>
                 </div>
                 <div class="control">
-                    <a class="button is-link is-light" href="/clients/{{ client.id }}/buckets">Cancel</a>
+                    <a class="button is-link is-light" href="/buckets">Cancel</a>
                 </div>
             </div>
         </div>

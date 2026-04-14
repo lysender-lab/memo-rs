@@ -45,10 +45,9 @@ pub async fn photo_listing_v2_handler(
     Query(query): Query<ListFilesParams>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
     enforce_policy(actor, Resource::Photo, Action::Read)?;
 
-    let cid = bucket.client_id.clone();
     let bid = bucket.id.clone();
     let dir_id = dir.id.clone();
 
@@ -64,7 +63,7 @@ pub async fn photo_listing_v2_handler(
     };
 
     let auth_token = ctx.token().expect("token is required");
-    let result = list_files(&state, auth_token, &cid, &bid, &dir_id, &query).await;
+    let result = list_files(&state, auth_token, &bid, &dir_id, &query).await;
 
     match result {
         Ok(listing) => {
@@ -122,11 +121,11 @@ pub async fn upload_page_handler(
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
 
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
     enforce_policy(actor, Resource::Photo, Action::Create)?;
 
     let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
-    let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
+    let mut t = TemplateData::new(&state, actor, &pref);
 
     t.title = format!("Photos - {} - Upload Photos", &dir.label);
 
@@ -154,10 +153,9 @@ pub async fn upload_handler(
     body: Bytes,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
     enforce_policy(actor, Resource::Photo, Action::Create)?;
 
-    let cid = bucket.client_id.clone();
     let bid = bucket.id.clone();
 
     let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
@@ -166,7 +164,6 @@ pub async fn upload_handler(
     let result = upload_photo(
         &state,
         auth_token,
-        &cid,
         &bid,
         &dir.id,
         &headers,
@@ -216,7 +213,7 @@ pub async fn pre_delete_photo_handler(
     Extension(dir): Extension<DirDto>,
     Extension(photo): Extension<Photo>,
 ) -> Result<Response<Body>> {
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Delete) {
         return Ok(handle_error_message(&err));
@@ -240,7 +237,7 @@ pub async fn confirm_delete_photo_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Delete) {
         return Ok(handle_error_message(&err));
@@ -277,8 +274,7 @@ pub async fn exec_delete_photo_handler(
     payload: Form<TokenFormData>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
-    let cid = bucket.client_id.clone();
+    let actor = ctx.actor();
     let bid = bucket.id.clone();
     let dir_id = dir.id.clone();
 
@@ -293,16 +289,7 @@ pub async fn exec_delete_photo_handler(
     };
 
     let auth_token = ctx.token().expect("token is required");
-    let result = delete_photo(
-        &state,
-        auth_token,
-        &cid,
-        &bid,
-        &dir_id,
-        &photo.id,
-        &payload.token,
-    )
-    .await;
+    let result = delete_photo(&state, auth_token, &bid, &dir_id, &photo.id, &payload.token).await;
     match result {
         Ok(_) => Response::builder()
             .status(204)

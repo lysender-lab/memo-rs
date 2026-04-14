@@ -35,12 +35,8 @@ pub struct UpdateBucketData {
     pub label: String,
 }
 
-pub async fn list_buckets(
-    state: &AppState,
-    token: &str,
-    client_id: &str,
-) -> Result<Vec<BucketDto>> {
-    let url = format!("{}/clients/{}/buckets", &state.config.api_url, client_id);
+pub async fn list_buckets(state: &AppState, token: &str) -> Result<Vec<BucketDto>> {
+    let url = format!("{}/buckets", &state.config.api_url);
 
     let response = state
         .client
@@ -69,13 +65,12 @@ pub async fn list_buckets(
 pub async fn create_bucket(
     state: &AppState,
     token: &str,
-    client_id: &str,
     form: &NewBucketFormData,
 ) -> Result<BucketDto> {
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(csrf_result == "new_bucket", CsrfTokenSnafu);
 
-    let url = format!("{}/clients/{}/buckets", &state.config.api_url, client_id);
+    let url = format!("{}/buckets", &state.config.api_url);
 
     let data = NewBucketData {
         name: form.name.clone(),
@@ -108,16 +103,8 @@ pub async fn create_bucket(
     Ok(bucket)
 }
 
-pub async fn get_bucket(
-    state: &AppState,
-    token: &str,
-    client_id: &str,
-    bucket_id: &str,
-) -> Result<BucketDto> {
-    let url = format!(
-        "{}/clients/{}/buckets/{}",
-        &state.config.api_url, client_id, bucket_id
-    );
+pub async fn get_bucket(state: &AppState, token: &str, bucket_id: &str) -> Result<BucketDto> {
+    let url = format!("{}/buckets/{}", &state.config.api_url, bucket_id);
     let response = state
         .client
         .get(url)
@@ -145,17 +132,13 @@ pub async fn get_bucket(
 pub async fn update_bucket(
     state: &AppState,
     token: &str,
-    client_id: &str,
     id: &str,
     form: &UpdateBucketFormData,
 ) -> Result<BucketDto> {
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(csrf_result == id, CsrfTokenSnafu);
 
-    let url = format!(
-        "{}/clients/{}/buckets/{}",
-        &state.config.api_url, client_id, id
-    );
+    let url = format!("{}/buckets/{}", &state.config.api_url, id);
 
     let data = UpdateBucketData {
         label: form.label.clone(),
@@ -189,16 +172,12 @@ pub async fn update_bucket(
 pub async fn delete_bucket(
     state: &AppState,
     token: &str,
-    client_id: &str,
     bucket_id: &str,
     csrf_token: &str,
 ) -> Result<()> {
     let csrf_result = verify_csrf_token(csrf_token, &state.config.jwt_secret)?;
     ensure!(csrf_result == bucket_id, CsrfTokenSnafu);
-    let url = format!(
-        "{}/clients/{}/buckets/{}",
-        &state.config.api_url, client_id, bucket_id
-    );
+    let url = format!("{}/buckets/{}", &state.config.api_url, bucket_id);
     let response = state
         .client
         .delete(url)

@@ -17,6 +17,7 @@ services:
       SERVER_ADDRESS: "0.0.0.0:80"
       GOOGLE_PROJECT_ID: "google-project"
       GOOGLE_APPLICATION_CREDENTIALS: "/app/certs/google-service-account.json"
+      AUTH_API_BASE_URL: "https://yaas-flashy-domain.com"
     restart: always
 
   website:
@@ -31,11 +32,14 @@ services:
       - "127.0.0.1:11000:80"
     environment:
       SERVER_ADDRESS: "0.0.0.0:80"
-      SSL: "false"
+      SERVER_PUBLIC_URL: "https://awesome-domain.com"
+      HTTPS: "1"
       FRONTEND_DIR: "/app/html"
-      CAPTCHA_SITE_KEY: ""
-      CAPTCHA_API_KEY: ""
       API_URL: "http://api"
       JWT_SECRET: "secret"
       GA_TAG_ID: ""
+      AUTH_PUBLIC_BASE_URL: "https://yaas-flashy-domain.com"
+      AUTH_API_BASE_URL: "https://yaas-flashy-domain.com"
+      AUTH_CLIENT_ID: "xxx"
+      AUTH_CLIENT_SECRET: "xxx"
     restart: always

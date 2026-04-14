@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use axum::extract::rejection::JsonRejection;
 use axum::response::IntoResponse;
 use axum::{body::Body, http::StatusCode, response::Response};
-use memo::role::{InvalidPermissionsError, InvalidRolesError};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 
@@ -99,12 +98,6 @@ pub enum Error {
     #[snafu(display("User not found"))]
     UserNotFound,
 
-    #[snafu(display("{}", source))]
-    InvalidRoles { source: InvalidRolesError },
-
-    #[snafu(display("{}", source))]
-    InvalidPermissions { source: InvalidPermissionsError },
-
     #[snafu(display("Upload error: {}", source))]
     UploadFile { source: std::io::Error },
 
@@ -113,6 +106,21 @@ pub enum Error {
 
     #[snafu(display("Storage error: {}", source))]
     Storage { source: storage::Error },
+
+    #[snafu(display("{}", source))]
+    Base64Decode { source: base64::DecodeError },
+
+    #[snafu(display("Failed to parse JWT claims: {}", source))]
+    JwtClaimsParse { source: serde_json::Error },
+
+    #[snafu(display("{}: {}", msg, source))]
+    HttpClient { msg: String, source: reqwest::Error },
+
+    #[snafu(display("{}: {}", msg, source))]
+    HttpResponseParse { msg: String, source: reqwest::Error },
+
+    #[snafu(display("{}", msg))]
+    Oauth { msg: String },
 
     #[snafu(display("{}", msg))]
     Whatever { msg: String },
@@ -157,9 +165,7 @@ impl From<&Error> for StatusCode {
             Error::RequiresAuth => StatusCode::UNAUTHORIZED,
             Error::InvalidPassword => StatusCode::UNAUTHORIZED,
             Error::InactiveUser => StatusCode::UNAUTHORIZED,
-            Error::UserNotFound => StatusCode::UNAUTHORIZED,
-            Error::InvalidRoles { .. } => StatusCode::BAD_REQUEST,
-            Error::InvalidPermissions { .. } => StatusCode::BAD_REQUEST,
+            Error::Oauth { .. } => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

@@ -31,7 +31,7 @@ pub async fn index_handler(
     Extension(pref): Extension<Pref>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
     enforce_policy(actor, Resource::Bucket, Action::Read)?;
 
     if actor.is_system_admin() {
@@ -39,11 +39,11 @@ pub async fn index_handler(
         return Ok(Redirect::to("/clients").into_response());
     }
 
-    let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
+    let mut t = TemplateData::new(&state, actor, &pref);
     t.title = String::from("Home");
 
     let token = ctx.token().expect("token is required");
-    let buckets = list_buckets(&state, token, &actor.client_id).await?;
+    let buckets = list_buckets(&state, token).await?;
 
     let tpl = IndexTemplate { t, buckets };
 

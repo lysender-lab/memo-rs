@@ -5,14 +5,16 @@ edition = "2024"
 
 [dependencies]
 axum.workspace = true
+base64.workspace = true
 chrono.workspace = true
-clap.workspace = true
 image.workspace = true
 infer.workspace = true
 jsonwebtoken.workspace = true
 kamadak-exif.workspace = true
+moka.workspace = true
 multer.workspace = true
 rpassword.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 snafu.workspace = true
@@ -27,3 +29,4 @@ db = { path = "../db" }
 memo = { path = "../memo" }
 password = { path = "../password" }
 storage = { path = "../storage" }
+yaas = { path = "../yaas" }

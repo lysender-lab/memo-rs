@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use serde::Deserialize;
 use snafu::{ResultExt, ensure};
 use std::{env, path::PathBuf};
 
@@ -12,6 +12,7 @@ pub struct Config {
     pub cloud: CloudConfig,
     pub server: ServerConfig,
     pub db: DbConfig,
+    pub auth: AuthConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -30,8 +31,13 @@ pub struct DbConfig {
     pub dir: PathBuf,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct AuthConfig {
+    pub api_url: String,
+}
+
 impl Config {
-    pub fn build_from_env() -> Result<Self> {
+    pub fn build() -> Result<Self> {
         let db_dir = PathBuf::from(required_env("DATABASE_DIR")?);
 
         ensure!(
@@ -52,6 +58,9 @@ impl Config {
                 address: required_env("SERVER_ADDRESS")?,
             },
             db: DbConfig { dir: db_dir },
+            auth: AuthConfig {
+                api_url: required_env("AUTH_API_BASE_URL")?,
+            },
         };
 
         // Validate config values
@@ -98,21 +107,4 @@ fn required_env(name: &str) -> Result<String> {
         }
         .fail(),
     }
-}
-
-/// File Management in the cloud
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-pub struct CliArgs {
-    #[command(subcommand)]
-    pub command: Commands,
-}
-
-#[derive(Subcommand, Debug)]
-pub enum Commands {
-    /// Runs the API server
-    Server,
-
-    /// Sets up the admin user
-    Setup,
 }

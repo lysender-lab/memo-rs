@@ -39,10 +39,9 @@ pub async fn search_dirs_handler(
     State(state): State<AppState>,
     Query(query): Query<SearchDirsParams>,
 ) -> Result<Response<Body>> {
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
     enforce_policy(actor, Resource::Album, Action::Read)?;
 
-    let cid = bucket.client_id.clone();
     let bid = bucket.id.clone();
 
     let mut tpl = SearchDirsTemplate {
@@ -54,7 +53,7 @@ pub async fn search_dirs_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    match list_dirs(&state, token, &cid, &bid, &query).await {
+    match list_dirs(&state, token, &bid, &query).await {
         Ok(dirs) => {
             let mut keyword_param: String = "".to_string();
             if let Some(keyword) = &query.keyword {
@@ -104,11 +103,11 @@ pub async fn new_dir_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Album, Action::Create)?;
 
-    let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
+    let mut t = TemplateData::new(&state, actor, &pref);
     t.title = String::from(match bucket.images_only {
         true => "Create New Album",
         false => "Create New Directory",
@@ -140,12 +139,11 @@ pub async fn post_new_dir_handler(
     payload: Form<NewDirFormData>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Album, Action::Create)?;
 
     let token = create_csrf_token("new_dir", &config.jwt_secret)?;
-    let cid = bucket.client_id.clone();
     let bid = bucket.id.clone();
 
     let mut tpl = DirFormTemplate {
@@ -167,7 +165,7 @@ pub async fn post_new_dir_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    let result = create_dir(&state, token, &cid, &bid, dir).await;
+    let result = create_dir(&state, token, &bid, dir).await;
 
     match result {
         Ok(_) => {
@@ -216,8 +214,8 @@ pub async fn dir_page_handler(
     Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
-    let actor = ctx.actor().expect("actor is required");
-    let mut t = TemplateData::new(&state, Some(actor.clone()), &pref);
+    let actor = ctx.actor();
+    let mut t = TemplateData::new(&state, actor, &pref);
 
     t.title = format!("Photos - {}", &dir.label);
 
@@ -256,7 +254,7 @@ pub async fn edit_dir_controls_handler(
     Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
 ) -> Result<Response<Body>> {
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
     enforce_policy(actor, Resource::Album, Action::Update)?;
 
     let tpl = EditDirControlsTemplate {
@@ -292,7 +290,7 @@ pub async fn edit_dir_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Album, Action::Update)?;
 
@@ -321,10 +319,9 @@ pub async fn post_edit_dir_handler(
     payload: Form<UpdateDirFormData>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let cid = bucket.client_id.clone();
     let bid = bucket.id.clone();
     let dir_id = dir.id.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Album, Action::Update)?;
 
@@ -343,7 +340,7 @@ pub async fn post_edit_dir_handler(
     tpl.payload.label = payload.label.clone();
 
     let token = ctx.token().expect("token is required");
-    let result = update_dir(&state, token, &cid, &bid, &dir_id, &payload).await;
+    let result = update_dir(&state, token, &bid, &dir_id, &payload).await;
     match result {
         Ok(updated_dir) => {
             // Render the controls again with an out-of-bound swap for title
@@ -402,7 +399,7 @@ pub async fn get_delete_dir_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Album, Action::Delete)?;
     let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
@@ -429,7 +426,7 @@ pub async fn post_delete_dir_handler(
     payload: Form<TokenFormData>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let actor = ctx.actor().expect("actor is required");
+    let actor = ctx.actor();
 
     enforce_policy(actor, Resource::Album, Action::Delete)?;
 
@@ -437,15 +434,7 @@ pub async fn post_delete_dir_handler(
 
     let auth_token = ctx.token().expect("token is required");
 
-    let result = delete_dir(
-        &state,
-        auth_token,
-        &bucket.client_id,
-        &bucket.id,
-        &dir.id,
-        &payload.token,
-    )
-    .await;
+    let result = delete_dir(&state, auth_token, &bucket.id, &dir.id, &payload.token).await;
 
     match result {
         Ok(_) => {

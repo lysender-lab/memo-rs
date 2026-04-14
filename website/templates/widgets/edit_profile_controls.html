@@ -1,13 +1,14 @@
 <div class="is-flex is-justify-content-space-between">
     <div>
         <div class="buttons">
-            <button
+            <a
                 class="button is-warning"
-                hx-get="/profile/change_password"
-                hx-target="#edit-profile-container"
+                href="{{ my_account_url }}"
+                target="_blank"
+                rel="noopener noreferrer"
             >
-                Change Password
-            </button>
+                Manage Account
+            </a>
         </div>
     </div>
 </div>

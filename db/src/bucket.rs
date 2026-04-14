@@ -105,6 +105,7 @@ impl BucketRepo {
     }
 
     pub async fn list(&self, client_id: &str) -> Result<Vec<BucketDto>> {
+        // Each client/org can only have 1 bucket now, so we list by id
         let query = r#"
             SELECT
                 id,

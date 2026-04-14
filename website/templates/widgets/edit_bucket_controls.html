@@ -1,7 +1,7 @@
 <div class="is-flex is-justify-content-space-between">
     <div>
         <div class="buttons">
-            <a class="button" href="/clients/{{ client.id }}/buckets">
+            <a class="button" href="/buckets">
                 <span class="icon is-small">
                     <i class="fas fa-arrow-left"></i>
                 </span>
@@ -34,7 +34,7 @@
                 {% if can_edit %}
                 <a
                     class="dropdown-item"
-                    hx-get="/clients/{{ client.id }}/buckets/{{ bucket.id }}/edit"
+                    hx-get="/buckets/{{ bucket.id }}/edit"
                     hx-target="#edit-bucket-container"
                 >
                     <span class="icon is-small">
@@ -51,7 +51,7 @@
 
                 <a
                     class="dropdown-item has-text-danger"
-                    hx-get="/clients/{{ client.id }}/buckets/{{ bucket.id }}/delete"
+                    hx-get="/buckets/{{ bucket.id }}/delete"
                     hx-target="#edit-bucket-container"
                 >
                     <span class="icon is-small">

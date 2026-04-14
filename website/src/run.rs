@@ -1,5 +1,6 @@
 use axum::Router;
 use axum::extract::FromRef;
+use moka::sync::Cache;
 use reqwest::{Client, ClientBuilder};
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,24 +13,33 @@ use tracing::{Level, info};
 use crate::Result;
 use crate::config::Config;
 use crate::web::all_routes;
+use yaas::actor::Actor;
 
 #[derive(Clone, FromRef)]
 pub struct AppState {
     pub config: Arc<Config>,
     pub client: Client,
+    pub auth_cache: Cache<String, Actor>,
 }
 
 pub async fn run(config: Config) -> Result<()> {
-    let server_address = config.server_address.clone();
+    let server_address = config.server.address.clone();
     let frontend_dir = config.frontend_dir.clone();
     let client = ClientBuilder::new()
         .timeout(Duration::from_secs(30))
         .build()
         .expect("HTTP Client is required");
 
+    let auth_cache = Cache::builder()
+        .time_to_live(Duration::from_secs(10 * 60))
+        .time_to_idle(Duration::from_secs(60))
+        .max_capacity(100)
+        .build();
+
     let state = AppState {
         config: Arc::new(config),
         client,
+        auth_cache,
     };
 
     let routes_all = Router::new()
