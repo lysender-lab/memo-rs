@@ -22,8 +22,8 @@ pub async fn authenticate_token(state: &AppState, token: &str) -> Result<Actor> 
         return Ok(actor);
     }
 
-    // Hit our api server instead of the auth server
-    let url = format!("{}/oauth/profile", &state.config.api_url);
+    // Hit the auth server directly
+    let url = format!("{}/oauth/profile", &state.config.auth.api_url);
     let response = state
         .client
         .get(url.as_str())

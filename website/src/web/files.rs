@@ -156,7 +156,6 @@ pub async fn upload_handler(
     let actor = ctx.actor();
     enforce_policy(actor, Resource::Photo, Action::Create)?;
 
-    let cid = bucket.client_id.clone();
     let bid = bucket.id.clone();
 
     let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
@@ -165,7 +164,6 @@ pub async fn upload_handler(
     let result = upload_photo(
         &state,
         auth_token,
-        &cid,
         &bid,
         &dir.id,
         &headers,

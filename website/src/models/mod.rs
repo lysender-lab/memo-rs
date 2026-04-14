@@ -1,4 +1,3 @@
-pub mod options;
 pub mod pagination;
 pub mod params;
 pub mod pref;

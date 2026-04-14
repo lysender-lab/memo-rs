@@ -16,6 +16,7 @@ use yaas::user::UserDto;
 struct ProfilePageTemplate {
     t: TemplateData,
     user: UserDto,
+    my_account_url: String,
 }
 
 pub async fn profile_page_handler(
@@ -31,25 +32,12 @@ pub async fn profile_page_handler(
 
     let tpl = ProfilePageTemplate {
         t,
-        user: actor.user.clone(),
+        user: actor.user,
+        my_account_url: format!("{}/profile", state.config.auth.auth_url),
     };
 
     Response::builder()
         .status(200)
-        .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)
-}
-
-#[derive(Template)]
-#[template(path = "widgets/edit_profile_controls.html")]
-struct ProfileControlsTemplate {}
-
-pub async fn profile_controls_handler() -> Result<Response<Body>> {
-    let tpl = ProfileControlsTemplate {};
-
-    Response::builder()
-        .status(200)
-        .header("Content-Type", "text/html")
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
         .context(ResponseBuilderSnafu)
 }

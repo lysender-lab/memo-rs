@@ -184,7 +184,6 @@ pub async fn get_photo(
 pub async fn upload_photo(
     state: &AppState,
     token: &str,
-    client_id: &str,
     bucket_id: &str,
     album_id: &str,
     headers: &HeaderMap,
