@@ -194,6 +194,7 @@ impl From<&Error> for StatusCode {
             Error::ClientNotFound => StatusCode::NOT_FOUND,
             Error::CsrfToken => StatusCode::BAD_REQUEST,
             Error::Oauth { .. } => StatusCode::UNAUTHORIZED,
+            Error::JwtClaimsParse { .. } => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

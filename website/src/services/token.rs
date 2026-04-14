@@ -68,7 +68,7 @@ pub fn decode_auth_token(token: &str) -> Result<AuthClaims> {
         return Ok(claims);
     }
 
-    Err("Invalid auth token.".into())
+    Err(Error::InvalidAuthToken)
 }
 
 #[cfg(test)]
