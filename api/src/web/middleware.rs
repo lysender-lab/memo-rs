@@ -7,7 +7,6 @@ use axum::{
     response::Response,
 };
 use snafu::{OptionExt, ResultExt, ensure};
-use tracing::info;
 use yaas::{actor::Actor, role::Permission};
 
 use crate::{
@@ -84,8 +83,6 @@ pub async fn bucket_middleware(
     //     }
     // );
 
-    info!("Fetching bucket with id: {}", params.bucket_id);
-
     let bucket = state
         .db
         .buckets
@@ -102,7 +99,7 @@ pub async fn bucket_middleware(
     };
 
     ensure!(
-        bucket.id == actor.org_id,
+        bucket.client_id == actor.org_id,
         NotFoundSnafu {
             msg: "Bucket not found"
         }

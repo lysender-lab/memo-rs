@@ -8,7 +8,7 @@ pub async fn logout_handler(cookies: Cookies) -> impl IntoResponse {
 
     Response::builder()
         .status(200)
-        .header("HX-Redirect", "/login")
+        .header("HX-Redirect", "/")
         .body("Log in".to_string())
         .expect("Response builder must succeed")
 }

@@ -95,8 +95,6 @@ pub async fn list_buckets_handler(
         .await
         .context(DbSnafu)?;
 
-    info!("Listing buckets for org: {}", actor.org_id);
-
     Ok(JsonResponse::new(serde_json::to_string(&buckets).unwrap()))
 }
 
