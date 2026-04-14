@@ -105,6 +105,7 @@ impl BucketRepo {
     }
 
     pub async fn list(&self, client_id: &str) -> Result<Vec<BucketDto>> {
+        // Each client/org can only have 1 bucket now, so we list by id
         let query = r#"
             SELECT
                 id,
@@ -115,13 +116,13 @@ impl BucketRepo {
                 created_at,
                 updated_at
             FROM buckets
-            WHERE client_id = :client_id AND deleted_at IS NULL
+            WHERE id = :id AND deleted_at IS NULL
             ORDER BY name ASC
         "#
         .to_string();
 
         let mut q_params = new_query_params();
-        q_params.push(text_param(":client_id", client_id.to_owned()));
+        q_params.push(text_param(":id", client_id.to_owned()));
 
         let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
         let mut rows = stmt.query(q_params).await.context(DbStatementSnafu)?;

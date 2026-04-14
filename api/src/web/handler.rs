@@ -8,6 +8,7 @@ use core::result::Result as CoreResult;
 use serde::Serialize;
 use snafu::{OptionExt, ResultExt, ensure};
 use tokio::{fs::File, fs::create_dir_all, io::AsyncWriteExt};
+use tracing::info;
 
 use crate::{
     Error,
@@ -137,6 +138,8 @@ pub async fn list_buckets_handler(
         .list(&actor.org_id)
         .await
         .context(DbSnafu)?;
+
+    info!("Listing buckets for org: {}", actor.org_id);
 
     Ok(JsonResponse::new(serde_json::to_string(&buckets).unwrap()))
 }
