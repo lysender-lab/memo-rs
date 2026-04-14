@@ -42,7 +42,6 @@ pub async fn search_dirs_handler(
     let actor = ctx.actor();
     enforce_policy(actor, Resource::Album, Action::Read)?;
 
-    let cid = bucket.client_id.clone();
     let bid = bucket.id.clone();
 
     let mut tpl = SearchDirsTemplate {
@@ -54,7 +53,7 @@ pub async fn search_dirs_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    match list_dirs(&state, token, &cid, &bid, &query).await {
+    match list_dirs(&state, token, &bid, &query).await {
         Ok(dirs) => {
             let mut keyword_param: String = "".to_string();
             if let Some(keyword) = &query.keyword {
@@ -145,7 +144,6 @@ pub async fn post_new_dir_handler(
     enforce_policy(actor, Resource::Album, Action::Create)?;
 
     let token = create_csrf_token("new_dir", &config.jwt_secret)?;
-    let cid = bucket.client_id.clone();
     let bid = bucket.id.clone();
 
     let mut tpl = DirFormTemplate {
@@ -167,7 +165,7 @@ pub async fn post_new_dir_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    let result = create_dir(&state, token, &cid, &bid, dir).await;
+    let result = create_dir(&state, token, &bid, dir).await;
 
     match result {
         Ok(_) => {
@@ -321,7 +319,6 @@ pub async fn post_edit_dir_handler(
     payload: Form<UpdateDirFormData>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let cid = bucket.client_id.clone();
     let bid = bucket.id.clone();
     let dir_id = dir.id.clone();
     let actor = ctx.actor();
@@ -343,7 +340,7 @@ pub async fn post_edit_dir_handler(
     tpl.payload.label = payload.label.clone();
 
     let token = ctx.token().expect("token is required");
-    let result = update_dir(&state, token, &cid, &bid, &dir_id, &payload).await;
+    let result = update_dir(&state, token, &bid, &dir_id, &payload).await;
     match result {
         Ok(updated_dir) => {
             // Render the controls again with an out-of-bound swap for title
@@ -437,15 +434,7 @@ pub async fn post_delete_dir_handler(
 
     let auth_token = ctx.token().expect("token is required");
 
-    let result = delete_dir(
-        &state,
-        auth_token,
-        &bucket.client_id,
-        &bucket.id,
-        &dir.id,
-        &payload.token,
-    )
-    .await;
+    let result = delete_dir(&state, auth_token, &bucket.id, &dir.id, &payload.token).await;
 
     match result {
         Ok(_) => {

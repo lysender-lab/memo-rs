@@ -37,7 +37,7 @@ fn public_routes(state: AppState) -> Router<AppState> {
         .route("/health/liveness", get(health_live_handler))
         .route("/health/readiness", get(health_ready_handler))
         .route("/oauth/token", post(oauth_token_handler))
-        .route("/oauth/profile", post(oauth_profile_handler))
+        .route("/oauth/profile", get(oauth_profile_handler))
         .with_state(state)
 }
 

@@ -6,10 +6,8 @@
         <nav class="breadcrumb" aria-label="breadcrumbs">
             <ul>
                 <li><a href="/">Home</a></li>
-                <li><a href="/clients">Clients</a></li>
-                <li><a href="/clients/{{ client.id }}">{{ client.name }}</a></li>
                 <li class="is-active">
-                    <a href="/clients/{{ client.id }}/buckets" aria-current="page">
+                    <a href="/buckets" aria-current="page">
                         <span>Buckets</span>
                     </a>
                 </li>
@@ -20,7 +18,7 @@
 
         <div class="is-flex is-justify-content-space-between mb-5">
             <div>
-                <a class="button" href="/clients/{{ client.id }}">
+                <a class="button" href="/">
                     <span class="icon is-small">
                         <i class="fas fa-arrow-left"></i>
                     </span>
@@ -29,7 +27,7 @@
             </div>
 
             <div>
-                <a class="button is-primary" href="/clients/{{ client.id }}/buckets/new">
+                <a class="button is-primary" href="/buckets/new">
                     <span class="icon is-small">
                         <i class="fas fa-plus"></i>
                     </span>
@@ -51,7 +49,7 @@
               <tbody>
                 {% for bucket in buckets %}
                 <tr>
-                    <td><a href="/clients/{{ client.id }}/buckets/{{ bucket.id }}">{{ bucket.name }}</a></td>
+                    <td><a href="/buckets/{{ bucket.id }}">{{ bucket.name }}</a></td>
                     <td>{{ bucket.label }}</td>
                     <td>
                         {% if bucket.images_only %}

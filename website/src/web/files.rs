@@ -48,7 +48,6 @@ pub async fn photo_listing_v2_handler(
     let actor = ctx.actor();
     enforce_policy(actor, Resource::Photo, Action::Read)?;
 
-    let cid = bucket.client_id.clone();
     let bid = bucket.id.clone();
     let dir_id = dir.id.clone();
 
@@ -64,7 +63,7 @@ pub async fn photo_listing_v2_handler(
     };
 
     let auth_token = ctx.token().expect("token is required");
-    let result = list_files(&state, auth_token, &cid, &bid, &dir_id, &query).await;
+    let result = list_files(&state, auth_token, &bid, &dir_id, &query).await;
 
     match result {
         Ok(listing) => {
@@ -278,7 +277,6 @@ pub async fn exec_delete_photo_handler(
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
     let actor = ctx.actor();
-    let cid = bucket.client_id.clone();
     let bid = bucket.id.clone();
     let dir_id = dir.id.clone();
 
@@ -293,16 +291,7 @@ pub async fn exec_delete_photo_handler(
     };
 
     let auth_token = ctx.token().expect("token is required");
-    let result = delete_photo(
-        &state,
-        auth_token,
-        &cid,
-        &bid,
-        &dir_id,
-        &photo.id,
-        &payload.token,
-    )
-    .await;
+    let result = delete_photo(&state, auth_token, &bid, &dir_id, &photo.id, &payload.token).await;
     match result {
         Ok(_) => Response::builder()
             .status(204)

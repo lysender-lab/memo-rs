@@ -1,7 +1,7 @@
 <form
     method="post"
-    action="/clients/{{ client.id }}/buckets/{{ bucket.id }}/delete"
-    hx-post="/clients/{{ client.id }}/buckets/{{ bucket.id }}/delete"
+    action="/buckets/{{ bucket.id }}/delete"
+    hx-post="/buckets/{{ bucket.id }}/delete"
     hx-target="#edit-bucket-container"
 >
     <div class="columns">
@@ -36,7 +36,7 @@
                         <div class="control">
                             <button
                                 class="button is-link is-light"
-                                hx-get="/clients/{{ client.id }}/buckets/{{ bucket.id }}/edit_controls"
+                                hx-get="/buckets/{{ bucket.id }}/edit_controls"
                                 hx-target="#edit-bucket-container"
                             >
                                 Cancel

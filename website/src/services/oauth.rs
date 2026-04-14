@@ -1,5 +1,4 @@
 use reqwest::StatusCode;
-use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use tracing::info;
 
@@ -14,17 +13,6 @@ use yaas::{
     oauth::{OauthTokenRequestDto, OauthTokenResponseDto},
 };
 
-#[derive(Serialize)]
-pub struct AuthPayload {
-    pub username: String,
-    pub password: String,
-}
-
-#[derive(Deserialize)]
-pub struct AuthResponse {
-    pub token: String,
-}
-
 pub async fn authenticate_token(state: &AppState, token: &str) -> Result<Actor> {
     // Decode token to get user ID (sub claim)
     let claims = decode_auth_token(token)?;
@@ -34,6 +22,7 @@ pub async fn authenticate_token(state: &AppState, token: &str) -> Result<Actor> 
         return Ok(actor);
     }
 
+    // Hit our api server instead of the auth server
     let url = format!("{}/oauth/profile", &state.config.api_url);
     let response = state
         .client

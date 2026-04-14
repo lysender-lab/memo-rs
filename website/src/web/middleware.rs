@@ -71,7 +71,7 @@ pub async fn require_auth_middleware(
 ) -> Result<Response> {
     let full_page = req.headers().get("HX-Request").is_none();
 
-    if ctx.is_authenticated() {
+    if !ctx.is_authenticated() {
         if full_page {
             let callback_url = format!("{}/auth/callback", &state.config.server.public_url);
             let scope = encode("auth oauth");
@@ -106,7 +106,7 @@ pub async fn dir_middleware(
     enforce_policy(actor, Resource::Album, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
-    let dir = get_dir(&state, token, &bucket.client_id, &bucket.id, &params.dir_id).await?;
+    let dir = get_dir(&state, token, &bucket.id, &params.dir_id).await?;
 
     req.extensions_mut().insert(dir);
     Ok(next.run(req).await)
@@ -125,15 +125,7 @@ pub async fn file_middleware(
     enforce_policy(actor, Resource::Photo, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
-    let photo = get_photo(
-        &state,
-        token,
-        &bucket.client_id,
-        &bucket.id,
-        &dir.id,
-        &params.file_id,
-    )
-    .await?;
+    let photo = get_photo(&state, token, &bucket.id, &dir.id, &params.file_id).await?;
 
     req.extensions_mut().insert(photo);
     Ok(next.run(req).await)
@@ -151,7 +143,7 @@ pub async fn bucket_middleware(
 
     let token = ctx.token().expect("token is required");
 
-    let bucket = get_bucket(&state, token, &params.client_id, &params.bucket_id).await?;
+    let bucket = get_bucket(&state, token, &params.bucket_id).await?;
 
     req.extensions_mut().insert(bucket);
     Ok(next.run(req).await)
@@ -169,8 +161,7 @@ pub async fn my_bucket_middleware(
     enforce_policy(actor, Resource::Bucket, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
-    let actor = actor.clone().actor.expect("actor dto is required");
-    let bucket = get_bucket(&state, token, &actor.org_id, &params.bucket_id).await?;
+    let bucket = get_bucket(&state, token, &params.bucket_id).await?;
 
     req.extensions_mut().insert(bucket);
     Ok(next.run(req).await)

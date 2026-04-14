@@ -6,11 +6,9 @@
         <nav class="breadcrumb" aria-label="breadcrumbs">
             <ul>
                 <li><a href="/">Home</a></li>
-                <li><a href="/clients">Clients</a></li>
-                <li><a href="/clients/{{ client.id }}">{{ client.name }}</a></li>
-                <li><a href="/clients/{{ client.id }}/buckets">Buckets</a></li>
+                <li><a href="/buckets">Buckets</a></li>
                 <li class="is-active">
-                    <a href="/clients/{{ client.id }}/buckets/{{ bucket.id }}" aria-current="page">
+                    <a href="/buckets/{{ bucket.id }}" aria-current="page">
                         <span id="breadcrumb-bucket-label">{{ bucket.label }}</span>
                     </a>
                 </li>

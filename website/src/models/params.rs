@@ -5,7 +5,6 @@ use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct BucketParams {
-    pub client_id: String,
     pub bucket_id: String,
 }
 

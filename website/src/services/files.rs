@@ -101,14 +101,13 @@ impl TryFrom<FileDto> for Photo {
 pub async fn list_files(
     state: &AppState,
     token: &str,
-    client_id: &str,
     bucket_id: &str,
     dir_id: &str,
     params: &ListFilesParams,
 ) -> Result<Paginated<Photo>> {
     let url = format!(
-        "{}/clients/{}/buckets/{}/dirs/{}/files",
-        &state.config.api_url, client_id, bucket_id, dir_id
+        "{}/buckets/{}/dirs/{}/files",
+        &state.config.api_url, bucket_id, dir_id
     );
     let mut page = "1".to_string();
     let per_page = "50".to_string();
@@ -154,14 +153,13 @@ pub async fn list_files(
 pub async fn get_photo(
     state: &AppState,
     token: &str,
-    client_id: &str,
     bucket_id: &str,
     album_id: &str,
     photo_id: &str,
 ) -> Result<Photo> {
     let url = format!(
-        "{}/clients/{}/buckets/{}/dirs/{}/files/{}",
-        &state.config.api_url, client_id, bucket_id, album_id, photo_id
+        "{}/buckets/{}/dirs/{}/files/{}",
+        &state.config.api_url, bucket_id, album_id, photo_id
     );
     let response = state
         .client
@@ -204,8 +202,8 @@ pub async fn upload_photo(
     let csrf_result = verify_csrf_token(&csrf_token, &state.config.jwt_secret)?;
     ensure!(csrf_result == album_id, CsrfTokenSnafu);
     let url = format!(
-        "{}/clients/{}/buckets/{}/dirs/{}/files",
-        &state.config.api_url, client_id, bucket_id, album_id
+        "{}/buckets/{}/dirs/{}/files",
+        &state.config.api_url, bucket_id, album_id
     );
 
     let response = state
@@ -238,7 +236,6 @@ pub async fn upload_photo(
 pub async fn delete_photo(
     state: &AppState,
     token: &str,
-    client_id: &str,
     bucket_id: &str,
     album_id: &str,
     photo_id: &str,
@@ -247,8 +244,8 @@ pub async fn delete_photo(
     let csrf_result = verify_csrf_token(csrf_token, &state.config.jwt_secret)?;
     ensure!(csrf_result == photo_id, CsrfTokenSnafu);
     let url = format!(
-        "{}/clients/{}/buckets/{}/dirs/{}/files/{}",
-        &state.config.api_url, client_id, bucket_id, album_id, photo_id
+        "{}/buckets/{}/dirs/{}/files/{}",
+        &state.config.api_url, bucket_id, album_id, photo_id
     );
     let _ = state
         .client
