@@ -137,6 +137,12 @@ pub enum Error {
     JwtClaimsParse { source: serde_json::Error },
 
     #[snafu(display("{}", msg))]
+    Oauth { msg: String },
+
+    #[snafu(display("Invalid OAuth Token."))]
+    InvalidOauthToken,
+
+    #[snafu(display("{}", msg))]
     Whatever { msg: String },
 }
 
@@ -187,6 +193,7 @@ impl From<&Error> for StatusCode {
             Error::BucketNotFound => StatusCode::NOT_FOUND,
             Error::ClientNotFound => StatusCode::NOT_FOUND,
             Error::CsrfToken => StatusCode::BAD_REQUEST,
+            Error::Oauth { .. } => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -245,4 +252,11 @@ impl From<&Error> for ErrorInfo {
             message: msg,
         }
     }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ErrorMessageDto {
+    pub status_code: u16,
+    pub message: String,
+    pub error: String,
 }

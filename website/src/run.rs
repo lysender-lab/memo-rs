@@ -23,7 +23,7 @@ pub struct AppState {
 }
 
 pub async fn run(config: Config) -> Result<()> {
-    let server_address = config.server_address.clone();
+    let server_address = config.server.address.clone();
     let frontend_dir = config.frontend_dir.clone();
     let client = ClientBuilder::new()
         .timeout(Duration::from_secs(30))

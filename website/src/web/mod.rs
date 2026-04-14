@@ -1,9 +1,9 @@
+pub mod auth;
 pub mod buckets;
 pub mod dirs;
 pub mod error;
 pub mod files;
 pub mod index;
-pub mod login;
 pub mod logout;
 pub mod middleware;
 pub mod my_bucket;
@@ -17,7 +17,6 @@ pub const THEME_COOKIE: &str = "theme";
 
 pub use error::*;
 pub use index::*;
-pub use login::*;
 pub use logout::*;
 pub use policies::*;
 pub use pref::*;

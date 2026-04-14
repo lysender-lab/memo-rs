@@ -165,7 +165,7 @@ impl From<&Error> for StatusCode {
             Error::RequiresAuth => StatusCode::UNAUTHORIZED,
             Error::InvalidPassword => StatusCode::UNAUTHORIZED,
             Error::InactiveUser => StatusCode::UNAUTHORIZED,
-            Error::UserNotFound => StatusCode::UNAUTHORIZED,
+            Error::Oauth { .. } => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

@@ -5,8 +5,8 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::CookieJar;
-use memo::{bucket::BucketDto, dir::DirDto};
-use yaas::actor::Actor;
+use chrono::Utc;
+use urlencoding::encode;
 
 use crate::{
     Error, Result,
@@ -14,9 +14,11 @@ use crate::{
     error::ErrorInfo,
     models::{BucketParams, MyBucketParams, MyDirParams, MyFileParams, Pref},
     run::AppState,
-    services::{auth::authenticate_token, buckets::get_bucket, dirs::get_dir, files::get_photo},
+    services::{buckets::get_bucket, dirs::get_dir, files::get_photo, oauth::authenticate_token},
     web::{Action, Resource, enforce_policy, handle_error},
 };
+use memo::{bucket::BucketDto, dir::DirDto};
+use yaas::actor::Actor;
 
 use super::{AUTH_TOKEN_COOKIE, THEME_COOKIE};
 
@@ -62,6 +64,7 @@ pub async fn auth_middleware(
 }
 
 pub async fn require_auth_middleware(
+    State(state): State<AppState>,
     Extension(ctx): Extension<Ctx>,
     req: Request,
     next: Next,
@@ -70,7 +73,19 @@ pub async fn require_auth_middleware(
 
     if ctx.is_authenticated() {
         if full_page {
-            return Ok(Redirect::to("/login").into_response());
+            let callback_url = format!("{}/auth/callback", &state.config.server.public_url);
+            let scope = encode("auth oauth");
+            // Generate current millis as state
+            let oauth_state = Utc::now().timestamp_millis();
+            let authorize_url = format!(
+                "{}/oauth/authorize?client_id={}&scope={}&state={}&redirect_uri={}",
+                state.config.auth.auth_url,
+                state.config.auth.client_id,
+                scope,
+                oauth_state,
+                callback_url
+            );
+            return Ok(Redirect::to(&authorize_url).into_response());
         } else {
             return Err(Error::LoginRequired);
         }

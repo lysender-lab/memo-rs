@@ -1,8 +1,8 @@
-pub mod auth;
 pub mod buckets;
 pub mod captcha;
 pub mod dirs;
 pub mod files;
+pub mod oauth;
 pub mod token;
 
 use reqwest::StatusCode;

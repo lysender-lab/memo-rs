@@ -44,7 +44,7 @@ async fn theme_handler(
     let theme_cookie = Cookie::build((THEME_COOKIE, theme.to_string()))
         .http_only(true)
         .max_age(Duration::days(365))
-        .secure(state.config.ssl)
+        .secure(state.config.server.https)
         .path("/")
         .build();
 

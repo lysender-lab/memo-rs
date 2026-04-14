@@ -14,7 +14,8 @@ use crate::ctx::Ctx;
 use crate::error::ErrorInfo;
 use crate::models::Pref;
 use crate::run::AppState;
-use crate::web::{error_handler, index_handler, login_handler, logout_handler, post_login_handler};
+use crate::web::auth::auth_callback_handler;
+use crate::web::{error_handler, index_handler, logout_handler};
 
 use super::dirs::{
     dir_page_handler, edit_dir_controls_handler, edit_dir_handler, get_delete_dir_handler,
@@ -144,7 +145,7 @@ fn my_photo_routes(state: AppState) -> Router<AppState> {
 
 pub fn public_routes(state: AppState) -> Router {
     Router::new()
-        .route("/login", get(login_handler).post(post_login_handler))
+        .route("/auth/callback", get(auth_callback_handler))
         .route("/logout", post(logout_handler))
         .layer(middleware::map_response_with_state(
             state.clone(),
