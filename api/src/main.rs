@@ -1,13 +1,13 @@
 use std::{process, str::FromStr};
 use tracing::Level;
 
-mod auth;
 mod bucket;
 mod config;
 mod dir;
 mod error;
 mod file;
 mod health;
+mod oauth;
 mod run;
 mod state;
 mod token;

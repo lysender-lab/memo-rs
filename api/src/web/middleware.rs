@@ -11,11 +11,11 @@ use yaas::{actor::Actor, role::Permission};
 
 use crate::{
     Error, Result,
-    auth::authenticate_token,
     error::{
         BadRequestSnafu, DbSnafu, ForbiddenSnafu, InsufficientAuthScopeSnafu,
         InvalidAuthTokenSnafu, NotFoundSnafu,
     },
+    oauth::authenticate_token,
     state::AppState,
     web::params::Params,
 };

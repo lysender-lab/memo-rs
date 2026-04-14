@@ -120,6 +120,9 @@ pub enum Error {
     HttpResponseParse { msg: String, source: reqwest::Error },
 
     #[snafu(display("{}", msg))]
+    Oauth { msg: String },
+
+    #[snafu(display("{}", msg))]
     Whatever { msg: String },
 }
 
@@ -200,4 +203,11 @@ pub struct ErrorResponse<'a> {
     pub status_code: u16,
     pub message: &'a str,
     pub error: &'a str,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ErrorMessageDto {
+    pub status_code: u16,
+    pub message: String,
+    pub error: String,
 }

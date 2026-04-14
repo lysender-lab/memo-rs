@@ -1,5 +1,6 @@
 pub mod actor;
 pub mod error;
+pub mod oauth;
 pub mod role;
 pub mod user;
 
