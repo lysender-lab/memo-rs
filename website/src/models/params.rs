@@ -4,11 +4,6 @@ use urlencoding::encode;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
-pub struct BucketParams {
-    pub bucket_id: String,
-}
-
-#[derive(Deserialize)]
 pub struct MyBucketParams {
     pub bucket_id: String,
 }

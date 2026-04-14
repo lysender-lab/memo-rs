@@ -5,9 +5,7 @@ use yaas::actor::Actor;
 use yaas::role::Permission;
 
 pub enum Resource {
-    Client,
     Bucket,
-    User,
     Album,
     Photo,
 }
@@ -21,9 +19,7 @@ pub enum Action {
 
 pub fn enforce_policy(actor: &Actor, resource: Resource, action: Action) -> Result<()> {
     let result = match resource {
-        Resource::Client => enforce_client_permissions(actor, action),
         Resource::Bucket => enforce_buckets_permissions(actor, action),
-        Resource::User => enforce_users_permissions(actor, action),
         Resource::Album => enforce_dir_permissions(actor, action),
         Resource::Photo => enforce_photo_permissions(actor, action),
     };
@@ -88,32 +84,6 @@ fn enforce_photo_permissions(actor: &Actor, action: Action) -> StdResult<(), &st
     Ok(())
 }
 
-fn enforce_client_permissions(actor: &Actor, action: Action) -> StdResult<(), &str> {
-    let (permissions, message) = match action {
-        Action::Create => (
-            vec![Permission::OrgsCreate],
-            "You do not have permission to create new clients.",
-        ),
-        Action::Read => (
-            vec![Permission::OrgsList, Permission::OrgsView],
-            "You do not have permission to view clients.",
-        ),
-        Action::Update => (
-            vec![Permission::OrgsEdit],
-            "You do not have permission to edit clients.",
-        ),
-        Action::Delete => (
-            vec![Permission::OrgsDelete],
-            "You do not have permission to delete clients.",
-        ),
-    };
-
-    if !actor.has_permissions(&permissions) {
-        return Err(message);
-    }
-    Ok(())
-}
-
 fn enforce_buckets_permissions(actor: &Actor, action: Action) -> StdResult<(), &str> {
     let (permissions, message) = match action {
         Action::Create => (
@@ -131,32 +101,6 @@ fn enforce_buckets_permissions(actor: &Actor, action: Action) -> StdResult<(), &
         Action::Delete => (
             vec![Permission::BucketsEdit],
             "You do not have permission to delete buckets.",
-        ),
-    };
-
-    if !actor.has_permissions(&permissions) {
-        return Err(message);
-    }
-    Ok(())
-}
-
-fn enforce_users_permissions(actor: &Actor, action: Action) -> StdResult<(), &str> {
-    let (permissions, message) = match action {
-        Action::Create => (
-            vec![Permission::UsersCreate],
-            "You do not have permission to create new users.",
-        ),
-        Action::Read => (
-            vec![Permission::UsersList, Permission::UsersView],
-            "You do not have permission to view users.",
-        ),
-        Action::Update => (
-            vec![Permission::UsersEdit],
-            "You do not have permission to edit users.",
-        ),
-        Action::Delete => (
-            vec![Permission::UsersDelete],
-            "You do not have permission to delete users.",
         ),
     };
 

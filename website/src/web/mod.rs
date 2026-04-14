@@ -4,6 +4,7 @@ pub mod dirs;
 pub mod error;
 pub mod files;
 pub mod index;
+pub mod login;
 pub mod logout;
 pub mod middleware;
 pub mod my_bucket;

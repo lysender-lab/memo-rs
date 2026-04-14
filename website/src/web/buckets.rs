@@ -5,10 +5,8 @@ use snafu::ResultExt;
 use yaas::role::Permission;
 
 use crate::Error;
-use crate::models::tokens::TokenFormData;
 use crate::services::buckets::{
-    NewBucketFormData, UpdateBucketFormData, create_bucket, delete_bucket, list_buckets,
-    update_bucket,
+    NewBucketFormData, UpdateBucketFormData, create_bucket, list_buckets, update_bucket,
 };
 use crate::{
     Result,
@@ -315,88 +313,6 @@ pub async fn post_edit_bucket_handler(
 
             Ok(Response::builder()
                 .status(status)
-                .body(Body::from(tpl.render().context(TemplateSnafu)?))
-                .context(ResponseBuilderSnafu)?)
-        }
-    }
-}
-
-#[derive(Template)]
-#[template(path = "widgets/delete_bucket_form.html")]
-struct DeleteBucketFormTemplate {
-    bucket: BucketDto,
-    payload: TokenFormData,
-    error_message: Option<String>,
-}
-
-pub async fn delete_bucket_handler(
-    Extension(ctx): Extension<Ctx>,
-    Extension(bucket): Extension<BucketDto>,
-    State(state): State<AppState>,
-) -> Result<Response<Body>> {
-    let config = state.config.clone();
-    let actor = ctx.actor();
-
-    enforce_policy(actor, Resource::Bucket, Action::Delete)?;
-
-    let token = create_csrf_token(&bucket.id, &config.jwt_secret)?;
-
-    let tpl = DeleteBucketFormTemplate {
-        bucket,
-        payload: TokenFormData { token },
-        error_message: None,
-    };
-
-    Response::builder()
-        .status(200)
-        .body(Body::from(tpl.render().context(TemplateSnafu)?))
-        .context(ResponseBuilderSnafu)
-}
-
-pub async fn post_delete_bucket_handler(
-    Extension(ctx): Extension<Ctx>,
-    Extension(bucket): Extension<BucketDto>,
-    State(state): State<AppState>,
-    payload: Form<TokenFormData>,
-) -> Result<Response<Body>> {
-    let config = state.config.clone();
-    let actor = ctx.actor();
-
-    enforce_policy(actor, Resource::Bucket, Action::Delete)?;
-
-    let token = create_csrf_token(&bucket.id, &config.jwt_secret)?;
-
-    let mut tpl = DeleteBucketFormTemplate {
-        bucket: bucket.clone(),
-        payload: TokenFormData { token },
-        error_message: None,
-    };
-
-    let token = ctx.token().expect("token is required");
-    let result = delete_bucket(&state, token, &bucket.id, &payload.token).await;
-
-    match result {
-        Ok(_) => {
-            // Render same form but trigger a redirect to home
-            let tpl = DeleteBucketFormTemplate {
-                bucket,
-                payload: TokenFormData {
-                    token: "".to_string(),
-                },
-                error_message: None,
-            };
-            Response::builder()
-                .status(200)
-                .header("HX-Redirect", "/buckets")
-                .body(Body::from(tpl.render().context(TemplateSnafu)?))
-                .context(ResponseBuilderSnafu)
-        }
-        Err(err) => {
-            let error_info = ErrorInfo::from(&err);
-            tpl.error_message = Some(error_info.message);
-
-            Ok(Response::builder()
-                .status(error_info.status_code)
                 .body(Body::from(tpl.render().context(TemplateSnafu)?))
                 .context(ResponseBuilderSnafu)?)
         }

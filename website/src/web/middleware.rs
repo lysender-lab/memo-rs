@@ -12,7 +12,7 @@ use crate::{
     Error, Result,
     ctx::Ctx,
     error::ErrorInfo,
-    models::{BucketParams, MyBucketParams, MyDirParams, MyFileParams, Pref},
+    models::{MyBucketParams, MyDirParams, MyFileParams, Pref},
     run::AppState,
     services::{buckets::get_bucket, dirs::get_dir, files::get_photo, oauth::authenticate_token},
     web::{Action, Resource, enforce_policy, handle_error},
@@ -73,18 +73,7 @@ pub async fn require_auth_middleware(
 
     if !ctx.is_authenticated() {
         if full_page {
-            let callback_url = format!("{}/auth/callback", &state.config.server.public_url);
-            let scope = encode("auth oauth");
-            // Generate current millis as state
-            let oauth_state = Utc::now().timestamp_millis();
-            let authorize_url = format!(
-                "{}/oauth/authorize?client_id={}&scope={}&state={}&redirect_uri={}",
-                state.config.auth.auth_url,
-                state.config.auth.client_id,
-                scope,
-                oauth_state,
-                callback_url
-            );
+            let authorize_url = build_oauth_authorize_url(&state);
             return Ok(Redirect::to(&authorize_url).into_response());
         } else {
             return Err(Error::LoginRequired);
@@ -92,6 +81,17 @@ pub async fn require_auth_middleware(
     }
 
     Ok(next.run(req).await)
+}
+
+pub fn build_oauth_authorize_url(state: &AppState) -> String {
+    let callback_url = format!("{}/auth/callback", &state.config.server.public_url);
+    let scope = encode("auth oauth");
+    let oauth_state = Utc::now().timestamp_millis();
+
+    format!(
+        "{}/oauth/authorize?client_id={}&scope={}&state={}&redirect_uri={}",
+        state.config.auth.auth_url, state.config.auth.client_id, scope, oauth_state, callback_url
+    )
 }
 
 pub async fn dir_middleware(
@@ -128,24 +128,6 @@ pub async fn file_middleware(
     let photo = get_photo(&state, token, &bucket.id, &dir.id, &params.file_id).await?;
 
     req.extensions_mut().insert(photo);
-    Ok(next.run(req).await)
-}
-
-pub async fn bucket_middleware(
-    State(state): State<AppState>,
-    Extension(ctx): Extension<Ctx>,
-    Path(params): Path<BucketParams>,
-    mut req: Request,
-    next: Next,
-) -> Result<Response> {
-    let actor = ctx.actor();
-    enforce_policy(actor, Resource::Bucket, Action::Read)?;
-
-    let token = ctx.token().expect("token is required");
-
-    let bucket = get_bucket(&state, token, &params.bucket_id).await?;
-
-    req.extensions_mut().insert(bucket);
     Ok(next.run(req).await)
 }
 
