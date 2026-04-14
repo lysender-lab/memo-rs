@@ -75,19 +75,6 @@ pub async fn update_bucket(state: &AppState, id: &str, data: &UpdateBucket) -> R
     state.db.buckets.update(id, data).await.context(DbSnafu)
 }
 
-pub async fn delete_bucket(state: &AppState, id: &str) -> Result<()> {
-    // Do not delete if there are still directories inside
-    let dir_count = state.db.dirs.count(id).await.context(DbSnafu)?;
-    ensure!(
-        dir_count == 0,
-        ValidationSnafu {
-            msg: "Cannot delete bucket with directories inside".to_string(),
-        }
-    );
-
-    state.db.buckets.delete(id).await.context(DbSnafu)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,7 +1,7 @@
 use axum::{
     Extension,
     extract::{Json, Multipart, Path, Query, State, rejection::JsonRejection},
-    http::{HeaderMap, StatusCode, header},
+    http::StatusCode,
     response::IntoResponse,
 };
 use core::result::Result as CoreResult;
@@ -11,17 +11,14 @@ use tokio::{fs::File, fs::create_dir_all, io::AsyncWriteExt};
 use tracing::info;
 
 use crate::{
-    Error,
     bucket::update_bucket,
     dir::{create_dir, delete_dir, update_dir},
     error::{
-        CreateFileSnafu, DbSnafu, ErrorResponse, ForbiddenSnafu, InvalidAuthTokenSnafu,
-        JsonRejectionSnafu, MissingUploadFileSnafu, Result, StorageSnafu, UploadDirSnafu,
-        WhateverSnafu,
+        CreateFileSnafu, DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu,
+        MissingUploadFileSnafu, Result, StorageSnafu, UploadDirSnafu, WhateverSnafu,
     },
     file::create_file,
     health::{check_liveness, check_readiness},
-    oauth::{authenticate_token, exchange_code_for_access_token},
     state::AppState,
     web::{params::Params, response::JsonResponse},
 };
@@ -35,7 +32,7 @@ use memo::{
     pagination::Paginated,
     utils::slugify_prefixed,
 };
-use yaas::{actor::Actor, oauth::OauthTokenRequestDto, role::Permission};
+use yaas::{actor::Actor, role::Permission};
 
 #[derive(Serialize)]
 pub struct AppMeta {
@@ -77,47 +74,6 @@ pub async fn health_ready_handler(State(state): State<AppState>) -> Result<JsonR
         status,
         serde_json::to_string(&health).unwrap(),
     ))
-}
-
-pub async fn oauth_token_handler(
-    State(state): State<AppState>,
-    payload: CoreResult<Json<OauthTokenRequestDto>, JsonRejection>,
-) -> Result<JsonResponse> {
-    let data = payload.context(JsonRejectionSnafu {
-        msg: "Invalid request payload",
-    })?;
-
-    let token_data = exchange_code_for_access_token(&state, &data).await?;
-
-    Ok(JsonResponse::new(
-        serde_json::to_string(&token_data).unwrap(),
-    ))
-}
-
-pub async fn oauth_profile_handler(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<JsonResponse> {
-    // Extract authorization bearer token from headers
-    let auth_header = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok());
-
-    let Some(auth_header) = auth_header else {
-        return Err(Error::Oauth {
-            msg: "Missing Authorization header".to_string(),
-        });
-    };
-
-    // At this point, authentication must be verified
-    ensure!(auth_header.starts_with("Bearer "), InvalidAuthTokenSnafu);
-    let token = auth_header.replace("Bearer ", "");
-
-    // Send full actor object
-    let actor = authenticate_token(&state, &token).await?;
-    let actor = actor.actor.expect("Actor is required");
-
-    Ok(JsonResponse::new(serde_json::to_string(&actor).unwrap()))
 }
 
 pub async fn list_buckets_handler(

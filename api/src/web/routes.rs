@@ -2,7 +2,7 @@ use axum::{
     Router,
     extract::DefaultBodyLimit,
     middleware,
-    routing::{any, get, post},
+    routing::{any, get},
 };
 use tower_http::limit::RequestBodyLimitLayer;
 
@@ -18,10 +18,7 @@ use super::{
         require_auth_middleware,
     },
 };
-use crate::{
-    state::AppState,
-    web::handler::{oauth_profile_handler, oauth_token_handler, update_bucket_handler},
-};
+use crate::{state::AppState, web::handler::update_bucket_handler};
 
 pub fn all_routes(state: AppState) -> Router {
     Router::new()
@@ -36,8 +33,6 @@ fn public_routes(state: AppState) -> Router<AppState> {
         .route("/", get(home_handler))
         .route("/health/liveness", get(health_live_handler))
         .route("/health/readiness", get(health_ready_handler))
-        .route("/oauth/token", post(oauth_token_handler))
-        .route("/oauth/profile", get(oauth_profile_handler))
         .with_state(state)
 }
 
