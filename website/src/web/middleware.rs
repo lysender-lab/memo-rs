@@ -51,6 +51,12 @@ pub async fn auth_middleware(
                 Error::LoginRequired => {
                     // Allow passing through
                 }
+                Error::InvalidAuthToken => {
+                    // Allow passing through
+                }
+                Error::JwtClaimsParse { .. } => {
+                    // Allow passing through
+                }
                 _ => {
                     let actor = Actor::default();
                     return handle_error(&state, &actor, &pref, ErrorInfo::from(&err), full_page);
