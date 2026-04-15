@@ -35,16 +35,8 @@ impl StorageClient {
         })
     }
 
-    pub fn get_client(&self) -> Storage {
-        self.storage.clone()
-    }
-
-    pub fn get_control_client(&self) -> StorageControl {
-        self.control.clone()
-    }
-
-    pub fn get_signer(&self) -> Signer {
-        self.signer.clone()
+    fn get_signer(&self) -> &Signer {
+        &self.signer
     }
 
     async fn upload_regular_object(
@@ -281,7 +273,7 @@ impl StorageClient {
             let dir_name_copy = dir_name.to_string();
 
             tasks.push(tokio::spawn(async move {
-                format_file_single(signer_copy, &bname, &dir_name_copy, file_copy).await
+                format_file_single(&signer_copy, &bname, &dir_name_copy, file_copy).await
             }));
         }
 
@@ -375,7 +367,7 @@ async fn generate_signed_url(
 }
 
 async fn format_file_single(
-    signer: Signer,
+    signer: &Signer,
     bucket_name: &str,
     dir_name: &str,
     mut file: FileDto,
