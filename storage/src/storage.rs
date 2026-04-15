@@ -366,6 +366,32 @@ async fn generate_signed_url(
     }
 }
 
+async fn generate_upload_signed_url(
+    signer: &Signer,
+    bucket_name: &str,
+    file_path: &str,
+    content_type: Option<&str>,
+) -> Result<String> {
+    let expires = Duration::from_secs(3600);
+    let mut builder = SignedUrlBuilder::for_object(bucket_name.to_string(), file_path.to_string())
+        .with_method(Method::PUT)
+        .with_expiration(expires);
+
+    if let Some(content_type) = content_type {
+        builder = builder.with_header("content-type", content_type);
+    }
+
+    let res = builder.sign_with(signer).await;
+
+    match res {
+        Ok(url) => Ok(url),
+        Err(err) => GoogleSnafu {
+            msg: format!("Failed to sign upload URL: {}", err),
+        }
+        .fail(),
+    }
+}
+
 async fn format_file_single(
     signer: &Signer,
     bucket_name: &str,
