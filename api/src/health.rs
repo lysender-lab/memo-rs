@@ -80,9 +80,7 @@ async fn perform_checks(config: &Config, db: Arc<DbMapper>) -> Result<HealthChec
 }
 
 async fn check_cloud_storage(config: &Config) -> Result<String> {
-    let client = create_storage_client(config.cloud.credentials.as_str())
-        .await
-        .context(StorageSnafu)?;
+    let client = create_storage_client().await.context(StorageSnafu)?;
     match test_list_hmac_keys(&client, config.cloud.project_id.as_str()).await {
         Ok(_) => Ok("UP".to_string()),
         Err(e) => {

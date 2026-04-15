@@ -9,6 +9,7 @@ argon2 = { version = "0.5.3", features = ["std"] }
 axum = { version = "0.8.1", features = ["macros", "multipart"] }
 axum-extra = { version = "0.10.0", features = ["cookie"] }
 base64 = "0.22.1"
+bytes = "1.11.1"
 chrono = "0.4.40"
 google-cloud-auth = "1.9.0"
 google-cloud-storage = "1.11.0"
