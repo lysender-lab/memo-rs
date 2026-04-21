@@ -117,7 +117,7 @@ pub async fn create_file(
 
     if let Err(upload_err) = state
         .storage_client
-        .upload_object(bucket, dir, &data.upload_dir, &file_dto)
+        .upload(bucket, dir, &data.upload_dir, &file_dto)
         .await
         .context(StorageSnafu)
     {

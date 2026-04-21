@@ -267,7 +267,7 @@ pub async fn list_files_handler(
 
     // Generate download urls for each files
     let items = storage_client
-        .format_files(&bucket.name, &dir.name, files.data)
+        .attach_urls(&bucket.name, &dir.name, files.data)
         .await
         .context(StorageSnafu)?;
 
@@ -352,7 +352,7 @@ pub async fn create_file_handler(
     let file = create_file(state, &bucket, &dir, &payload).await?;
     let file_dto: FileDto = file;
     let file_dto = storage_client
-        .format_file(&bucket.name, &dir.name, file_dto)
+        .attach_url(&bucket.name, &dir.name, file_dto)
         .await
         .context(StorageSnafu)?;
 
@@ -371,7 +371,7 @@ pub async fn get_file_handler(
     let storage_client = state.storage_client.clone();
     // Extract dir from the middleware extension
     let file_dto = storage_client
-        .format_file(&bucket.name, &dir.name, file)
+        .attach_url(&bucket.name, &dir.name, file)
         .await
         .context(StorageSnafu)?;
     Ok(JsonResponse::new(serde_json::to_string(&file_dto).unwrap()))
@@ -398,7 +398,7 @@ pub async fn delete_file_handler(
     // Delete file(s) from storage
     let storage_client = state.storage_client.clone();
     storage_client
-        .delete_file_object(&bucket.name, &dir.name, &file)
+        .delete(&bucket.name, &dir.name, &file)
         .await
         .context(StorageSnafu)?;
 
