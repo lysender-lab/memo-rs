@@ -7,15 +7,13 @@ use axum::{
 use core::result::Result as CoreResult;
 use serde::Serialize;
 use snafu::{OptionExt, ResultExt, ensure};
-use tokio::{fs::File, fs::create_dir_all, io::AsyncWriteExt};
 
 use crate::{
-    Error,
     bucket::update_bucket,
     dir::{create_dir, delete_dir, update_dir},
     error::{
-        CreateFileSnafu, DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu,
-        MissingUploadFileSnafu, Result, StorageSnafu, UploadDirSnafu, WhateverSnafu,
+        DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, Result, StorageSnafu,
+        WhateverSnafu,
     },
     file::create_file,
     health::{check_liveness, check_readiness},
@@ -25,14 +23,11 @@ use crate::{
 };
 use db::bucket::UpdateBucket;
 use db::dir::{ListDirsParams, NewDir, UpdateDir};
-use db::file::{FilePayload, ListFilesParams};
+use db::file::ListFilesParams;
 use memo::{
     bucket::BucketDto,
     dir::DirDto,
-    file::{
-        FileDto, ImgVersion, ORIGINAL_PATH, RemoteUploadDto, SignedFileUploadDto,
-        SignedRemoteUploadDto,
-    },
+    file::{FileDto, ORIGINAL_PATH, RemoteUploadDto, SignedFileUploadDto, SignedRemoteUploadDto},
     pagination::Paginated,
     utils::slugify_prefixed,
 };
@@ -305,15 +300,25 @@ pub async fn create_upload_url_handler(
         msg: "Invalid request payload",
     })?;
 
-    let token = create_upload_token(&data.filename, &state.config.jwt_secret)?;
+    // Low chance of collision but higher than the full uuid v7 string
+    // Prefer a shorter filename for better readability
+    let uniq_filename = slugify_prefixed(&data.filename);
+
+    let token = create_upload_token(
+        data.filename.clone(),
+        uniq_filename.clone(),
+        &state.config.jwt_secret,
+    )?;
+
     let upload_url = state
         .storage_client
-        .generate_upload_url(&bucket.name, &dir.name, ORIGINAL_PATH, &data.filename, None)
+        .generate_upload_url(&bucket.name, &dir.name, ORIGINAL_PATH, &uniq_filename, None)
         .await
         .context(StorageSnafu)?;
 
     let dto = SignedFileUploadDto {
-        filename: data.0.filename,
+        orig_filename: data.filename.clone(),
+        new_filename: uniq_filename,
         url: upload_url,
         token,
     };
@@ -341,94 +346,26 @@ pub async fn create_file_handler(
     })?;
 
     // Validate token
-    let orig_filename = verify_upload_token(&data.token, &state.config.jwt_secret)?;
-    if orig_filename != data.filename {
-        return Err(Error::Forbidden {
-            msg: "Invalid upload token".to_string(),
-        });
-    }
+    let upload_claims = verify_upload_token(&data.token, &state.config.jwt_secret)?;
+    let orig_filename = upload_claims.orig_filename;
+    let new_filename = upload_claims.new_filename;
 
-    // Low chance of collision but higher than the full uuid v7 string
-    // Prefer a shorter filename for better readability
-    let filename = slugify_prefixed(&orig_filename);
-
-    // Ensure upload dir exists
-    let orig_dir = state
-        .config
-        .upload_dir
-        .clone()
-        .join(ImgVersion::Original.to_string());
-
-    create_dir_all(orig_dir.clone())
+    // Download file locally
+    let downloaded = state
+        .storage_client
+        .download(
+            &bucket.name,
+            &dir.name,
+            ORIGINAL_PATH,
+            &orig_filename,
+            &new_filename,
+            &state.config.upload_dir,
+        )
         .await
-        .context(UploadDirSnafu)?;
-
-    // Prepare to save to file
-    let file_path = orig_dir.as_path().join(&filename);
-    let mut file = File::create(&file_path)
-        .await
-        .context(CreateFileSnafu { path: file_path })?;
-
-    // Stream contents to file
-    let mut size: usize = 0;
-    while let Some(chunk) = field.chunk().await.unwrap() {
-        size += chunk.len();
-        file.write_all(&chunk).await.unwrap();
-    }
-
-    while let Some(mut field) = multipart.next_field().await.unwrap() {
-        let name = field.name().unwrap().to_string();
-        if name != "file" {
-            continue;
-        }
-
-        let original_filename = field.file_name().unwrap().to_string();
-
-        // Low chance of collision but higher than the full uuid v7 string
-        // Prefer a shorter filename for better readability
-        let filename = slugify_prefixed(&original_filename);
-
-        // Ensure upload dir exists
-        let orig_dir = state
-            .config
-            .upload_dir
-            .clone()
-            .join(ImgVersion::Original.to_string());
-
-        create_dir_all(orig_dir.clone())
-            .await
-            .context(UploadDirSnafu)?;
-
-        // Prepare to save to file
-        let file_path = orig_dir.as_path().join(&filename);
-        let mut file = File::create(&file_path)
-            .await
-            .context(CreateFileSnafu { path: file_path })?;
-
-        // Stream contents to file
-        let mut size: usize = 0;
-        while let Some(chunk) = field.chunk().await.unwrap() {
-            size += chunk.len();
-            file.write_all(&chunk).await.unwrap();
-        }
-
-        payload = Some({
-            FilePayload {
-                upload_dir: state.config.upload_dir.clone(),
-                name: original_filename,
-                filename: filename.clone(),
-                path: orig_dir.clone().join(&filename),
-                size: size as i64,
-            }
-        })
-    }
-
-    let payload = payload.context(MissingUploadFileSnafu {
-        msg: "Missing upload file",
-    })?;
+        .context(StorageSnafu)?;
 
     let storage_client = state.storage_client.clone();
-    let file = create_file(state, &bucket, &dir, &payload).await?;
+    let file = create_file(state, &bucket, &dir, &downloaded).await?;
     let file_dto: FileDto = file;
     let file_dto = storage_client
         .attach_url(&bucket.name, &dir.name, file_dto)

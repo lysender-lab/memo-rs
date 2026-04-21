@@ -1,6 +1,3 @@
-use std::path::PathBuf;
-use std::time::Duration;
-
 use bytes::Bytes;
 use google_cloud_auth::credentials::Builder as CredentialsBuilder;
 use google_cloud_auth::signer::Signer;
@@ -8,13 +5,25 @@ use google_cloud_storage::Error as CloudError;
 use google_cloud_storage::builder::storage::SignedUrlBuilder;
 use google_cloud_storage::client::{Storage, StorageControl};
 use google_cloud_storage::http::Method;
+use snafu::ResultExt;
+use std::path::PathBuf;
+use std::time::Duration;
+use tokio::{fs::File, fs::create_dir_all, io::AsyncWriteExt};
 
-use crate::error::{GoogleSnafu, ValidationSnafu};
+use crate::error::{CreateFileSnafu, GoogleSnafu, UploadDirSnafu, ValidationSnafu};
 use crate::{Error, Result};
 use memo::bucket::BucketDto;
 use memo::dir::DirDto;
 use memo::file::ORIGINAL_PATH;
 use memo::file::{FileDto, ImgVersionDto};
+
+pub struct DownloadedFile {
+    pub upload_dir: PathBuf,
+    pub name: String,
+    pub filename: String,
+    pub path: PathBuf,
+    pub size: i64,
+}
 
 pub struct StorageClient {
     storage: Storage,
@@ -182,6 +191,62 @@ impl StorageClient {
 
         self.upload_regular_object(bucket, dir, source_dir, file)
             .await
+    }
+
+    /// Downloads an object from cloud storage into a local file.
+    pub async fn download(
+        &self,
+        bucket_name: &str,
+        dir_name: &str,
+        version: &str,
+        orig_filename: &str,
+        new_filename: &str,
+        upload_dir: &PathBuf,
+    ) -> Result<DownloadedFile> {
+        let bucket_path = format!("projects/_/buckets/{}", bucket_name);
+        let file_path = format!("{}/{}/{}", dir_name, version, new_filename);
+        let res = self
+            .storage
+            .read_object(bucket_path, file_path)
+            .send()
+            .await;
+
+        match res {
+            Ok(mut data) => {
+                // Ensure upload dir exists
+                let version_dir = upload_dir.clone().join(version);
+
+                create_dir_all(version_dir.clone())
+                    .await
+                    .context(UploadDirSnafu)?;
+
+                // Prepare to save to file
+                let file_path = version_dir.as_path().join(&new_filename);
+                let mut size: usize = 0;
+                let mut file = File::create(&file_path)
+                    .await
+                    .context(CreateFileSnafu { path: file_path })?;
+
+                while let Ok(chunk_opt) = data.next().await.transpose() {
+                    match chunk_opt {
+                        Some(chunk) => {
+                            size += chunk.len();
+                            file.write_all(&chunk).await.unwrap();
+                        }
+                        None => break,
+                    };
+                }
+
+                Ok(DownloadedFile {
+                    upload_dir: upload_dir.clone(),
+                    name: orig_filename.to_owned(),
+                    filename: new_filename.to_owned(),
+                    path: version_dir.clone().join(&orig_filename),
+                    size: size as i64,
+                })
+            }
+            Err(_) => Err("Failed to download object from cloud storage.".into()),
+        }
     }
 
     /// Deletes an object from cloud storage. If the file is an image, all versions will be deleted.

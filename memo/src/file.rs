@@ -140,15 +140,13 @@ pub struct RemoteUploadDto {
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SignedRemoteUploadDto {
     #[validate(length(min = 1))]
-    pub filename: String,
-
-    #[validate(length(min = 1))]
     pub token: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedFileUploadDto {
-    pub filename: String,
+    pub orig_filename: String,
+    pub new_filename: String,
     pub url: String,
     pub token: String,
 }

@@ -6,6 +6,7 @@ use image::imageops;
 use snafu::ResultExt;
 use std::fs::File;
 use std::path::PathBuf;
+use storage::storage::DownloadedFile;
 use tracing::error;
 
 use crate::Result;
@@ -13,7 +14,6 @@ use crate::error::DbSnafu;
 use crate::error::{ExifInfoSnafu, StorageSnafu, UploadFileSnafu, ValidationSnafu};
 
 use crate::state::AppState;
-use db::file::FilePayload;
 use db::file::MAX_FILES;
 use memo::bucket::BucketDto;
 use memo::dir::DirDto;
@@ -43,11 +43,11 @@ pub async fn create_file(
     state: AppState,
     bucket: &BucketDto,
     dir: &DirDto,
-    data: &FilePayload,
+    data: &DownloadedFile,
 ) -> Result<FileDto> {
     let mut file_dto = init_file(dir, data)?;
 
-    let cleanup = |data: &FilePayload, file: Option<&FileDto>| {
+    let cleanup = |data: &DownloadedFile, file: Option<&FileDto>| {
         if let Err(e) = cleanup_temp_uploads(data, file) {
             error!("Cleanup file(s): {}", e);
         }
@@ -160,7 +160,7 @@ pub async fn create_file(
     }
 }
 
-fn cleanup_temp_uploads(data: &FilePayload, file: Option<&FileDto>) -> Result<()> {
+fn cleanup_temp_uploads(data: &DownloadedFile, file: Option<&FileDto>) -> Result<()> {
     if let Some(file) = file {
         if file.is_image {
             // Cleanup versions
@@ -198,7 +198,7 @@ fn cleanup_temp_uploads(data: &FilePayload, file: Option<&FileDto>) -> Result<()
     Ok(())
 }
 
-fn init_file(dir: &DirDto, data: &FilePayload) -> Result<FileDto> {
+fn init_file(dir: &DirDto, data: &DownloadedFile) -> Result<FileDto> {
     let mut is_image = false;
     let content_type = get_content_type(&data.path)?;
     if content_type.starts_with("image/") {
@@ -257,7 +257,7 @@ fn read_image(path: &PathBuf) -> Result<DynamicImage> {
     }
 }
 
-fn create_versions(data: &FilePayload, exif_info: &PhotoExif) -> Result<Vec<ImgVersionDto>> {
+fn create_versions(data: &DownloadedFile, exif_info: &PhotoExif) -> Result<Vec<ImgVersionDto>> {
     let img = read_image(&data.path)?;
 
     // Rotate based on exif orientation before creating versions
@@ -299,7 +299,7 @@ fn create_versions(data: &FilePayload, exif_info: &PhotoExif) -> Result<Vec<ImgV
     Ok(versions)
 }
 
-fn create_preview(data: &FilePayload, img: &DynamicImage) -> Result<ImgVersionDto> {
+fn create_preview(data: &DownloadedFile, img: &DynamicImage) -> Result<ImgVersionDto> {
     // Prepare dir
     let prev_dir = data
         .upload_dir
@@ -342,7 +342,7 @@ fn create_preview(data: &FilePayload, img: &DynamicImage) -> Result<ImgVersionDt
     Ok(version)
 }
 
-fn create_thumbnail(data: &FilePayload, img: &DynamicImage) -> Result<ImgVersionDto> {
+fn create_thumbnail(data: &DownloadedFile, img: &DynamicImage) -> Result<ImgVersionDto> {
     // Prepare dir
     let prev_dir = data
         .upload_dir
