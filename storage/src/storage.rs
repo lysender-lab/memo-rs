@@ -9,8 +9,8 @@ use google_cloud_storage::builder::storage::SignedUrlBuilder;
 use google_cloud_storage::client::{Storage, StorageControl};
 use google_cloud_storage::http::Method;
 
-use crate::Result;
 use crate::error::{GoogleSnafu, ValidationSnafu};
+use crate::{Error, Result};
 use memo::bucket::BucketDto;
 use memo::dir::DirDto;
 use memo::file::ORIGINAL_PATH;
@@ -23,6 +23,7 @@ pub struct StorageClient {
 }
 
 impl StorageClient {
+    /// Creates a new storage client using default credentials from ENV.
     pub async fn new() -> Result<Self> {
         let storage = create_data_storage_client().await?;
         let control = create_storage_client().await?;
@@ -130,6 +131,7 @@ impl StorageClient {
         }
     }
 
+    /// Reads a bucket to check its status.
     pub async fn read_bucket(&self, name: &str) -> Result<String> {
         let bucket_name = bucket_resource_name(name);
 
@@ -164,82 +166,26 @@ impl StorageClient {
         }
     }
 
-    pub async fn list_file_objects(&self, bucket_name: &str, prefix: &str) -> Result<Vec<String>> {
-        let parent = bucket_resource_name(bucket_name);
-        let mut page_token = String::new();
-        let mut files = Vec::new();
-
-        loop {
-            let mut req = self
-                .control
-                .list_objects()
-                .set_parent(parent.clone())
-                .set_prefix(prefix.to_string());
-
-            if !page_token.is_empty() {
-                req = req.set_page_token(page_token.clone());
-            }
-
-            let res = req.send().await;
-            let response = match res {
-                Ok(response) => response,
-                Err(e) => {
-                    return map_cloud_error(e, "Failed to list files from cloud storage.");
-                }
-            };
-
-            files.extend(response.objects.iter().map(|obj| obj.name.clone()));
-
-            if response.next_page_token.is_empty() {
-                break;
-            }
-            page_token = response.next_page_token;
-        }
-
-        Ok(files)
-    }
-
-    pub async fn get_file_object(&self, bucket_name: &str, object_path: &str) -> Result<String> {
-        let bucket_name = bucket_resource_name(bucket_name);
-        let res = self
-            .control
-            .get_object()
-            .set_bucket(bucket_name)
-            .set_object(object_path.to_string())
-            .send()
-            .await;
-
-        match res {
-            Ok(object) => Ok(object.name),
-            Err(e) => map_cloud_error(e, "Failed to get file from cloud storage."),
-        }
-    }
-
-    pub async fn upload_object(
+    /// Uploads a file to cloud storage directly.
+    pub async fn upload(
         &self,
         bucket: &BucketDto,
         dir: &DirDto,
         source_dir: &PathBuf,
         file: &FileDto,
     ) -> Result<()> {
-        match file.is_image {
-            true => {
-                self.upload_image_object(bucket, dir, source_dir, file)
-                    .await
-            }
-            false => {
-                self.upload_regular_object(bucket, dir, source_dir, file)
-                    .await
-            }
+        if file.is_image {
+            return self
+                .upload_image_object(bucket, dir, source_dir, file)
+                .await;
         }
+
+        self.upload_regular_object(bucket, dir, source_dir, file)
+            .await
     }
 
-    pub async fn delete_file_object(
-        &self,
-        bucket_name: &str,
-        dir_name: &str,
-        file: &FileDto,
-    ) -> Result<()> {
+    /// Deletes an object from cloud storage. If the file is an image, all versions will be deleted.
+    pub async fn delete(&self, bucket_name: &str, dir_name: &str, file: &FileDto) -> Result<()> {
         if file.is_image {
             // Delete all versions
             if let Some(versions) = &file.img_versions {
@@ -256,7 +202,7 @@ impl StorageClient {
         Ok(())
     }
 
-    pub async fn format_files(
+    pub async fn attach_urls(
         &self,
         bucket_name: &str,
         dir_name: &str,
@@ -289,7 +235,7 @@ impl StorageClient {
         Ok(updated_files)
     }
 
-    pub async fn format_file(
+    pub async fn attach_url(
         &self,
         bucket_name: &str,
         dir_name: &str,
@@ -298,9 +244,21 @@ impl StorageClient {
         let bucket_resource = bucket_resource_name(bucket_name);
         format_file_single(self.get_signer(), &bucket_resource, dir_name, file).await
     }
+
+    pub async fn generate_upload_url(
+        &self,
+        bucket_name: &str,
+        dir_name: &str,
+        version: &str,
+        filename: &str,
+        content_type: Option<&str>,
+    ) -> Result<String> {
+        let file_path = format!("{}/{}/{}", dir_name, version, filename);
+        generate_upload_signed_url(self.get_signer(), bucket_name, &file_path, content_type).await
+    }
 }
 
-pub async fn create_storage_client() -> Result<StorageControl> {
+async fn create_storage_client() -> Result<StorageControl> {
     let credentials = CredentialsBuilder::default()
         .build()
         .map_err(|err| format!("Error creating credentials: {}", err))?;
@@ -328,21 +286,6 @@ fn create_storage_signer() -> Result<Signer> {
     CredentialsBuilder::default()
         .build_signer()
         .map_err(|err| format!("Error creating cloud signer: {}", err).into())
-}
-
-pub async fn test_list_hmac_keys(client: &StorageControl, project_id: &str) -> Result<()> {
-    let parent = format!("projects/{}", project_id);
-    let res = client
-        .list_buckets()
-        .set_parent(parent)
-        .set_page_size(1)
-        .send()
-        .await;
-
-    match res {
-        Ok(_) => Ok(()),
-        Err(e) => map_cloud_error(e, "Failed to list buckets from cloud storage."),
-    }
 }
 
 async fn generate_signed_url(
@@ -443,20 +386,17 @@ fn bucket_resource_name(bucket_name: &str) -> String {
 fn map_cloud_error<T>(err: CloudError, fallback: &str) -> Result<T> {
     if let Some(code) = err.http_status_code() {
         if (400..500).contains(&code) {
-            return ValidationSnafu {
+            return Err(Error::Validation {
                 msg: err.to_string(),
-            }
-            .fail();
+            });
         }
 
-        return GoogleSnafu {
+        return Err(Error::Google {
             msg: err.to_string(),
-        }
-        .fail();
+        });
     }
 
-    GoogleSnafu {
-        msg: format!("{} {}", fallback, err),
-    }
-    .fail()
+    Err(Error::Google {
+        msg: format!("{}: {}", fallback, err),
+    })
 }

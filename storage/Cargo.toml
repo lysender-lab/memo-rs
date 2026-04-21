@@ -10,6 +10,3 @@ google-cloud-storage.workspace = true
 snafu.workspace = true
 tokio.workspace = true
 memo = { path = "../memo" }
-
-[features]
-test = []

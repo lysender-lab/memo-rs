@@ -1,4 +1,4 @@
-pub mod error;
+mod error;
 pub mod storage;
 
 // Re-export error types for convenience
