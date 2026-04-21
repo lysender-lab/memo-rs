@@ -1,4 +1,4 @@
-use axum::extract::{DefaultBodyLimit, State};
+use axum::extract::State;
 use axum::handler::HandlerWithoutStateExt;
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
@@ -6,7 +6,6 @@ use axum::routing::{any, get, get_service, post};
 use axum::{Extension, Router, middleware};
 use reqwest::StatusCode;
 use std::path::Path;
-use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::error;
 
@@ -125,8 +124,6 @@ fn my_dir_inner_routes(state: AppState) -> Router<AppState> {
 fn my_upload_route(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(upload_page_handler).post(upload_handler))
-        .layer(DefaultBodyLimit::max(8000000))
-        .layer(RequestBodyLimitLayer::new(8000000))
         .with_state(state)
 }
 

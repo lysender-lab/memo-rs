@@ -1,6 +1,6 @@
 use axum::{
     Extension,
-    extract::{Json, Multipart, Path, Query, State, rejection::JsonRejection},
+    extract::{Json, Path, Query, State, rejection::JsonRejection},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -10,6 +10,7 @@ use snafu::{OptionExt, ResultExt, ensure};
 use tokio::{fs::File, fs::create_dir_all, io::AsyncWriteExt};
 
 use crate::{
+    Error,
     bucket::update_bucket,
     dir::{create_dir, delete_dir, update_dir},
     error::{
@@ -19,6 +20,7 @@ use crate::{
     file::create_file,
     health::{check_liveness, check_readiness},
     state::AppState,
+    token::{create_upload_token, verify_upload_token},
     web::{params::Params, response::JsonResponse},
 };
 use db::bucket::UpdateBucket;
@@ -27,7 +29,10 @@ use db::file::{FilePayload, ListFilesParams};
 use memo::{
     bucket::BucketDto,
     dir::DirDto,
-    file::{FileDto, ImgVersion},
+    file::{
+        FileDto, ImgVersion, ORIGINAL_PATH, RemoteUploadDto, SignedFileUploadDto,
+        SignedRemoteUploadDto,
+    },
     pagination::Paginated,
     utils::slugify_prefixed,
 };
@@ -280,12 +285,13 @@ pub async fn list_files_handler(
     Ok(JsonResponse::new(serde_json::to_string(&listing).unwrap()))
 }
 
-pub async fn create_file_handler(
+/// Creates a pre-signed upload URL for a file.
+pub async fn create_upload_url_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
     Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
-    mut multipart: Multipart,
+    payload: CoreResult<Json<RemoteUploadDto>, JsonRejection>,
 ) -> Result<JsonResponse> {
     let permissions = vec![Permission::FilesCreate];
     ensure!(
@@ -295,7 +301,80 @@ pub async fn create_file_handler(
         }
     );
 
-    let mut payload: Option<FilePayload> = None;
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
+
+    let token = create_upload_token(&data.filename, &state.config.jwt_secret)?;
+    let upload_url = state
+        .storage_client
+        .generate_upload_url(&bucket.name, &dir.name, ORIGINAL_PATH, &data.filename, None)
+        .await
+        .context(StorageSnafu)?;
+
+    let dto = SignedFileUploadDto {
+        filename: data.0.filename,
+        url: upload_url,
+        token,
+    };
+
+    Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
+}
+
+pub async fn create_file_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(bucket): Extension<BucketDto>,
+    Extension(dir): Extension<DirDto>,
+    payload: CoreResult<Json<SignedRemoteUploadDto>, JsonRejection>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::FilesCreate];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
+
+    // Validate token
+    let orig_filename = verify_upload_token(&data.token, &state.config.jwt_secret)?;
+    if orig_filename != data.filename {
+        return Err(Error::Forbidden {
+            msg: "Invalid upload token".to_string(),
+        });
+    }
+
+    // Low chance of collision but higher than the full uuid v7 string
+    // Prefer a shorter filename for better readability
+    let filename = slugify_prefixed(&orig_filename);
+
+    // Ensure upload dir exists
+    let orig_dir = state
+        .config
+        .upload_dir
+        .clone()
+        .join(ImgVersion::Original.to_string());
+
+    create_dir_all(orig_dir.clone())
+        .await
+        .context(UploadDirSnafu)?;
+
+    // Prepare to save to file
+    let file_path = orig_dir.as_path().join(&filename);
+    let mut file = File::create(&file_path)
+        .await
+        .context(CreateFileSnafu { path: file_path })?;
+
+    // Stream contents to file
+    let mut size: usize = 0;
+    while let Some(chunk) = field.chunk().await.unwrap() {
+        size += chunk.len();
+        file.write_all(&chunk).await.unwrap();
+    }
 
     while let Some(mut field) = multipart.next_field().await.unwrap() {
         let name = field.name().unwrap().to_string();

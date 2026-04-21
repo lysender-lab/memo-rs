@@ -122,6 +122,9 @@ pub enum Error {
     #[snafu(display("{}", msg))]
     Oauth { msg: String },
 
+    #[snafu(display("Invalid upload token"))]
+    UploadToken,
+
     #[snafu(display("{}", msg))]
     Whatever { msg: String },
 }
@@ -166,6 +169,7 @@ impl From<&Error> for StatusCode {
             Error::InvalidPassword => StatusCode::UNAUTHORIZED,
             Error::InactiveUser => StatusCode::UNAUTHORIZED,
             Error::Oauth { .. } => StatusCode::UNAUTHORIZED,
+            Error::UploadToken => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
