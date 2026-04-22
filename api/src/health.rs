@@ -1,13 +1,9 @@
-use std::sync::Arc;
-
 use serde::Serialize;
-
-use snafu::ResultExt;
+use std::sync::Arc;
 use tracing::error;
 
-use crate::{Result, config::Config, error::StorageSnafu};
+use crate::{Result, config::Config};
 use db::DbMapper;
-use storage::storage::{create_storage_client, test_list_hmac_keys};
 
 #[derive(Serialize)]
 pub struct LiveStatus {
@@ -70,27 +66,12 @@ pub async fn check_readiness(config: &Config, db: Arc<DbMapper>) -> Result<Healt
     })
 }
 
-async fn perform_checks(config: &Config, db: Arc<DbMapper>) -> Result<HealthChecks> {
+async fn perform_checks(_config: &Config, db: Arc<DbMapper>) -> Result<HealthChecks> {
     let mut checks = HealthChecks::new();
 
-    checks.cloud_storage = check_cloud_storage(config).await?;
     checks.database = check_database(db).await?;
 
     Ok(checks)
-}
-
-async fn check_cloud_storage(config: &Config) -> Result<String> {
-    let client = create_storage_client(config.cloud.credentials.as_str())
-        .await
-        .context(StorageSnafu)?;
-    match test_list_hmac_keys(&client, config.cloud.project_id.as_str()).await {
-        Ok(_) => Ok("UP".to_string()),
-        Err(e) => {
-            let msg = format!("{}", e);
-            error!(msg);
-            Ok("DOWN".to_string())
-        }
-    }
 }
 
 async fn check_database(db: Arc<DbMapper>) -> Result<String> {

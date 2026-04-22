@@ -114,16 +114,6 @@ fn optional_env(name: &str) -> Option<String> {
     }
 }
 
-fn required_env_parse<T>(name: &str) -> Result<T>
-where
-    T: std::str::FromStr,
-{
-    let value = required_env(name)?;
-    value.parse::<T>().map_err(|_| crate::Error::Config {
-        msg: format!("{} is invalid.", name),
-    })
-}
-
 impl AssetManifest {
     pub fn build(frontend_dir: &PathBuf) -> Result<Self> {
         let filename = Path::new(frontend_dir).join("public/assets/bundles/.vite/manifest.json");

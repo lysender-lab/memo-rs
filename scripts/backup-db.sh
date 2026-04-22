@@ -8,6 +8,7 @@
 CURRENT_DATE=$(date +"%Y-%m-%d-%H-%M-%S")
 TARGET_DIR="$DB_BACKUP_PATH/memo-rs/$CURRENT_DATE"
 BACKUP_FILE="memo-db-$CURRENT_DATE.tar.gz"
+TUROSODB_BIN="$HOME/.turso/tursodb"
 
 echo "Creating backup for memo-rs database at $CURRENT_DATE"
 
@@ -15,7 +16,7 @@ echo "Creating backup for memo-rs database at $CURRENT_DATE"
 mkdir -p "$TARGET_DIR"
 
 # Backup the database
-tursodb --readonly "$MEMO_DB_PATH/memo.db" ".dump" >"$TARGET_DIR/memo.sql"
+$TUROSODB_BIN --readonly "$MEMO_DB_PATH/memo.db" ".dump" >"$TARGET_DIR/memo.sql"
 
 # Compress directory
 cd "$DB_BACKUP_PATH/memo-rs"

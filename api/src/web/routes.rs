@@ -1,10 +1,7 @@
 use axum::{
-    Router,
-    extract::DefaultBodyLimit,
-    middleware,
-    routing::{any, get},
+    Router, middleware,
+    routing::{any, get, post},
 };
-use tower_http::limit::RequestBodyLimitLayer;
 
 use super::{
     handler::{
@@ -18,7 +15,10 @@ use super::{
         require_auth_middleware,
     },
 };
-use crate::{state::AppState, web::handler::update_bucket_handler};
+use crate::{
+    state::AppState,
+    web::handler::{create_upload_url_handler, update_bucket_handler},
+};
 
 pub fn all_routes(state: AppState) -> Router {
     Router::new()
@@ -83,6 +83,7 @@ fn inner_dir_routes(state: AppState) -> Router<AppState> {
                 .patch(update_dir_handler)
                 .delete(delete_dir_handler),
         )
+        .route("/upload-url", post(create_upload_url_handler))
         .nest("/files", files_routes(state.clone()))
         .layer(middleware::from_fn_with_state(
             state.clone(),
@@ -95,8 +96,6 @@ fn files_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(list_files_handler).post(create_file_handler))
         .nest("/{file_id}", inner_file_routes(state.clone()))
-        .layer(DefaultBodyLimit::max(8000000))
-        .layer(RequestBodyLimitLayer::new(8000000))
         .with_state(state)
 }
 

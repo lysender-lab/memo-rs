@@ -1,37 +1,53 @@
+use bytes::Bytes;
+use google_cloud_auth::credentials::Builder as CredentialsBuilder;
+use google_cloud_auth::signer::Signer;
+use google_cloud_storage::Error as CloudError;
+use google_cloud_storage::builder::storage::SignedUrlBuilder;
+use google_cloud_storage::client::{Storage, StorageControl};
+use google_cloud_storage::http::Method;
+use snafu::ResultExt;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
+use tokio::{fs::File, fs::create_dir_all, io::AsyncWriteExt};
 
-use google_cloud_storage::client::google_cloud_auth::credentials::CredentialsFile;
-use google_cloud_storage::client::{Client, ClientConfig};
-use google_cloud_storage::http::Error as CloudError;
-use google_cloud_storage::http::buckets::get::GetBucketRequest;
-use google_cloud_storage::http::hmac_keys::list::ListHmacKeysRequest;
-use google_cloud_storage::http::objects::delete::DeleteObjectRequest;
-use google_cloud_storage::http::objects::upload::{Media, UploadObjectRequest, UploadType};
-use google_cloud_storage::sign::SignedURLOptions;
-
-use crate::Result;
-use crate::error::{GoogleSnafu, ValidationSnafu};
+use crate::error::{CreateFileSnafu, GoogleSnafu, UploadDirSnafu, ValidationSnafu};
+use crate::{Error, Result};
 use memo::bucket::BucketDto;
 use memo::dir::DirDto;
 use memo::file::ORIGINAL_PATH;
 use memo::file::{FileDto, ImgVersionDto};
 
+#[derive(Debug, Clone)]
+pub struct DownloadedFile {
+    pub upload_dir: PathBuf,
+    pub name: String,
+    pub filename: String,
+    pub path: PathBuf,
+    pub size: i64,
+}
+
 pub struct StorageClient {
-    client: Arc<Client>,
+    storage: Storage,
+    control: StorageControl,
+    signer: Signer,
 }
 
 impl StorageClient {
-    pub async fn new(key_file: &str) -> Result<Self> {
-        let client = create_storage_client(key_file).await?;
+    /// Creates a new storage client using default credentials from ENV.
+    pub async fn new() -> Result<Self> {
+        let storage = create_data_storage_client().await?;
+        let control = create_storage_client().await?;
+        let signer = create_storage_signer()?;
+
         Ok(Self {
-            client: Arc::new(client),
+            storage,
+            control,
+            signer,
         })
     }
 
-    pub fn get_client(&self) -> Arc<Client> {
-        self.client.clone()
+    fn get_signer(&self) -> &Signer {
+        &self.signer
     }
 
     async fn upload_regular_object(
@@ -41,42 +57,24 @@ impl StorageClient {
         source_dir: &PathBuf,
         file: &FileDto,
     ) -> Result<()> {
-        // Prepare media
         let file_path = format!("{}/{}/{}", &dir.name, ORIGINAL_PATH, &file.filename);
-        let mut media = Media::new(file_path.clone());
-        media.content_type = file.content_type.clone().into();
-        let upload_type = UploadType::Simple(media);
+        let bucket_name = bucket_resource_name(&bucket.name);
 
-        // Read file, preferred a stream but skill issues...
         let source_path = source_dir.join(ORIGINAL_PATH).join(&file.filename);
         let Ok(data) = std::fs::read(&source_path) else {
             return Err("Failed to read file for upload.".into());
         };
 
         let upload_res = self
-            .client
-            .upload_object(
-                &UploadObjectRequest {
-                    bucket: bucket.name.clone(),
-                    ..Default::default()
-                },
-                data,
-                &upload_type,
-            )
+            .storage
+            .write_object(bucket_name, file_path, Bytes::from(data))
+            .set_content_type(file.content_type.clone())
+            .send_buffered()
             .await;
 
         match upload_res {
             Ok(_) => Ok(()),
-            Err(e) => match e {
-                CloudError::Response(gerr) => {
-                    if gerr.code >= 400 && gerr.code < 500 {
-                        ValidationSnafu { msg: gerr.message }.fail()
-                    } else {
-                        GoogleSnafu { msg: gerr.message }.fail()
-                    }
-                }
-                _ => Err("Failed to upload object to cloud storage.".into()),
-            },
+            Err(e) => map_cloud_error(e, "Failed to upload object to cloud storage."),
         }
     }
 
@@ -105,134 +103,154 @@ impl StorageClient {
         file: &FileDto,
         version: &ImgVersionDto,
     ) -> Result<()> {
-        // Prepare media
         let version_dir: String = version.version.to_string();
         let file_path = format!("{}/{}/{}", &dir.name, &version_dir, &file.filename);
-        let mut media = Media::new(file_path.clone());
-        media.content_type = file.content_type.clone().into();
-        let upload_type = UploadType::Simple(media);
+        let bucket_name = bucket_resource_name(&bucket.name);
 
-        // Read file, preferred a stream but skill issues...
         let source_path = source_dir.join(&version_dir).join(&file.filename);
         let Ok(data) = std::fs::read(&source_path) else {
             return Err("Failed to read image version for upload.".into());
         };
 
         let upload_res = self
-            .client
-            .upload_object(
-                &UploadObjectRequest {
-                    bucket: bucket.name.clone(),
-                    ..Default::default()
-                },
-                data,
-                &upload_type,
-            )
+            .storage
+            .write_object(bucket_name, file_path, Bytes::from(data))
+            .set_content_type(file.content_type.clone())
+            .send_buffered()
             .await;
 
         match upload_res {
             Ok(_) => Ok(()),
-            Err(e) => match e {
-                CloudError::Response(gerr) => {
-                    if gerr.code >= 400 && gerr.code < 500 {
-                        ValidationSnafu { msg: gerr.message }.fail()
-                    } else {
-                        GoogleSnafu { msg: gerr.message }.fail()
-                    }
-                }
-                _ => Err("Failed to upload object to cloud storage.".into()),
-            },
+            Err(e) => map_cloud_error(e, "Failed to upload object to cloud storage."),
         }
     }
 
     async fn delete_object_by_path(&self, bucket_name: &str, path: &str) -> Result<()> {
+        let bucket_name = bucket_resource_name(bucket_name);
         let res = self
-            .client
-            .delete_object(&DeleteObjectRequest {
-                bucket: bucket_name.to_string(),
-                object: path.to_string(),
-                ..Default::default()
-            })
+            .control
+            .delete_object()
+            .set_bucket(bucket_name)
+            .set_object(path.to_string())
+            .send()
             .await;
 
         match res {
             Ok(_) => Ok(()),
-            Err(e) => match e {
-                CloudError::Response(gerr) => {
-                    if gerr.code >= 400 && gerr.code < 500 {
-                        ValidationSnafu { msg: gerr.message }.fail()
-                    } else {
-                        GoogleSnafu { msg: gerr.message }.fail()
-                    }
-                }
-                _ => Err("Failed to delete object from cloud storage.".into()),
-            },
+            Err(e) => map_cloud_error(e, "Failed to delete object from cloud storage."),
         }
     }
 
+    /// Reads a bucket to check its status.
     pub async fn read_bucket(&self, name: &str) -> Result<String> {
-        let res = self
-            .client
-            .get_bucket(&GetBucketRequest {
-                bucket: name.to_string(),
-                ..Default::default()
-            })
-            .await;
+        let bucket_name = bucket_resource_name(name);
+
+        let res = self.control.get_bucket().set_name(bucket_name).send().await;
 
         match res {
             Ok(bucket) => Ok(bucket.name),
-            Err(e) => match e {
-                CloudError::Response(gerr) => {
-                    if gerr.code >= 400 && gerr.code < 500 {
-                        match gerr.code {
-                            401 => ValidationSnafu {
-                                msg: "Cloud Storage: Unauthorized",
-                            }
-                            .fail(),
-                            403 => ValidationSnafu {
-                                msg: "Cloud Storage: Forbidden",
-                            }
-                            .fail(),
-                            404 => ValidationSnafu {
-                                msg: "Cloud Storage: Bucket not found",
-                            }
-                            .fail(),
-                            _ => ValidationSnafu { msg: gerr.message }.fail(),
+            Err(e) => {
+                if let Some(code) = e.http_status_code() {
+                    match code {
+                        401 => ValidationSnafu {
+                            msg: "Cloud Storage: Unauthorized",
                         }
-                    } else {
-                        GoogleSnafu { msg: gerr.message }.fail()
+                        .fail(),
+                        403 => ValidationSnafu {
+                            msg: "Cloud Storage: Forbidden",
+                        }
+                        .fail(),
+                        404 => ValidationSnafu {
+                            msg: "Cloud Storage: Bucket not found",
+                        }
+                        .fail(),
+                        _ if (400..500).contains(&code) => {
+                            ValidationSnafu { msg: e.to_string() }.fail()
+                        }
+                        _ => GoogleSnafu { msg: e.to_string() }.fail(),
                     }
+                } else {
+                    GoogleSnafu { msg: e.to_string() }.fail()
                 }
-                _ => Err("Failed to read bucket from cloud storage.".into()),
-            },
+            }
         }
     }
 
-    pub async fn upload_object(
+    /// Uploads a file to cloud storage directly.
+    pub async fn upload(
         &self,
         bucket: &BucketDto,
         dir: &DirDto,
         source_dir: &PathBuf,
         file: &FileDto,
     ) -> Result<()> {
-        match file.is_image {
-            true => {
-                self.upload_image_object(bucket, dir, source_dir, file)
-                    .await
-            }
-            false => {
-                self.upload_regular_object(bucket, dir, source_dir, file)
-                    .await
-            }
+        if file.is_image {
+            return self
+                .upload_image_object(bucket, dir, source_dir, file)
+                .await;
         }
+
+        self.upload_regular_object(bucket, dir, source_dir, file)
+            .await
     }
 
-    pub async fn delete_file_object(
+    /// Downloads an object from cloud storage into a local file.
+    pub async fn download(
         &self,
         bucket_name: &str,
         dir_name: &str,
-        file: &FileDto,
-    ) -> Result<()> {
+        version: &str,
+        orig_filename: &str,
+        new_filename: &str,
+        upload_dir: &PathBuf,
+    ) -> Result<DownloadedFile> {
+        let file_path = format!("{}/{}/{}", dir_name, version, new_filename);
+        let res = self
+            .storage
+            .read_object(bucket_resource_name(bucket_name), file_path)
+            .send()
+            .await;
+
+        match res {
+            Ok(mut data) => {
+                // Ensure upload dir exists
+                let version_dir = upload_dir.clone().join(version);
+
+                create_dir_all(version_dir.clone())
+                    .await
+                    .context(UploadDirSnafu)?;
+
+                // Prepare to save to file
+                let file_path = version_dir.as_path().join(&new_filename);
+                let mut size: usize = 0;
+                let mut file = File::create(&file_path)
+                    .await
+                    .context(CreateFileSnafu { path: file_path })?;
+
+                while let Ok(chunk_opt) = data.next().await.transpose() {
+                    match chunk_opt {
+                        Some(chunk) => {
+                            size += chunk.len();
+                            file.write_all(&chunk).await.unwrap();
+                        }
+                        None => break,
+                    };
+                }
+
+                Ok(DownloadedFile {
+                    upload_dir: upload_dir.clone(),
+                    name: orig_filename.to_owned(),
+                    filename: new_filename.to_owned(),
+                    path: version_dir.clone().join(new_filename),
+                    size: size as i64,
+                })
+            }
+            Err(_) => Err("Failed to download object from cloud storage.".into()),
+        }
+    }
+
+    /// Deletes an object from cloud storage. If the file is an image, all versions will be deleted.
+    pub async fn delete(&self, bucket_name: &str, dir_name: &str, file: &FileDto) -> Result<()> {
         if file.is_image {
             // Delete all versions
             if let Some(versions) = &file.img_versions {
@@ -249,23 +267,24 @@ impl StorageClient {
         Ok(())
     }
 
-    pub async fn format_files(
+    pub async fn attach_urls(
         &self,
         bucket_name: &str,
         dir_name: &str,
         files: Vec<FileDto>,
     ) -> Result<Vec<FileDto>> {
-        let client = self.get_client();
+        let signer = self.get_signer();
+        let bucket_resource = bucket_resource_name(bucket_name);
 
         let mut tasks = Vec::with_capacity(files.len());
         for file in files.iter() {
-            let client_copy = client.clone();
+            let signer_copy = signer.clone();
             let file_copy = file.clone();
-            let bname = bucket_name.to_string();
+            let bname = bucket_resource.clone();
             let dir_name_copy = dir_name.to_string();
 
             tasks.push(tokio::spawn(async move {
-                format_file_single(client_copy, &bname, &dir_name_copy, file_copy).await
+                format_file_single(&signer_copy, &bname, &dir_name_copy, file_copy).await
             }));
         }
 
@@ -281,70 +300,114 @@ impl StorageClient {
         Ok(updated_files)
     }
 
-    pub async fn format_file(
+    pub async fn attach_url(
         &self,
         bucket_name: &str,
         dir_name: &str,
         file: FileDto,
     ) -> Result<FileDto> {
-        format_file_single(self.get_client(), bucket_name, dir_name, file).await
+        let bucket_resource = bucket_resource_name(bucket_name);
+        format_file_single(self.get_signer(), &bucket_resource, dir_name, file).await
+    }
+
+    pub async fn generate_upload_url(
+        &self,
+        bucket_name: &str,
+        dir_name: &str,
+        version: &str,
+        filename: &str,
+        content_type: Option<&str>,
+    ) -> Result<String> {
+        let file_path = format!("{}/{}/{}", dir_name, version, filename);
+        generate_upload_signed_url(
+            self.get_signer(),
+            &bucket_resource_name(bucket_name),
+            &file_path,
+            content_type,
+        )
+        .await
     }
 }
 
-pub async fn create_storage_client(key_file: &str) -> Result<Client> {
-    match CredentialsFile::new_from_file(key_file.to_string()).await {
-        Ok(creds) => match ClientConfig::default().with_credentials(creds).await {
-            Ok(config) => Ok(Client::new(config)),
-            Err(err) => Err(format!("Error creating Cloud Storage config: {}", err).into()),
-        },
-        Err(err) => Err(format!("Error reading credentials file: {}", err).into()),
-    }
+async fn create_storage_client() -> Result<StorageControl> {
+    let credentials = CredentialsBuilder::default()
+        .build()
+        .map_err(|err| format!("Error creating credentials: {}", err))?;
+
+    StorageControl::builder()
+        .with_credentials(credentials)
+        .build()
+        .await
+        .map_err(|err| format!("Error creating Cloud Storage client: {}", err).into())
 }
 
-pub async fn test_list_hmac_keys(client: &Client, project_id: &str) -> Result<()> {
-    let res = client
-        .list_hmac_keys(&ListHmacKeysRequest {
-            project_id: project_id.to_string(),
-            ..Default::default()
-        })
-        .await;
+async fn create_data_storage_client() -> Result<Storage> {
+    let credentials = CredentialsBuilder::default()
+        .build()
+        .map_err(|err| format!("Error creating credentials: {}", err))?;
 
-    match res {
-        Ok(_) => Ok(()),
-        Err(e) => match e {
-            CloudError::Response(gerr) => {
-                if gerr.code >= 400 && gerr.code < 500 {
-                    ValidationSnafu { msg: gerr.message }.fail()
-                } else {
-                    GoogleSnafu { msg: gerr.message }.fail()
-                }
-            }
-            _ => Err("Failed to list buckets from cloud storage.".into()),
-        },
-    }
+    Storage::builder()
+        .with_credentials(credentials)
+        .build()
+        .await
+        .map_err(|err| format!("Error creating Cloud Storage data client: {}", err).into())
+}
+
+fn create_storage_signer() -> Result<Signer> {
+    CredentialsBuilder::default()
+        .build_signer()
+        .map_err(|err| format!("Error creating cloud signer: {}", err).into())
 }
 
 async fn generate_signed_url(
-    client: &Client,
+    signer: &Signer,
     bucket_name: &str,
     file_path: &str,
 ) -> Result<String> {
     let expires = Duration::from_secs(3600 * 12);
-    let mut options = SignedURLOptions::default();
-    options.expires = expires;
-
-    let res = client
-        .signed_url(bucket_name, file_path, None, None, options)
+    let res = SignedUrlBuilder::for_object(bucket_name.to_string(), file_path.to_string())
+        .with_method(Method::GET)
+        .with_expiration(expires)
+        .sign_with(signer)
         .await;
 
     match res {
         Ok(url) => Ok(url),
-        Err(_) => Err("Failed to sign object URL.".into()),
+        Err(err) => GoogleSnafu {
+            msg: format!("Failed to sign object URL: {}", err),
+        }
+        .fail(),
+    }
+}
+
+async fn generate_upload_signed_url(
+    signer: &Signer,
+    bucket_name: &str,
+    file_path: &str,
+    content_type: Option<&str>,
+) -> Result<String> {
+    let expires = Duration::from_secs(3600);
+    let mut builder = SignedUrlBuilder::for_object(bucket_name.to_string(), file_path.to_string())
+        .with_method(Method::PUT)
+        .with_expiration(expires);
+
+    if let Some(content_type) = content_type {
+        builder = builder.with_header("content-type", content_type);
+    }
+
+    let res = builder.sign_with(signer).await;
+
+    match res {
+        Ok(url) => Ok(url),
+        Err(err) => GoogleSnafu {
+            msg: format!("Failed to sign upload URL: {}", err),
+        }
+        .fail(),
     }
 }
 
 async fn format_file_single(
-    client: Arc<Client>,
+    signer: &Signer,
     bucket_name: &str,
     dir_name: &str,
     mut file: FileDto,
@@ -353,25 +416,14 @@ async fn format_file_single(
         if let Some(versions) = &file.img_versions
             && !versions.is_empty()
         {
-            let mut tasks = Vec::with_capacity(versions.len());
+            let mut updated_versions: Vec<ImgVersionDto> = Vec::with_capacity(versions.len());
 
-            for version in versions.iter() {
-                let client_copy = client.clone();
+            for i in 0..versions.len() {
+                let mut version = versions[i].clone();
+                let signer_copy = signer.clone();
                 let bname = bucket_name.to_string();
                 let file_path = format!("{}/{}/{}", dir_name, version.version, file.filename);
-
-                tasks.push(tokio::spawn(async move {
-                    generate_signed_url(&client_copy, &bname, &file_path).await
-                }));
-            }
-
-            let mut updated_versions: Vec<ImgVersionDto> = Vec::with_capacity(versions.len());
-            for (k, task) in tasks.into_iter().enumerate() {
-                let Ok(res) = task.await else {
-                    return Err("Unable to extract data from spanwed task.".into());
-                };
-                let url = res?;
-                let mut version = versions[k].clone();
+                let url = generate_signed_url(&signer_copy, &bname, &file_path).await?;
                 version.url = Some(url);
 
                 updated_versions.push(version);
@@ -383,7 +435,7 @@ async fn format_file_single(
         }
     } else {
         let url = generate_signed_url(
-            &client,
+            &signer,
             bucket_name,
             &format!("{}/{}/{}", dir_name, ORIGINAL_PATH, file.filename),
         )
@@ -392,4 +444,30 @@ async fn format_file_single(
     }
 
     Ok(file)
+}
+
+fn bucket_resource_name(bucket_name: &str) -> String {
+    if bucket_name.starts_with("projects/") && bucket_name.contains("/buckets/") {
+        return bucket_name.to_string();
+    }
+
+    format!("projects/_/buckets/{}", bucket_name)
+}
+
+fn map_cloud_error<T>(err: CloudError, fallback: &str) -> Result<T> {
+    if let Some(code) = err.http_status_code() {
+        if (400..500).contains(&code) {
+            return Err(Error::Validation {
+                msg: err.to_string(),
+            });
+        }
+
+        return Err(Error::Google {
+            msg: err.to_string(),
+        });
+    }
+
+    Err(Error::Google {
+        msg: format!("{}: {}", fallback, err),
+    })
 }

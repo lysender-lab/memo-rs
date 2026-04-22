@@ -1,33 +1,33 @@
 use axum::{
     Extension,
-    extract::{Json, Multipart, Path, Query, State, rejection::JsonRejection},
+    extract::{Json, Path, Query, State, rejection::JsonRejection},
     http::StatusCode,
     response::IntoResponse,
 };
 use core::result::Result as CoreResult;
 use serde::Serialize;
 use snafu::{OptionExt, ResultExt, ensure};
-use tokio::{fs::File, fs::create_dir_all, io::AsyncWriteExt};
 
 use crate::{
     bucket::update_bucket,
     dir::{create_dir, delete_dir, update_dir},
     error::{
-        CreateFileSnafu, DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu,
-        MissingUploadFileSnafu, Result, StorageSnafu, UploadDirSnafu, WhateverSnafu,
+        DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, Result, StorageSnafu,
+        WhateverSnafu,
     },
     file::create_file,
     health::{check_liveness, check_readiness},
     state::AppState,
+    token::{create_upload_token, verify_upload_token},
     web::{params::Params, response::JsonResponse},
 };
 use db::bucket::UpdateBucket;
 use db::dir::{ListDirsParams, NewDir, UpdateDir};
-use db::file::{FilePayload, ListFilesParams};
+use db::file::ListFilesParams;
 use memo::{
     bucket::BucketDto,
     dir::DirDto,
-    file::{FileDto, ImgVersion},
+    file::{FileDto, ORIGINAL_PATH, RemoteUploadDto, SignedFileUploadDto, SignedRemoteUploadDto},
     pagination::Paginated,
     utils::slugify_prefixed,
 };
@@ -267,7 +267,7 @@ pub async fn list_files_handler(
 
     // Generate download urls for each files
     let items = storage_client
-        .format_files(&bucket.name, &dir.name, files.data)
+        .attach_urls(&bucket.name, &dir.name, files.data)
         .await
         .context(StorageSnafu)?;
 
@@ -280,12 +280,13 @@ pub async fn list_files_handler(
     Ok(JsonResponse::new(serde_json::to_string(&listing).unwrap()))
 }
 
-pub async fn create_file_handler(
+/// Creates a pre-signed upload URL for a file.
+pub async fn create_upload_url_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
     Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
-    mut multipart: Multipart,
+    payload: CoreResult<Json<RemoteUploadDto>, JsonRejection>,
 ) -> Result<JsonResponse> {
     let permissions = vec![Permission::FilesCreate];
     ensure!(
@@ -295,64 +296,79 @@ pub async fn create_file_handler(
         }
     );
 
-    let mut payload: Option<FilePayload> = None;
-
-    while let Some(mut field) = multipart.next_field().await.unwrap() {
-        let name = field.name().unwrap().to_string();
-        if name != "file" {
-            continue;
-        }
-
-        let original_filename = field.file_name().unwrap().to_string();
-
-        // Low chance of collision but higher than the full uuid v7 string
-        // Prefer a shorter filename for better readability
-        let filename = slugify_prefixed(&original_filename);
-
-        // Ensure upload dir exists
-        let orig_dir = state
-            .config
-            .upload_dir
-            .clone()
-            .join(ImgVersion::Original.to_string());
-
-        create_dir_all(orig_dir.clone())
-            .await
-            .context(UploadDirSnafu)?;
-
-        // Prepare to save to file
-        let file_path = orig_dir.as_path().join(&filename);
-        let mut file = File::create(&file_path)
-            .await
-            .context(CreateFileSnafu { path: file_path })?;
-
-        // Stream contents to file
-        let mut size: usize = 0;
-        while let Some(chunk) = field.chunk().await.unwrap() {
-            size += chunk.len();
-            file.write_all(&chunk).await.unwrap();
-        }
-
-        payload = Some({
-            FilePayload {
-                upload_dir: state.config.upload_dir.clone(),
-                name: original_filename,
-                filename: filename.clone(),
-                path: orig_dir.clone().join(&filename),
-                size: size as i64,
-            }
-        })
-    }
-
-    let payload = payload.context(MissingUploadFileSnafu {
-        msg: "Missing upload file",
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
     })?;
 
+    // Low chance of collision but higher than the full uuid v7 string
+    // Prefer a shorter filename for better readability
+    let uniq_filename = slugify_prefixed(&data.filename);
+
+    let token = create_upload_token(
+        data.filename.clone(),
+        uniq_filename.clone(),
+        &state.config.jwt_secret,
+    )?;
+
+    let upload_url = state
+        .storage_client
+        .generate_upload_url(&bucket.name, &dir.name, ORIGINAL_PATH, &uniq_filename, None)
+        .await
+        .context(StorageSnafu)?;
+
+    let dto = SignedFileUploadDto {
+        orig_filename: data.filename.clone(),
+        new_filename: uniq_filename,
+        url: upload_url,
+        token,
+    };
+
+    Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
+}
+
+pub async fn create_file_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(bucket): Extension<BucketDto>,
+    Extension(dir): Extension<DirDto>,
+    payload: CoreResult<Json<SignedRemoteUploadDto>, JsonRejection>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::FilesCreate];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
+
+    // Validate token
+    let upload_claims = verify_upload_token(&data.token, &state.config.jwt_secret)?;
+    let orig_filename = upload_claims.orig_filename;
+    let new_filename = upload_claims.new_filename;
+
+    // Download file locally
+    let downloaded = state
+        .storage_client
+        .download(
+            &bucket.name,
+            &dir.name,
+            ORIGINAL_PATH,
+            &orig_filename,
+            &new_filename,
+            &state.config.upload_dir,
+        )
+        .await
+        .context(StorageSnafu)?;
+
     let storage_client = state.storage_client.clone();
-    let file = create_file(state, &bucket, &dir, &payload).await?;
+    let file = create_file(state, &bucket, &dir, &downloaded).await?;
     let file_dto: FileDto = file;
     let file_dto = storage_client
-        .format_file(&bucket.name, &dir.name, file_dto)
+        .attach_url(&bucket.name, &dir.name, file_dto)
         .await
         .context(StorageSnafu)?;
 
@@ -371,7 +387,7 @@ pub async fn get_file_handler(
     let storage_client = state.storage_client.clone();
     // Extract dir from the middleware extension
     let file_dto = storage_client
-        .format_file(&bucket.name, &dir.name, file)
+        .attach_url(&bucket.name, &dir.name, file)
         .await
         .context(StorageSnafu)?;
     Ok(JsonResponse::new(serde_json::to_string(&file_dto).unwrap()))
@@ -398,7 +414,7 @@ pub async fn delete_file_handler(
     // Delete file(s) from storage
     let storage_client = state.storage_client.clone();
     storage_client
-        .delete_file_object(&bucket.name, &dir.name, &file)
+        .delete(&bucket.name, &dir.name, &file)
         .await
         .context(StorageSnafu)?;
 

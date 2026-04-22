@@ -68,6 +68,12 @@
                                         name="token"
                                         value="{{ token }}"
                                     />
+                                    <input
+                                        type="hidden"
+                                        id="prepare-upload-url"
+                                        name="prepare-upload-url"
+                                        value="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/upload-url"
+                                    />
                                 </div>
                             </div>
                         </div>

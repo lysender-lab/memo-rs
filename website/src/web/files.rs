@@ -1,17 +1,17 @@
 use askama::Template;
-use axum::Form;
 use axum::body::Bytes;
 use axum::extract::Query;
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, StatusCode};
 use axum::{Extension, body::Body, extract::State, response::Response};
-use memo::bucket::BucketDto;
-use memo::dir::DirDto;
-use memo::pagination::PaginatedMeta;
+use axum::{Form, Json};
 use snafu::ResultExt;
 
 use crate::models::tokens::TokenFormData;
 use crate::models::{ListFilesParams, UploadParams};
-use crate::services::files::{Photo, delete_photo, list_files, upload_photo};
+use crate::services::files::{
+    CommitUploadPayload, Photo, PrepareUploadPayload, add_file_svc, delete_file_svc,
+    list_files_svc, prepare_upload_svc, upload_photo,
+};
 use crate::{
     Error, Result,
     ctx::Ctx,
@@ -21,6 +21,10 @@ use crate::{
     services::token::create_csrf_token,
     web::{Action, Resource, enforce_policy},
 };
+use memo::bucket::BucketDto;
+use memo::dir::DirDto;
+use memo::file::SignedFileUploadDto;
+use memo::pagination::PaginatedMeta;
 
 use super::handle_error_message;
 
@@ -63,7 +67,7 @@ pub async fn photo_listing_v2_handler(
     };
 
     let auth_token = ctx.token().expect("token is required");
-    let result = list_files(&state, auth_token, &bid, &dir_id, &query).await;
+    let result = list_files_svc(&state, auth_token, &bid, &dir_id, &query).await;
 
     match result {
         Ok(listing) => {
@@ -140,6 +144,53 @@ pub async fn upload_page_handler(
         .status(200)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
         .context(ResponseBuilderSnafu)
+}
+
+pub async fn generate_upload_url_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(dir): Extension<DirDto>,
+    State(state): State<AppState>,
+    payload: Json<PrepareUploadPayload>,
+) -> Result<(StatusCode, Json<SignedFileUploadDto>)> {
+    let actor = ctx.actor();
+    enforce_policy(actor, Resource::Photo, Action::Create)?;
+
+    let auth_token = ctx.token().expect("token is required");
+    let dto = prepare_upload_svc(&state, auth_token, &dir.bucket_id, &dir.id, payload.0).await?;
+
+    Ok((StatusCode::OK, Json(dto)))
+}
+
+pub async fn add_file_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(pref): Extension<Pref>,
+    Extension(dir): Extension<DirDto>,
+    State(state): State<AppState>,
+    payload: Form<CommitUploadPayload>,
+) -> Result<Response<Body>> {
+    let config = state.config.clone();
+    let actor = ctx.actor();
+    enforce_policy(actor, Resource::Photo, Action::Create)?;
+
+    let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
+
+    let auth_token = ctx.token().expect("token is required");
+    let result = add_file_svc(&state, auth_token, &dir.bucket_id, &dir.id, payload.0).await;
+
+    match result {
+        Ok(photo) => {
+            let tpl = UploadedPhotoTemplate {
+                photo,
+                theme: pref.theme,
+            };
+            Ok(Response::builder()
+                .status(201)
+                .header("X-Next-Token", token)
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)?)
+        }
+        Err(err) => Ok(handle_error_message(&err)),
+    }
 }
 
 pub async fn upload_handler(
@@ -289,7 +340,8 @@ pub async fn exec_delete_photo_handler(
     };
 
     let auth_token = ctx.token().expect("token is required");
-    let result = delete_photo(&state, auth_token, &bid, &dir_id, &photo.id, &payload.token).await;
+    let result =
+        delete_file_svc(&state, auth_token, &bid, &dir_id, &photo.id, &payload.token).await;
     match result {
         Ok(_) => Response::builder()
             .status(204)

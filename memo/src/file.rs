@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, str::FromStr};
+use validator::Validate;
 
 pub const ORIGINAL_PATH: &str = "orig";
 pub const ALLOWED_IMAGE_TYPES: [&str; 4] = ["image/jpeg", "image/pjpeg", "image/png", "image/gif"];
@@ -128,4 +129,24 @@ impl TryFrom<&str> for ImgVersion {
             _ => Err(format!("Invalid image version: {}", value)),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct RemoteUploadDto {
+    #[validate(length(min = 1))]
+    pub filename: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct SignedRemoteUploadDto {
+    #[validate(length(min = 1))]
+    pub token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignedFileUploadDto {
+    pub orig_filename: String,
+    pub new_filename: String,
+    pub url: String,
+    pub token: String,
 }

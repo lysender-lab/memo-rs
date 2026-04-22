@@ -14,7 +14,9 @@ use crate::{
     error::ErrorInfo,
     models::{MyBucketParams, MyDirParams, MyFileParams, Pref},
     run::AppState,
-    services::{buckets::get_bucket, dirs::get_dir, files::get_photo, oauth::authenticate_token},
+    services::{
+        buckets::get_bucket, dirs::get_dir, files::get_photo_svc, oauth::authenticate_token,
+    },
     web::{Action, Resource, enforce_policy, handle_error},
 };
 use memo::{bucket::BucketDto, dir::DirDto};
@@ -131,7 +133,7 @@ pub async fn file_middleware(
     enforce_policy(actor, Resource::Photo, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
-    let photo = get_photo(&state, token, &bucket.id, &dir.id, &params.file_id).await?;
+    let photo = get_photo_svc(&state, token, &bucket.id, &dir.id, &params.file_id).await?;
 
     req.extensions_mut().insert(photo);
     Ok(next.run(req).await)
