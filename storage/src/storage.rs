@@ -17,6 +17,7 @@ use memo::dir::DirDto;
 use memo::file::ORIGINAL_PATH;
 use memo::file::{FileDto, ImgVersionDto};
 
+#[derive(Debug, Clone)]
 pub struct DownloadedFile {
     pub upload_dir: PathBuf,
     pub name: String,
@@ -240,7 +241,7 @@ impl StorageClient {
                     upload_dir: upload_dir.clone(),
                     name: orig_filename.to_owned(),
                     filename: new_filename.to_owned(),
-                    path: version_dir.clone().join(&orig_filename),
+                    path: version_dir.clone().join(new_filename),
                     size: size as i64,
                 })
             }

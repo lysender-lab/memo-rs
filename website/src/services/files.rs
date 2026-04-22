@@ -236,7 +236,7 @@ pub async fn add_file_svc(
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(csrf_result == album_id, CsrfTokenSnafu);
     let url = format!(
-        "{}/buckets/{}/dirs/{}/upload-url",
+        "{}/buckets/{}/dirs/{}/files",
         &state.config.api_url, bucket_id, album_id
     );
 
