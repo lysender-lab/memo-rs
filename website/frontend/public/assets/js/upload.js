@@ -33,6 +33,16 @@ function createDomElement(html) {
   return template.content.firstChild;
 }
 
+function chunkArray(items, chunkSize) {
+  const chunks = [];
+
+  for (let i = 0; i < items.length; i += chunkSize) {
+    chunks.push(items.slice(i, i + chunkSize));
+  }
+
+  return chunks;
+}
+
 function startUploadPhotos() {
   uploadPhotos()
     .then(() => {
@@ -104,6 +114,8 @@ async function remoteUploadPhoto(prepareUrl, commitUrl, token, file) {
 }
 
 async function uploadPhotos() {
+  // Server seems problematic with concurrency, so we keep it to 1 item per upload for now
+  const CHUNK_SIZE = 1;
   const form = document.getElementById('upload-photos-form');
   const photosInput = document.getElementById('photos-input');
   const tokenInput = document.getElementById('upload-photos-token');
@@ -166,26 +178,32 @@ async function uploadPhotos() {
   uploadContainer.classList.add('is-hidden');
   progressContainer.classList.remove('is-hidden');
 
-  // Wanted to upload batch of 4 but concurrency is not good
-  // in the backend side due to sqlite locking
-  for (const file of files) {
-    await remoteUploadPhoto(prepareUploadUrl, commitUploadUrl, token, file)
+  const filesArray = Array.from(files);
+  const fileChunks = chunkArray(filesArray, CHUNK_SIZE);
+
+  const uploadSingleFile = async (file, uploadToken) => {
+    return await remoteUploadPhoto(
+      prepareUploadUrl,
+      commitUploadUrl,
+      uploadToken,
+      file,
+    )
       .then((res) => {
-        if (res.nextToken) {
-          token = res.nextToken;
-        }
         if (res.html) {
           galleryContainer.appendChild(createDomElement(res.html));
         }
 
         uploadedCount++;
         updateOverallProgress();
+
+        return { ok: true, res };
       })
       .catch((err) => {
         console.error(err);
 
         failedCount++;
         updateOverallProgress();
+
         if (err.response && err.response.data) {
           errorsContainer.appendChild(createDomElement(err.response.data));
         } else {
@@ -195,7 +213,23 @@ async function uploadPhotos() {
             ),
           );
         }
+
+        return { ok: false };
       });
+  };
+
+  for (const fileChunk of fileChunks) {
+    const results = await Promise.all(
+      fileChunk.map((file) => uploadSingleFile(file, token)),
+    );
+
+    for (let i = results.length - 1; i >= 0; i--) {
+      const result = results[i];
+      if (result.ok && result.res.nextToken) {
+        token = result.res.nextToken;
+        break;
+      }
+    }
   }
 }
 
