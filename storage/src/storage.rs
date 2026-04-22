@@ -14,8 +14,8 @@ use crate::error::{CreateFileSnafu, GoogleSnafu, UploadDirSnafu, ValidationSnafu
 use crate::{Error, Result};
 use memo::bucket::BucketDto;
 use memo::dir::DirDto;
-use memo::file::ORIGINAL_PATH;
 use memo::file::{FileDto, ImgVersionDto};
+use memo::file::{ImgVersion, ORIGINAL_PATH};
 
 #[derive(Debug, Clone)]
 pub struct DownloadedFile {
@@ -87,8 +87,11 @@ impl StorageClient {
     ) -> Result<()> {
         if let Some(versions) = &file.img_versions {
             for version in versions.iter() {
-                self.upload_image_version(bucket, dir, source_dir, file, version)
-                    .await?;
+                // Skip the original version as it is already uploaded remotely
+                if version.version != ImgVersion::Original {
+                    self.upload_image_version(bucket, dir, source_dir, file, version)
+                        .await?;
+                }
             }
         }
 
@@ -190,8 +193,8 @@ impl StorageClient {
                 .await;
         }
 
-        self.upload_regular_object(bucket, dir, source_dir, file)
-            .await
+        // For regular files, no need to upload as it is already uploaded remotely.
+        Ok(())
     }
 
     /// Downloads an object from cloud storage into a local file.

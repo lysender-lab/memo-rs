@@ -69,11 +69,12 @@ pub async fn create_file(
         .count_by_dir(&dir.id)
         .await
         .context(DbSnafu)?;
+
     if count >= MAX_FILES as i64 {
         cleanup(data, None);
 
         return ValidationSnafu {
-            msg: "Directory already has files".to_string(),
+            msg: "Directory already has maximum files".to_string(),
         }
         .fail();
     }
