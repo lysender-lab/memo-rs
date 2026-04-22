@@ -1,6 +1,6 @@
 use axum::body::Bytes;
 use axum::http::HeaderMap;
-use memo::file::{FileDto, ImgDimension, ImgVersion};
+use memo::file::{FileDto, ImgDimension, ImgVersion, SignedFileUploadDto, SignedRemoteUploadDto};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 
@@ -35,10 +35,10 @@ pub struct PhotoVersionDto {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
-pub struct UploadResult {
-    pub error_message: Option<String>,
-    pub photo: Option<Photo>,
-    pub next_token: String,
+pub struct UploadPayload {
+    pub filename: String,
+    pub token: String,
+    pub upload_token: String,
 }
 
 impl TryFrom<FileDto> for Photo {
@@ -98,7 +98,7 @@ impl TryFrom<FileDto> for Photo {
     }
 }
 
-pub async fn list_files(
+pub async fn list_files_svc(
     state: &AppState,
     token: &str,
     bucket_id: &str,
@@ -150,7 +150,7 @@ pub async fn list_files(
     })
 }
 
-pub async fn get_photo(
+pub async fn get_photo_svc(
     state: &AppState,
     token: &str,
     bucket_id: &str,
@@ -176,6 +176,89 @@ pub async fn get_photo(
         .await
         .context(HttpResponseParseSnafu {
             msg: "Unable to parse photo.".to_string(),
+        })?;
+
+    Ok(Photo::try_from(file)?)
+}
+
+pub async fn prepare_upload_svc(
+    state: &AppState,
+    token: &str,
+    bucket_id: &str,
+    album_id: &str,
+    form: UploadPayload,
+) -> Result<SignedFileUploadDto> {
+    let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
+    ensure!(csrf_result == album_id, CsrfTokenSnafu);
+    let url = format!(
+        "{}/buckets/{}/dirs/{}/upload-url",
+        &state.config.api_url, bucket_id, album_id
+    );
+
+    let response = state
+        .client
+        .post(url)
+        .bearer_auth(token)
+        .json(&form)
+        .send()
+        .await
+        .context(HttpClientSnafu {
+            msg: "Unable to prepare upload photo. Try again later.".to_string(),
+        })?;
+
+    if !response.status().is_success() {
+        return Err(handle_response_error(response, "photos", Error::FileNotFound).await);
+    }
+
+    let upload_info =
+        response
+            .json::<SignedFileUploadDto>()
+            .await
+            .context(HttpResponseParseSnafu {
+                msg: "Unable to parse upload photo information.".to_string(),
+            })?;
+
+    Ok(upload_info)
+}
+
+pub async fn add_file_svc(
+    state: &AppState,
+    token: &str,
+    bucket_id: &str,
+    album_id: &str,
+    form: UploadPayload,
+) -> Result<Photo> {
+    let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
+    ensure!(csrf_result == album_id, CsrfTokenSnafu);
+    let url = format!(
+        "{}/buckets/{}/dirs/{}/upload-url",
+        &state.config.api_url, bucket_id, album_id
+    );
+
+    let payload = SignedRemoteUploadDto {
+        token: form.upload_token,
+    };
+
+    let response = state
+        .client
+        .post(url)
+        .bearer_auth(token)
+        .json(&payload)
+        .send()
+        .await
+        .context(HttpClientSnafu {
+            msg: "Unable to prepare upload photo. Try again later.".to_string(),
+        })?;
+
+    if !response.status().is_success() {
+        return Err(handle_response_error(response, "photos", Error::FileNotFound).await);
+    }
+
+    let file = response
+        .json::<FileDto>()
+        .await
+        .context(HttpResponseParseSnafu {
+            msg: "Unable to parse photo information.".to_string(),
         })?;
 
     Ok(Photo::try_from(file)?)
@@ -232,7 +315,7 @@ pub async fn upload_photo(
     Ok(Photo::try_from(file)?)
 }
 
-pub async fn delete_photo(
+pub async fn delete_file_svc(
     state: &AppState,
     token: &str,
     bucket_id: &str,

@@ -3,17 +3,18 @@ use axum::handler::HandlerWithoutStateExt;
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, get_service, post};
-use axum::{Extension, Router, middleware};
+use axum::{Extension, Json, Router, middleware};
 use reqwest::StatusCode;
 use std::path::Path;
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::error;
 
 use crate::ctx::Ctx;
-use crate::error::ErrorInfo;
+use crate::error::{ErrorInfo, ErrorMessageDto};
 use crate::models::Pref;
 use crate::run::AppState;
 use crate::web::auth::auth_callback_handler;
+use crate::web::files::{add_file_handler, generate_upload_url_handler};
 use crate::web::login::{login_handler, login_page_handler};
 use crate::web::{error_handler, index_handler, logout_handler};
 
@@ -112,6 +113,7 @@ fn my_dir_inner_routes(state: AppState) -> Router<AppState> {
             get(get_delete_dir_handler).post(post_delete_dir_handler),
         )
         .route("/photo_grid", get(photo_listing_v2_handler))
+        .nest("/upload-url", upload_api_routes(state.clone()))
         .nest("/upload", my_upload_route(state.clone()))
         .nest("/photos/{file_id}", my_photo_routes(state.clone()))
         .route_layer(middleware::from_fn_with_state(
@@ -121,9 +123,19 @@ fn my_dir_inner_routes(state: AppState) -> Router<AppState> {
         .with_state(state)
 }
 
+pub fn upload_api_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", post(generate_upload_url_handler))
+        .layer(middleware::map_response_with_state(
+            state.clone(),
+            api_response_mapper,
+        ))
+        .with_state(state)
+}
+
 fn my_upload_route(state: AppState) -> Router<AppState> {
     Router::new()
-        .route("/", get(upload_page_handler).post(upload_handler))
+        .route("/", get(upload_page_handler).post(add_file_handler))
         .with_state(state)
 }
 
@@ -174,6 +186,25 @@ async fn response_mapper(
         let full_page = headers.get("HX-Request").is_none();
         let actor = ctx.actor();
         return handle_error(&state, actor, &pref, e.clone(), full_page);
+    }
+    res
+}
+
+async fn api_response_mapper(res: Response) -> Response {
+    let error = res.extensions().get::<ErrorInfo>();
+    if let Some(e) = error {
+        if e.status_code.is_server_error() {
+            // Build the error response
+            error!("{}", e.message);
+        }
+
+        let error_message = ErrorMessageDto {
+            status_code: e.status_code.as_u16(),
+            message: e.message.clone(),
+            error: e.status_code.canonical_reason().unwrap().to_string(),
+        };
+
+        return (e.status_code, Json(error_message)).into_response();
     }
     res
 }
