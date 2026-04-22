@@ -35,8 +35,13 @@ pub struct PhotoVersionDto {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
-pub struct UploadPayload {
+pub struct PrepareUploadPayload {
     pub filename: String,
+    pub token: String,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct CommitUploadPayload {
     pub token: String,
     pub upload_token: String,
 }
@@ -186,7 +191,7 @@ pub async fn prepare_upload_svc(
     token: &str,
     bucket_id: &str,
     album_id: &str,
-    form: UploadPayload,
+    form: PrepareUploadPayload,
 ) -> Result<SignedFileUploadDto> {
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(csrf_result == album_id, CsrfTokenSnafu);
@@ -226,7 +231,7 @@ pub async fn add_file_svc(
     token: &str,
     bucket_id: &str,
     album_id: &str,
-    form: UploadPayload,
+    form: CommitUploadPayload,
 ) -> Result<Photo> {
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(csrf_result == album_id, CsrfTokenSnafu);

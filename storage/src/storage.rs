@@ -203,11 +203,10 @@ impl StorageClient {
         new_filename: &str,
         upload_dir: &PathBuf,
     ) -> Result<DownloadedFile> {
-        let bucket_path = format!("projects/_/buckets/{}", bucket_name);
         let file_path = format!("{}/{}/{}", dir_name, version, new_filename);
         let res = self
             .storage
-            .read_object(bucket_path, file_path)
+            .read_object(bucket_resource_name(bucket_name), file_path)
             .send()
             .await;
 
@@ -319,7 +318,13 @@ impl StorageClient {
         content_type: Option<&str>,
     ) -> Result<String> {
         let file_path = format!("{}/{}/{}", dir_name, version, filename);
-        generate_upload_signed_url(self.get_signer(), bucket_name, &file_path, content_type).await
+        generate_upload_signed_url(
+            self.get_signer(),
+            &bucket_resource_name(bucket_name),
+            &file_path,
+            content_type,
+        )
+        .await
     }
 }
 

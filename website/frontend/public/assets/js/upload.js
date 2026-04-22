@@ -45,29 +45,69 @@ function startUploadPhotos() {
     });
 }
 
-async function uploadPhoto(action, token, file, onUploadProgress) {
-  const url = `${action}?token=${token}`;
-
+async function prepareUpload(url, token, file) {
   const config = {
     headers: {
-      'Content-Type': 'multipart/form-data',
+      'Content-Type': 'application/json',
     },
-    onUploadProgress,
   };
-  const formData = new FormData();
-  formData.append('file', file);
 
-  const res = await axios.post(url, formData, config);
+  const data = {
+    filename: file.name,
+    token,
+  };
+
+  const res = await axios.post(url, data, config);
+  return {
+    nextToken: res.headers['x-next-token'],
+    data: res.data,
+  };
+}
+
+async function commitUpload(url, token, uploadToken) {
+  const config = {
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+  };
+
+  const body = new URLSearchParams({
+    token,
+    upload_token: uploadToken,
+  });
+
+  const res = await axios.post(url, body, config);
   return {
     nextToken: res.headers['x-next-token'],
     html: res.data,
   };
 }
 
+async function uploadPhoto(url, file) {
+  const config = {
+    headers: {
+      'Content-Type': file.type || 'application/octet-stream',
+    },
+  };
+
+  await axios.put(url, file, config);
+}
+
+async function remoteUploadPhoto(prepareUrl, commitUrl, token, file) {
+  const prepared = await prepareUpload(prepareUrl, token, file);
+  const remoteUploadUrl = prepared.data.url;
+  const uploadToken = prepared.data.token;
+
+  await uploadPhoto(remoteUploadUrl, file);
+
+  return await commitUpload(commitUrl, token, uploadToken);
+}
+
 async function uploadPhotos() {
   const form = document.getElementById('upload-photos-form');
   const photosInput = document.getElementById('photos-input');
   const tokenInput = document.getElementById('upload-photos-token');
+  const prepareUploadInput = document.getElementById('prepare-upload-url');
   const galleryContainer = document.getElementById('photo-gallery');
   const uploadContainer = document.getElementById('photos-input-w');
   const progressContainer = document.getElementById('upload-progress-w');
@@ -90,7 +130,8 @@ async function uploadPhotos() {
   }
 
   const files = photosInput.files;
-  const action = form.action;
+  const prepareUploadUrl = prepareUploadInput.value;
+  const commitUploadUrl = form.action;
 
   // Token will change on every upload batch
   let token = tokenInput.value.toString();
@@ -128,7 +169,7 @@ async function uploadPhotos() {
   // Wanted to upload batch of 4 but concurrency is not good
   // in the backend side due to sqlite locking
   for (const file of files) {
-    await uploadPhoto(action, token, file)
+    await remoteUploadPhoto(prepareUploadUrl, commitUploadUrl, token, file)
       .then((res) => {
         if (res.nextToken) {
           token = res.nextToken;
@@ -141,6 +182,8 @@ async function uploadPhotos() {
         updateOverallProgress();
       })
       .catch((err) => {
+        console.error(err);
+
         failedCount++;
         updateOverallProgress();
         if (err.response && err.response.data) {

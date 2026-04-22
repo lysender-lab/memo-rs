@@ -9,8 +9,8 @@ use snafu::ResultExt;
 use crate::models::tokens::TokenFormData;
 use crate::models::{ListFilesParams, UploadParams};
 use crate::services::files::{
-    Photo, UploadPayload, add_file_svc, delete_file_svc, list_files_svc, prepare_upload_svc,
-    upload_photo,
+    CommitUploadPayload, Photo, PrepareUploadPayload, add_file_svc, delete_file_svc,
+    list_files_svc, prepare_upload_svc, upload_photo,
 };
 use crate::{
     Error, Result,
@@ -150,7 +150,7 @@ pub async fn generate_upload_url_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
-    payload: Form<UploadPayload>,
+    payload: Json<PrepareUploadPayload>,
 ) -> Result<(StatusCode, Json<SignedFileUploadDto>)> {
     let actor = ctx.actor();
     enforce_policy(actor, Resource::Photo, Action::Create)?;
@@ -166,7 +166,7 @@ pub async fn add_file_handler(
     Extension(pref): Extension<Pref>,
     Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
-    payload: Form<UploadPayload>,
+    payload: Form<CommitUploadPayload>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
     let actor = ctx.actor();
