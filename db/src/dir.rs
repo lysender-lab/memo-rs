@@ -413,8 +413,6 @@ impl DirRepo {
                 Ok(result) => return Ok(result),
                 Err(Error::DbStatement { source }) => match source {
                     turso::Error::Misuse(..) => {
-                        dbg!(&source);
-
                         attempts += 1;
                         if attempts >= max_retries {
                             return Err(Error::DbStatement { source });
@@ -425,12 +423,10 @@ impl DirRepo {
                         // Retries...
                     }
                     _ => {
-                        dbg!(&source);
                         return Err(Error::DbStatement { source });
                     }
                 },
                 Err(e) => {
-                    dbg!(&e);
                     return Err(e);
                 }
             }
