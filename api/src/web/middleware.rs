@@ -85,7 +85,7 @@ pub async fn bucket_middleware(
     let bucket = state
         .db
         .buckets
-        .get(&params.bucket_id)
+        .retry_get(&params.bucket_id, 5)
         .await
         .context(DbSnafu)?;
 
@@ -126,7 +126,7 @@ pub async fn dir_middleware(
     );
 
     let did = params.dir_id.clone().expect("dir_id is required");
-    let dir_res = state.db.dirs.get(&did).await.context(DbSnafu)?;
+    let dir_res = state.db.dirs.retry_get(&did, 5).await.context(DbSnafu)?;
 
     let dir = dir_res.context(NotFoundSnafu {
         msg: "Directory not found",
