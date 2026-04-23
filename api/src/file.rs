@@ -130,7 +130,7 @@ pub async fn create_file(
     let create_res = state
         .db
         .files
-        .create(file_dto.clone())
+        .retry_create(file_dto.clone(), 5)
         .await
         .context(DbSnafu);
 
@@ -143,7 +143,7 @@ pub async fn create_file(
             let dir_result = state
                 .db
                 .dirs
-                .update_timestamp(&dir.id, today)
+                .retry_update_timestamp(&dir.id, today, 5)
                 .await
                 .context(DbSnafu);
 

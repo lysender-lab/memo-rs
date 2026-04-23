@@ -1,7 +1,9 @@
-use memo::dir::DirDto;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
+use std::cmp::min;
 use std::path::PathBuf;
+use std::time::Duration;
+use tokio::time::sleep;
 use turso::{Connection, Row};
 use validator::Validate;
 
@@ -14,6 +16,7 @@ use crate::turso_params::{
     integer_param, new_query_params, opt_integer_param, opt_text_param, text_param,
 };
 use crate::{Error, Result};
+use memo::dir::DirDto;
 use memo::file::{FileDto, ImgVersionDto};
 use memo::pagination::Paginated;
 use memo::validators::flatten_errors;
@@ -309,6 +312,40 @@ impl FileRepo {
         stmt.execute(q_params).await.context(DbStatementSnafu)?;
 
         Ok(file.into())
+    }
+
+    pub async fn retry_create(&self, file_dto: FileDto, max_retries: usize) -> Result<FileDto> {
+        let mut attempts = 0;
+        let mut delay = Duration::from_millis(100);
+        let max_delay = Duration::from_secs(2);
+
+        loop {
+            match self.create(file_dto.clone()).await {
+                Ok(result) => return Ok(result),
+                Err(Error::DbStatement { source }) => match source {
+                    turso::Error::Misuse(..) => {
+                        dbg!(&source);
+
+                        attempts += 1;
+                        if attempts >= max_retries {
+                            return Err(Error::DbStatement { source });
+                        }
+
+                        sleep(delay).await;
+                        delay = min(delay.saturating_mul(2), max_delay);
+                        // Retries...
+                    }
+                    _ => {
+                        dbg!(&source);
+                        return Err(Error::DbStatement { source });
+                    }
+                },
+                Err(e) => {
+                    dbg!(&e);
+                    return Err(e);
+                }
+            }
+        }
     }
 
     pub async fn get(&self, id: &str) -> Result<Option<FileDto>> {

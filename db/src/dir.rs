@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
+use std::cmp::min;
+use std::time::Duration;
+use tokio::time::sleep;
 use turso::Row;
 use validator::Validate;
 
@@ -390,6 +393,48 @@ impl DirRepo {
         let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
         let affected = stmt.execute(q_params).await.context(DbStatementSnafu)?;
         Ok(affected > 0)
+    }
+
+    pub async fn retry_update_timestamp(
+        &self,
+        id: &str,
+        timestamp: i64,
+        max_retries: usize,
+    ) -> Result<bool> {
+        // Ideally, this should use a transaction
+        // but then again, we are just bumping the timestamp
+        // so no big deal if it is less accurate
+        let mut attempts = 0;
+        let mut delay = Duration::from_millis(100);
+        let max_delay = Duration::from_secs(2);
+
+        loop {
+            match self.update_timestamp(id, timestamp).await {
+                Ok(result) => return Ok(result),
+                Err(Error::DbStatement { source }) => match source {
+                    turso::Error::Misuse(..) => {
+                        dbg!(&source);
+
+                        attempts += 1;
+                        if attempts >= max_retries {
+                            return Err(Error::DbStatement { source });
+                        }
+
+                        sleep(delay).await;
+                        delay = min(delay.saturating_mul(2), max_delay);
+                        // Retries...
+                    }
+                    _ => {
+                        dbg!(&source);
+                        return Err(Error::DbStatement { source });
+                    }
+                },
+                Err(e) => {
+                    dbg!(&e);
+                    return Err(e);
+                }
+            }
+        }
     }
 
     pub async fn delete(&self, id: &str) -> Result<()> {
