@@ -410,6 +410,7 @@ pub async fn delete_file_handler(
 
     // Delete record
     state.db.files.delete(&file.id).await.context(DbSnafu)?;
+    state.file_cache.remove(&file.id);
 
     // Delete file(s) from storage
     let storage_client = state.storage_client.clone();

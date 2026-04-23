@@ -48,6 +48,7 @@ pub async fn update_dir(state: &AppState, id: &str, data: &UpdateDir) -> Result<
         }
     );
 
+    state.dir_cache.remove(id);
     state.db.dirs.update(id, data).await.context(DbSnafu)
 }
 
@@ -61,6 +62,7 @@ pub async fn delete_dir(state: &AppState, id: &str) -> Result<()> {
         }
     );
 
+    state.dir_cache.remove(id);
     state.db.dirs.delete(id).await.context(DbSnafu)
 }
 

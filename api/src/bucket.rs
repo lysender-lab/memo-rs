@@ -72,6 +72,7 @@ pub async fn update_bucket(state: &AppState, id: &str, data: &UpdateBucket) -> R
         }
     );
 
+    state.bucket_cache.remove(id);
     state.db.buckets.update(id, data).await.context(DbSnafu)
 }
 
