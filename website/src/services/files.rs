@@ -1,5 +1,3 @@
-use axum::body::Bytes;
-use axum::http::HeaderMap;
 use memo::file::{FileDto, ImgDimension, ImgVersion, SignedFileUploadDto, SignedRemoteUploadDto};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
@@ -253,57 +251,6 @@ pub async fn add_file_svc(
         .await
         .context(HttpClientSnafu {
             msg: "Unable to prepare upload photo. Try again later.".to_string(),
-        })?;
-
-    if !response.status().is_success() {
-        return Err(handle_response_error(response, "photos", Error::FileNotFound).await);
-    }
-
-    let file = response
-        .json::<FileDto>()
-        .await
-        .context(HttpResponseParseSnafu {
-            msg: "Unable to parse photo information.".to_string(),
-        })?;
-
-    Ok(Photo::try_from(file)?)
-}
-
-pub async fn upload_photo(
-    state: &AppState,
-    token: &str,
-    bucket_id: &str,
-    album_id: &str,
-    headers: &HeaderMap,
-    csrf_token: Option<String>,
-    body: Bytes,
-) -> Result<Photo> {
-    // We need the content type header
-    let Some(content_type) = headers.get("Content-Type") else {
-        return Err("Content-Type header is required.".into());
-    };
-    let Ok(content_type) = content_type.to_str() else {
-        return Err("Invalid Content-Type header.".into());
-    };
-    let csrf_token = csrf_token.unwrap_or("".to_string());
-    let csrf_result = verify_csrf_token(&csrf_token, &state.config.jwt_secret)?;
-    ensure!(csrf_result == album_id, CsrfTokenSnafu);
-    let url = format!(
-        "{}/buckets/{}/dirs/{}/files",
-        &state.config.api_url, bucket_id, album_id
-    );
-
-    let response = state
-        .client
-        .post(url)
-        .header("Content-Type", content_type)
-        .header("Content-Length", body.len().to_string())
-        .bearer_auth(token)
-        .body(body)
-        .send()
-        .await
-        .context(HttpClientSnafu {
-            msg: "Unable to upload photo. Try again later.".to_string(),
         })?;
 
     if !response.status().is_success() {

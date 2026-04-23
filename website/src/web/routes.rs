@@ -25,7 +25,7 @@ use super::dirs::{
 };
 use super::files::{
     confirm_delete_photo_handler, exec_delete_photo_handler, photo_listing_v2_handler,
-    pre_delete_photo_handler, upload_handler, upload_page_handler,
+    pre_delete_photo_handler, upload_page_handler,
 };
 use super::middleware::{
     auth_middleware, dir_middleware, file_middleware, my_bucket_middleware, pref_middleware,
