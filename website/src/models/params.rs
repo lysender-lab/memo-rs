@@ -35,11 +35,6 @@ pub struct ListDirsParams {
 }
 
 #[derive(Deserialize)]
-pub struct UploadParams {
-    pub token: Option<String>,
-}
-
-#[derive(Deserialize)]
 pub struct ListFilesParams {
     pub page: Option<u32>,
 }

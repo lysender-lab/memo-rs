@@ -3,12 +3,12 @@ use snafu::ResultExt;
 use turso::{Connection, Row};
 use validator::Validate;
 
-use crate::Result;
 use crate::error::{DbPrepareSnafu, DbStatementSnafu};
 use crate::turso_decode::{
     FromTursoRow, collect_count, collect_row, collect_rows, row_integer, row_text,
 };
 use crate::turso_params::{integer_param, new_query_params, opt_integer_param, text_param};
+use crate::{Error, Result};
 use memo::{bucket::BucketDto, utils::generate_id};
 
 #[derive(Debug, Clone, Serialize)]
@@ -206,6 +206,30 @@ impl BucketRepo {
         let row_result = stmt.query_row(q_params).await;
         let dto: Option<BucketDto> = collect_row(row_result)?;
         Ok(dto)
+    }
+
+    pub async fn retry_get(&self, id: &str, max_retries: usize) -> Result<Option<BucketDto>> {
+        let mut attempts = 0;
+
+        loop {
+            match self.get(id).await {
+                Ok(result) => return Ok(result),
+                Err(Error::DbResult { source }) => match source {
+                    turso::Error::Misuse(..) => {
+                        attempts += 1;
+                        if attempts >= max_retries {
+                            return Err(Error::DbResult { source });
+                        }
+
+                        // Retries...
+                    }
+                    _ => {
+                        return Err(Error::DbResult { source });
+                    }
+                },
+                Err(e) => return Err(e),
+            }
+        }
     }
 
     pub async fn find_by_name(&self, client_id: &str, name: &str) -> Result<Option<BucketDto>> {

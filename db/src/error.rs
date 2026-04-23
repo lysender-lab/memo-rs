@@ -8,28 +8,34 @@ pub enum Error {
     #[snafu(display("I/O error: {}", source))]
     Io { source: std::io::Error },
 
-    #[snafu(display("{}", source))]
+    #[snafu(display("DB Builder error: {}", source))]
     DbBuilder { source: turso::Error },
 
-    #[snafu(display("{}", source))]
+    #[snafu(display("DB Connect error: {}", source))]
     DbConnect { source: turso::Error },
 
-    #[snafu(display("{}", source))]
+    #[snafu(display("DB Execute error: {}", source))]
     DbExecute { source: turso::Error },
 
-    #[snafu(display("{}", source))]
+    #[snafu(display("DB Prepare error: {}", source))]
     DbPrepare { source: turso::Error },
 
-    #[snafu(display("{}", source))]
+    #[snafu(display("DB Statement error: {}", source))]
     DbStatement { source: turso::Error },
 
-    #[snafu(display("{}", source))]
+    #[snafu(display("DB Query error: {}", source))]
+    DbQuery { source: turso::Error },
+
+    #[snafu(display("DB Row error: {}", source))]
     DbRow { source: turso::Error },
 
-    #[snafu(display("{}", source))]
+    #[snafu(display("DB Result error: {}", source))]
+    DbResult { source: turso::Error },
+
+    #[snafu(display("DB Value error: {}", source))]
     DbValue { source: turso::Error },
 
-    #[snafu(display("{}", source))]
+    #[snafu(display("DB Transaction error: {}", source))]
     DbTransaction { source: turso::Error },
 
     #[snafu(display("{}", msg))]

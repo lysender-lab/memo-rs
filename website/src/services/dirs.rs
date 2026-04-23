@@ -192,6 +192,8 @@ pub async fn update_dir(
         return Err(handle_response_error(response, "dirs", Error::AlbumNotFound).await);
     }
 
+    state.dir_cache.remove(dir_id);
+
     let dir = response
         .json::<DirDto>()
         .await
@@ -228,6 +230,8 @@ pub async fn delete_dir(
     if !response.status().is_success() {
         return Err(handle_response_error(response, "dirs", Error::AlbumNotFound).await);
     }
+
+    state.dir_cache.remove(dir_id);
 
     Ok(())
 }

@@ -1,14 +1,17 @@
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
+use std::cmp::min;
+use std::time::Duration;
+use tokio::time::sleep;
 use turso::Row;
 use validator::Validate;
 
-use crate::Result;
 use crate::error::{DbPrepareSnafu, DbStatementSnafu, ValidationSnafu};
 use crate::turso_decode::{
     FromTursoRow, collect_count, collect_row, collect_rows, row_integer, row_text,
 };
 use crate::turso_params::{integer_param, new_query_params, opt_integer_param, text_param};
+use crate::{Error, Result};
 use memo::dir::DirDto;
 use memo::pagination::Paginated;
 use memo::utils::generate_id;
@@ -302,6 +305,30 @@ impl DirRepo {
         Ok(dto)
     }
 
+    pub async fn retry_get(&self, id: &str, max_retries: usize) -> Result<Option<DirDto>> {
+        let mut attempts = 0;
+
+        loop {
+            match self.get(id).await {
+                Ok(result) => return Ok(result),
+                Err(Error::DbResult { source }) => match source {
+                    turso::Error::Misuse(..) => {
+                        attempts += 1;
+                        if attempts >= max_retries {
+                            return Err(Error::DbResult { source });
+                        }
+
+                        // Retries...
+                    }
+                    _ => {
+                        return Err(Error::DbResult { source });
+                    }
+                },
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
     pub async fn find_by_name(&self, bucket_id: &str, name: &str) -> Result<Option<DirDto>> {
         let query = r#"
             SELECT
@@ -366,6 +393,44 @@ impl DirRepo {
         let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
         let affected = stmt.execute(q_params).await.context(DbStatementSnafu)?;
         Ok(affected > 0)
+    }
+
+    pub async fn retry_update_timestamp(
+        &self,
+        id: &str,
+        timestamp: i64,
+        max_retries: usize,
+    ) -> Result<bool> {
+        // Ideally, this should use a transaction
+        // but then again, we are just bumping the timestamp
+        // so no big deal if it is less accurate
+        let mut attempts = 0;
+        let mut delay = Duration::from_millis(100);
+        let max_delay = Duration::from_secs(2);
+
+        loop {
+            match self.update_timestamp(id, timestamp).await {
+                Ok(result) => return Ok(result),
+                Err(Error::DbStatement { source }) => match source {
+                    turso::Error::Misuse(..) => {
+                        attempts += 1;
+                        if attempts >= max_retries {
+                            return Err(Error::DbStatement { source });
+                        }
+
+                        sleep(delay).await;
+                        delay = min(delay.saturating_mul(2), max_delay);
+                        // Retries...
+                    }
+                    _ => {
+                        return Err(Error::DbStatement { source });
+                    }
+                },
+                Err(e) => {
+                    return Err(e);
+                }
+            }
+        }
     }
 
     pub async fn delete(&self, id: &str) -> Result<()> {

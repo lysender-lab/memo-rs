@@ -114,8 +114,8 @@ async function remoteUploadPhoto(prepareUrl, commitUrl, token, file) {
 }
 
 async function uploadPhotos() {
-  // Server seems problematic with concurrency, so we keep it to 1 item per upload for now
-  const CHUNK_SIZE = 1;
+  // Match chunks with server's core (2)
+  const CHUNK_SIZE = 2;
   const form = document.getElementById('upload-photos-form');
   const photosInput = document.getElementById('photos-input');
   const tokenInput = document.getElementById('upload-photos-token');

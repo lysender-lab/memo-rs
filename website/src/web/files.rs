@@ -1,16 +1,15 @@
 use askama::Template;
-use axum::body::Bytes;
 use axum::extract::Query;
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::StatusCode;
 use axum::{Extension, body::Body, extract::State, response::Response};
 use axum::{Form, Json};
 use snafu::ResultExt;
 
+use crate::models::ListFilesParams;
 use crate::models::tokens::TokenFormData;
-use crate::models::{ListFilesParams, UploadParams};
 use crate::services::files::{
     CommitUploadPayload, Photo, PrepareUploadPayload, add_file_svc, delete_file_svc,
-    list_files_svc, prepare_upload_svc, upload_photo,
+    list_files_svc, prepare_upload_svc,
 };
 use crate::{
     Error, Result,
@@ -176,52 +175,6 @@ pub async fn add_file_handler(
 
     let auth_token = ctx.token().expect("token is required");
     let result = add_file_svc(&state, auth_token, &dir.bucket_id, &dir.id, payload.0).await;
-
-    match result {
-        Ok(photo) => {
-            let tpl = UploadedPhotoTemplate {
-                photo,
-                theme: pref.theme,
-            };
-            Ok(Response::builder()
-                .status(201)
-                .header("X-Next-Token", token)
-                .body(Body::from(tpl.render().context(TemplateSnafu)?))
-                .context(ResponseBuilderSnafu)?)
-        }
-        Err(err) => Ok(handle_error_message(&err)),
-    }
-}
-
-pub async fn upload_handler(
-    Extension(ctx): Extension<Ctx>,
-    Extension(pref): Extension<Pref>,
-    Extension(bucket): Extension<BucketDto>,
-    Extension(dir): Extension<DirDto>,
-    State(state): State<AppState>,
-    Query(query): Query<UploadParams>,
-    headers: HeaderMap,
-    body: Bytes,
-) -> Result<Response<Body>> {
-    let config = state.config.clone();
-    let actor = ctx.actor();
-    enforce_policy(actor, Resource::Photo, Action::Create)?;
-
-    let bid = bucket.id.clone();
-
-    let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
-
-    let auth_token = ctx.token().expect("token is required");
-    let result = upload_photo(
-        &state,
-        auth_token,
-        &bid,
-        &dir.id,
-        &headers,
-        query.token,
-        body,
-    )
-    .await;
 
     match result {
         Ok(photo) => {

@@ -66,7 +66,7 @@ pub async fn create_file(
     let count = state
         .db
         .files
-        .count_by_dir(&dir.id)
+        .retry_count_by_dir(&dir.id, 5)
         .await
         .context(DbSnafu)?;
 
@@ -83,7 +83,7 @@ pub async fn create_file(
     if state
         .db
         .files
-        .find_by_name(&dir.id, &data.name)
+        .retry_find_by_name(&dir.id, &data.name, 5)
         .await
         .context(DbSnafu)?
         .is_some()
@@ -130,7 +130,7 @@ pub async fn create_file(
     let create_res = state
         .db
         .files
-        .create(file_dto.clone())
+        .retry_create(file_dto.clone(), 5)
         .await
         .context(DbSnafu);
 
@@ -143,7 +143,7 @@ pub async fn create_file(
             let dir_result = state
                 .db
                 .dirs
-                .update_timestamp(&dir.id, today)
+                .retry_update_timestamp(&dir.id, today, 5)
                 .await
                 .context(DbSnafu);
 

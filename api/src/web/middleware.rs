@@ -7,19 +7,18 @@ use axum::{
     response::Response,
 };
 use snafu::{OptionExt, ResultExt, ensure};
-use yaas::{actor::Actor, role::Permission};
 
 use crate::{
     Error, Result,
     error::{
-        BadRequestSnafu, DbSnafu, ForbiddenSnafu, InsufficientAuthScopeSnafu,
-        InvalidAuthTokenSnafu, NotFoundSnafu,
+        DbSnafu, ForbiddenSnafu, InsufficientAuthScopeSnafu, InvalidAuthTokenSnafu, NotFoundSnafu,
     },
     oauth::authenticate_token,
     state::AppState,
     web::params::Params,
 };
-use memo::{dir::DirDto, utils::valid_id};
+use memo::{bucket::BucketDto, dir::DirDto, file::FileDto};
+use yaas::{actor::Actor, role::Permission};
 
 pub async fn auth_middleware(
     State(state): State<AppState>,
@@ -83,14 +82,24 @@ pub async fn bucket_middleware(
     //     }
     // );
 
-    let bucket = state
-        .db
-        .buckets
-        .get(&params.bucket_id)
-        .await
-        .context(DbSnafu)?;
+    let mut bucket_res: Option<BucketDto> = state.bucket_cache.get(&params.bucket_id);
 
-    let bucket = bucket.context(NotFoundSnafu {
+    if bucket_res.is_none() {
+        // Fetch from database
+        bucket_res = state
+            .db
+            .buckets
+            .retry_get(&params.bucket_id, 5)
+            .await
+            .context(DbSnafu)?;
+
+        if let Some(b) = bucket_res.clone() {
+            // Store to cache if present
+            state.bucket_cache.insert(params.bucket_id.clone(), b);
+        }
+    }
+
+    let bucket = bucket_res.context(NotFoundSnafu {
         msg: "Bucket not found",
     })?;
 
@@ -127,7 +136,18 @@ pub async fn dir_middleware(
     );
 
     let did = params.dir_id.clone().expect("dir_id is required");
-    let dir_res = state.db.dirs.get(&did).await.context(DbSnafu)?;
+
+    let mut dir_res: Option<DirDto> = state.dir_cache.get(&did);
+
+    if dir_res.is_none() {
+        // Fetch from database
+        dir_res = state.db.dirs.retry_get(&did, 5).await.context(DbSnafu)?;
+
+        if let Some(d) = dir_res.clone() {
+            // Store to cache if present
+            state.dir_cache.insert(did.clone(), d);
+        }
+    }
 
     let dir = dir_res.context(NotFoundSnafu {
         msg: "Directory not found",
@@ -165,7 +185,19 @@ pub async fn file_middleware(
 
     let did = params.dir_id.clone().expect("dir_id is required");
     let fid = params.file_id.clone().expect("file_id is required");
-    let file_res = state.db.files.get(&fid).await.context(DbSnafu)?;
+
+    let mut file_res: Option<FileDto> = state.file_cache.get(&fid);
+
+    if file_res.is_none() {
+        // Fetch from database
+        file_res = state.db.files.get(&fid).await.context(DbSnafu)?;
+
+        if let Some(f) = file_res.clone() {
+            // Store to cache if present
+            state.file_cache.insert(fid.clone(), f);
+        }
+    }
+
     let file = file_res.context(NotFoundSnafu {
         msg: "File not found",
     })?;

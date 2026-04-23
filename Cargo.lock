@@ -981,6 +981,8 @@ dependencies = [
  "password",
  "serde",
  "snafu",
+ "tokio",
+ "tracing",
  "turso",
  "validator",
  "yaas",
