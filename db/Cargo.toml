@@ -7,6 +7,7 @@ edition = "2024"
 chrono.workspace = true
 serde.workspace = true
 snafu.workspace = true
+tracing.workspace = true
 turso.workspace = true
 validator.workspace = true
 memo = { path = "../memo" }

@@ -24,7 +24,7 @@ pub fn collect_row<T: FromTursoRow>(row: turso::Result<Row>) -> Result<Option<T>
     match row {
         Ok(t_row) => Ok(Some(T::from_row(&t_row)?)),
         Err(turso::Error::QueryReturnedNoRows) => Ok(None),
-        Err(err) => Err(Error::DbRow { source: err }),
+        Err(err) => Err(Error::DbResult { source: err }),
     }
 }
 

@@ -7,19 +7,18 @@ use axum::{
     response::Response,
 };
 use snafu::{OptionExt, ResultExt, ensure};
-use yaas::{actor::Actor, role::Permission};
 
 use crate::{
     Error, Result,
     error::{
-        BadRequestSnafu, DbSnafu, ForbiddenSnafu, InsufficientAuthScopeSnafu,
-        InvalidAuthTokenSnafu, NotFoundSnafu,
+        DbSnafu, ForbiddenSnafu, InsufficientAuthScopeSnafu, InvalidAuthTokenSnafu, NotFoundSnafu,
     },
     oauth::authenticate_token,
     state::AppState,
     web::params::Params,
 };
-use memo::{dir::DirDto, utils::valid_id};
+use memo::dir::DirDto;
+use yaas::{actor::Actor, role::Permission};
 
 pub async fn auth_middleware(
     State(state): State<AppState>,
