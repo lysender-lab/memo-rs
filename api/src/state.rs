@@ -1,5 +1,4 @@
 use axum::extract::FromRef;
-use memo::{bucket::BucketDto, dir::DirDto};
 use moka::sync::Cache;
 use reqwest::{Client, ClientBuilder};
 use snafu::ResultExt;
@@ -11,6 +10,7 @@ use crate::{
     config::Config,
     error::{DbSnafu, StorageSnafu},
 };
+use memo::{bucket::BucketDto, dir::DirDto, file::FileDto};
 use storage::StorageClient;
 use yaas::actor::Actor;
 
@@ -25,6 +25,7 @@ pub struct AppState {
     pub auth_cache: Cache<String, Actor>,
     pub bucket_cache: Cache<String, BucketDto>,
     pub dir_cache: Cache<String, DirDto>,
+    pub file_cache: Cache<String, FileDto>,
 }
 
 pub async fn create_app_state(config: &Config) -> Result<AppState> {
@@ -56,6 +57,12 @@ pub async fn create_app_state(config: &Config) -> Result<AppState> {
         .max_capacity(100)
         .build();
 
+    let file_cache = Cache::builder()
+        .time_to_live(Duration::from_secs(10 * 60))
+        .time_to_idle(Duration::from_secs(60))
+        .max_capacity(100)
+        .build();
+
     Ok(AppState {
         config: config.clone(),
         client,
@@ -64,5 +71,6 @@ pub async fn create_app_state(config: &Config) -> Result<AppState> {
         auth_cache,
         bucket_cache,
         dir_cache,
+        file_cache,
     })
 }

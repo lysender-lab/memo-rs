@@ -114,7 +114,18 @@ pub async fn dir_middleware(
     enforce_policy(actor, Resource::Album, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
-    let dir = get_dir(&state, token, &bucket.id, &params.dir_id).await?;
+
+    let mut dir_res = state.dir_cache.get(&params.dir_id);
+    if dir_res.is_none() {
+        // Fetch from api
+        let dir = get_dir(&state, token, &bucket.id, &params.dir_id).await?;
+
+        state.dir_cache.insert(params.dir_id.clone(), dir.clone());
+
+        dir_res = Some(dir);
+    }
+
+    let dir = dir_res.expect("dir should be present at this point");
 
     req.extensions_mut().insert(dir);
     Ok(next.run(req).await)
@@ -133,7 +144,21 @@ pub async fn file_middleware(
     enforce_policy(actor, Resource::Photo, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
-    let photo = get_photo_svc(&state, token, &bucket.id, &dir.id, &params.file_id).await?;
+
+    let mut photo_res = state.file_cache.get(&params.file_id);
+
+    if photo_res.is_none() {
+        // Fetch from api
+        let photo = get_photo_svc(&state, token, &bucket.id, &dir.id, &params.file_id).await?;
+
+        state
+            .file_cache
+            .insert(params.file_id.clone(), photo.clone());
+
+        photo_res = Some(photo);
+    }
+
+    let photo = photo_res.expect("photo should be present at this point");
 
     req.extensions_mut().insert(photo);
     Ok(next.run(req).await)
@@ -151,7 +176,21 @@ pub async fn my_bucket_middleware(
     enforce_policy(actor, Resource::Bucket, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
-    let bucket = get_bucket(&state, token, &params.bucket_id).await?;
+
+    let mut bucket_res: Option<BucketDto> = state.bucket_cache.get(&params.bucket_id);
+
+    if bucket_res.is_none() {
+        // Fetch from api
+        let bucket = get_bucket(&state, token, &params.bucket_id).await?;
+
+        state
+            .bucket_cache
+            .insert(params.bucket_id.clone(), bucket.clone());
+
+        bucket_res = Some(bucket);
+    }
+
+    let bucket = bucket_res.expect("bucket should be present at this point");
 
     req.extensions_mut().insert(bucket);
     Ok(next.run(req).await)

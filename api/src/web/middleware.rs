@@ -17,7 +17,7 @@ use crate::{
     state::AppState,
     web::params::Params,
 };
-use memo::{bucket::BucketDto, dir::DirDto};
+use memo::{bucket::BucketDto, dir::DirDto, file::FileDto};
 use yaas::{actor::Actor, role::Permission};
 
 pub async fn auth_middleware(
@@ -185,7 +185,19 @@ pub async fn file_middleware(
 
     let did = params.dir_id.clone().expect("dir_id is required");
     let fid = params.file_id.clone().expect("file_id is required");
-    let file_res = state.db.files.get(&fid).await.context(DbSnafu)?;
+
+    let mut file_res: Option<FileDto> = state.file_cache.get(&fid);
+
+    if file_res.is_none() {
+        // Fetch from database
+        file_res = state.db.files.get(&fid).await.context(DbSnafu)?;
+
+        if let Some(f) = file_res.clone() {
+            // Store to cache if present
+            state.file_cache.insert(fid.clone(), f);
+        }
+    }
+
     let file = file_res.context(NotFoundSnafu {
         msg: "File not found",
     })?;

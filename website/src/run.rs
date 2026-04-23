@@ -1,5 +1,6 @@
 use axum::Router;
 use axum::extract::FromRef;
+use memo::bucket::BucketDto;
 use moka::sync::Cache;
 use reqwest::{Client, ClientBuilder};
 use std::sync::Arc;
@@ -12,7 +13,9 @@ use tracing::{Level, info};
 
 use crate::Result;
 use crate::config::Config;
+use crate::services::files::Photo;
 use crate::web::all_routes;
+use memo::dir::DirDto;
 use yaas::actor::Actor;
 
 #[derive(Clone, FromRef)]
@@ -20,6 +23,9 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub client: Client,
     pub auth_cache: Cache<String, Actor>,
+    pub bucket_cache: Cache<String, BucketDto>,
+    pub dir_cache: Cache<String, DirDto>,
+    pub file_cache: Cache<String, Photo>,
 }
 
 pub async fn run(config: Config) -> Result<()> {
@@ -36,10 +42,31 @@ pub async fn run(config: Config) -> Result<()> {
         .max_capacity(100)
         .build();
 
+    let bucket_cache = Cache::builder()
+        .time_to_live(Duration::from_secs(10 * 60))
+        .time_to_idle(Duration::from_secs(60))
+        .max_capacity(100)
+        .build();
+
+    let dir_cache = Cache::builder()
+        .time_to_live(Duration::from_secs(10 * 60))
+        .time_to_idle(Duration::from_secs(60))
+        .max_capacity(100)
+        .build();
+
+    let file_cache = Cache::builder()
+        .time_to_live(Duration::from_secs(10 * 60))
+        .time_to_idle(Duration::from_secs(60))
+        .max_capacity(100)
+        .build();
+
     let state = AppState {
         config: Arc::new(config),
         client,
         auth_cache,
+        bucket_cache,
+        dir_cache,
+        file_cache,
     };
 
     let routes_all = Router::new()
