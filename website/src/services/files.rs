@@ -291,5 +291,7 @@ pub async fn delete_file_svc(
             msg: "Unable to delete photo. Try again later.".to_string(),
         })?;
 
+    state.file_cache.remove(photo_id);
+
     Ok(())
 }
