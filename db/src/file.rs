@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use turso::{Connection, Row};
 use validator::Validate;
 
-use crate::Result;
 use crate::error::{DbPrepareSnafu, DbStatementSnafu, ValidationSnafu};
 use crate::turso_decode::{
     FromTursoRow, collect_count, collect_row, collect_rows, opt_row_integer, opt_row_text,
@@ -14,6 +13,7 @@ use crate::turso_decode::{
 use crate::turso_params::{
     integer_param, new_query_params, opt_integer_param, opt_text_param, text_param,
 };
+use crate::{Error, Result};
 use memo::file::{FileDto, ImgVersionDto};
 use memo::pagination::Paginated;
 use memo::validators::flatten_errors;
@@ -370,6 +370,35 @@ impl FileRepo {
         Ok(dto)
     }
 
+    pub async fn retry_find_by_name(
+        &self,
+        dir_id: &str,
+        name: &str,
+        max_retries: usize,
+    ) -> Result<Option<FileDto>> {
+        let mut attempts = 0;
+
+        loop {
+            match self.find_by_name(dir_id, name).await {
+                Ok(result) => return Ok(result),
+                Err(Error::DbResult { source }) => match source {
+                    turso::Error::Misuse(..) => {
+                        attempts += 1;
+                        if attempts >= max_retries {
+                            return Err(Error::DbResult { source });
+                        }
+
+                        // Retries...
+                    }
+                    _ => {
+                        return Err(Error::DbResult { source });
+                    }
+                },
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
     pub async fn count_by_dir(&self, dir_id: &str) -> Result<i64> {
         let query = r#"
             SELECT COUNT(*) AS total_count
@@ -384,6 +413,30 @@ impl FileRepo {
         let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
         let row_result = stmt.query_row(q_params).await;
         collect_count(row_result)
+    }
+
+    pub async fn retry_count_by_dir(&self, dir_id: &str, max_retries: usize) -> Result<i64> {
+        let mut attempts = 0;
+
+        loop {
+            match self.count_by_dir(dir_id).await {
+                Ok(result) => return Ok(result),
+                Err(Error::DbResult { source }) => match source {
+                    turso::Error::Misuse(..) => {
+                        attempts += 1;
+                        if attempts >= max_retries {
+                            return Err(Error::DbResult { source });
+                        }
+
+                        // Retries...
+                    }
+                    _ => {
+                        return Err(Error::DbResult { source });
+                    }
+                },
+                Err(e) => return Err(e),
+            }
+        }
     }
 
     pub async fn delete(&self, id: &str) -> Result<()> {

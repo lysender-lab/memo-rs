@@ -1,4 +1,5 @@
 use axum::extract::FromRef;
+use memo::{bucket::BucketDto, dir::DirDto};
 use moka::sync::Cache;
 use reqwest::{Client, ClientBuilder};
 use snafu::ResultExt;
@@ -22,6 +23,8 @@ pub struct AppState {
     pub storage_client: Arc<StorageClient>,
     pub db: Arc<DbMapper>,
     pub auth_cache: Cache<String, Actor>,
+    pub bucket_cache: Cache<String, BucketDto>,
+    pub dir_cache: Cache<String, DirDto>,
 }
 
 pub async fn create_app_state(config: &Config) -> Result<AppState> {
@@ -41,11 +44,25 @@ pub async fn create_app_state(config: &Config) -> Result<AppState> {
         .max_capacity(100)
         .build();
 
+    let bucket_cache = Cache::builder()
+        .time_to_live(Duration::from_secs(10 * 60))
+        .time_to_idle(Duration::from_secs(60))
+        .max_capacity(100)
+        .build();
+
+    let dir_cache = Cache::builder()
+        .time_to_live(Duration::from_secs(10 * 60))
+        .time_to_idle(Duration::from_secs(60))
+        .max_capacity(100)
+        .build();
+
     Ok(AppState {
         config: config.clone(),
         client,
         storage_client: Arc::new(storage_client),
         db: Arc::new(db),
         auth_cache,
+        bucket_cache,
+        dir_cache,
     })
 }

@@ -66,7 +66,7 @@ pub async fn create_file(
     let count = state
         .db
         .files
-        .count_by_dir(&dir.id)
+        .retry_count_by_dir(&dir.id, 5)
         .await
         .context(DbSnafu)?;
 
@@ -83,7 +83,7 @@ pub async fn create_file(
     if state
         .db
         .files
-        .find_by_name(&dir.id, &data.name)
+        .retry_find_by_name(&dir.id, &data.name, 5)
         .await
         .context(DbSnafu)?
         .is_some()
