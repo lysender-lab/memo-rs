@@ -291,7 +291,7 @@ impl StorageClient {
         dir_name: &str,
         version: &str,
         filename: &str,
-        content_type: Option<&str>,
+        content_type: &str,
     ) -> Result<String> {
         let file_path = format!("{}/{}/{}", dir_name, version, filename);
         generate_upload_signed_url(
@@ -359,16 +359,13 @@ async fn generate_upload_signed_url(
     signer: &Signer,
     bucket_name: &str,
     file_path: &str,
-    content_type: Option<&str>,
+    content_type: &str,
 ) -> Result<String> {
     let expires = Duration::from_secs(3600);
-    let mut builder = SignedUrlBuilder::for_object(bucket_name.to_string(), file_path.to_string())
+    let builder = SignedUrlBuilder::for_object(bucket_name.to_string(), file_path.to_string())
         .with_method(Method::PUT)
+        .with_header("content-type", content_type)
         .with_expiration(expires);
-
-    if let Some(content_type) = content_type {
-        builder = builder.with_header("content-type", content_type);
-    }
 
     let res = builder.sign_with(signer).await;
 

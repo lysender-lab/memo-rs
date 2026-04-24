@@ -39,12 +39,14 @@ pub struct FileUploadClaims {
     pub sub: String,
     pub orig_filename: String,
     pub new_filename: String,
+    pub content_type: String,
     pub exp: usize,
 }
 
 pub fn create_upload_token(
     orig_filename: String,
     new_filename: String,
+    content_type: String,
     secret: &str,
 ) -> Result<String> {
     // Limit up to 1 hour only
@@ -54,6 +56,7 @@ pub fn create_upload_token(
         sub: "upload".to_string(),
         orig_filename: orig_filename,
         new_filename: new_filename,
+        content_type: content_type,
         exp: exp.timestamp() as usize,
     };
 

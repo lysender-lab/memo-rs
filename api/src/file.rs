@@ -89,18 +89,26 @@ pub async fn generate_upload_url(
     let token = create_upload_token(
         data.filename.clone(),
         uniq_filename.clone(),
+        data.content_type.clone(),
         &state.config.jwt_secret,
     )?;
 
     let upload_url = state
         .storage_client
-        .generate_upload_url(&bucket.name, &dir.name, ORIGINAL_PATH, &uniq_filename, None)
+        .generate_upload_url(
+            &bucket.name,
+            &dir.name,
+            ORIGINAL_PATH,
+            &uniq_filename,
+            &data.content_type,
+        )
         .await
         .context(StorageSnafu)?;
 
     Ok(SignedFileUploadDto {
         orig_filename: data.filename.clone(),
         new_filename: uniq_filename,
+        content_type: data.content_type.clone(),
         url: upload_url,
         token,
     })

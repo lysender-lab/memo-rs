@@ -135,6 +135,9 @@ impl TryFrom<&str> for ImgVersion {
 pub struct RemoteUploadDto {
     #[validate(length(min = 1))]
     pub filename: String,
+
+    #[validate(length(min = 1))]
+    pub content_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -147,6 +150,7 @@ pub struct SignedRemoteUploadDto {
 pub struct SignedFileUploadDto {
     pub orig_filename: String,
     pub new_filename: String,
+    pub content_type: String,
     pub url: String,
     pub token: String,
 }

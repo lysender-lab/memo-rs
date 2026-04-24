@@ -64,6 +64,7 @@ async function prepareUpload(url, token, file) {
 
   const data = {
     filename: file.name,
+    content_type: file.type || 'application/octet-stream',
     token,
   };
 
