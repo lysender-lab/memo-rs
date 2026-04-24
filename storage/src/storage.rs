@@ -50,34 +50,6 @@ impl StorageClient {
         &self.signer
     }
 
-    async fn upload_regular_object(
-        &self,
-        bucket: &BucketDto,
-        dir: &DirDto,
-        source_dir: &PathBuf,
-        file: &FileDto,
-    ) -> Result<()> {
-        let file_path = format!("{}/{}/{}", &dir.name, ORIGINAL_PATH, &file.filename);
-        let bucket_name = bucket_resource_name(&bucket.name);
-
-        let source_path = source_dir.join(ORIGINAL_PATH).join(&file.filename);
-        let Ok(data) = std::fs::read(&source_path) else {
-            return Err("Failed to read file for upload.".into());
-        };
-
-        let upload_res = self
-            .storage
-            .write_object(bucket_name, file_path, Bytes::from(data))
-            .set_content_type(file.content_type.clone())
-            .send_buffered()
-            .await;
-
-        match upload_res {
-            Ok(_) => Ok(()),
-            Err(e) => map_cloud_error(e, "Failed to upload object to cloud storage."),
-        }
-    }
-
     async fn upload_image_object(
         &self,
         bucket: &BucketDto,

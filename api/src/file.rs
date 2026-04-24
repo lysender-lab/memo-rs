@@ -3,6 +3,9 @@ use exif::{In, Tag};
 use image::DynamicImage;
 use image::ImageReader;
 use image::imageops;
+use memo::file::RemoteUploadDto;
+use memo::file::SignedFileUploadDto;
+use memo::utils::slugify_prefixed;
 use snafu::ResultExt;
 use std::fs::File;
 use std::path::PathBuf;
@@ -15,6 +18,7 @@ use crate::error::TokioJoinSnafu;
 use crate::error::{ExifInfoSnafu, StorageSnafu, UploadFileSnafu, ValidationSnafu};
 
 use crate::state::AppState;
+use crate::token::create_upload_token;
 use db::file::MAX_FILES;
 use memo::bucket::BucketDto;
 use memo::dir::DirDto;
@@ -38,6 +42,68 @@ impl Default for PhotoExif {
             img_taken_at: None,
         }
     }
+}
+
+pub async fn generate_upload_url(
+    state: AppState,
+    bucket: &BucketDto,
+    dir: &DirDto,
+    data: &RemoteUploadDto,
+) -> Result<SignedFileUploadDto> {
+    // Limit the number of files per dir
+    let count = state
+        .db
+        .files
+        .retry_count_by_dir(&dir.id, 5)
+        .await
+        .context(DbSnafu)?;
+
+    if count >= MAX_FILES as i64 {
+        return ValidationSnafu {
+            msg: "Directory already has maximum files".to_string(),
+        }
+        .fail();
+    }
+
+    // Name must be unique for the dir (not filename)
+    if state
+        .db
+        .files
+        .retry_find_by_name(&dir.id, &data.filename, 5)
+        .await
+        .context(DbSnafu)?
+        .is_some()
+    {
+        // Show error but ensure name is not too long
+        let short_name = truncate_string(&data.filename, 20);
+        return ValidationSnafu {
+            msg: format!("{} already exists", short_name),
+        }
+        .fail();
+    }
+
+    // Low chance of collision but higher than the full uuid v7 string
+    // Prefer a shorter filename for better readability
+    let uniq_filename = slugify_prefixed(&data.filename);
+
+    let token = create_upload_token(
+        data.filename.clone(),
+        uniq_filename.clone(),
+        &state.config.jwt_secret,
+    )?;
+
+    let upload_url = state
+        .storage_client
+        .generate_upload_url(&bucket.name, &dir.name, ORIGINAL_PATH, &uniq_filename, None)
+        .await
+        .context(StorageSnafu)?;
+
+    Ok(SignedFileUploadDto {
+        orig_filename: data.filename.clone(),
+        new_filename: uniq_filename,
+        url: upload_url,
+        token,
+    })
 }
 
 pub async fn create_file(
@@ -115,10 +181,7 @@ pub async fn create_file(
                         img_versions = Some(versions);
                     }
                 }
-                Err(e) => {
-                    cleanup(&data_copy, None);
-                    return Err(e);
-                }
+                Err(e) => return Err(e),
             };
 
             Ok((img_versions, img_taken_at))

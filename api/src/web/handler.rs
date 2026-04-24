@@ -15,10 +15,10 @@ use crate::{
         DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, Result, StorageSnafu,
         WhateverSnafu,
     },
-    file::create_file,
+    file::{create_file, generate_upload_url},
     health::{check_liveness, check_readiness},
     state::AppState,
-    token::{create_upload_token, verify_upload_token},
+    token::verify_upload_token,
     web::{params::Params, response::JsonResponse},
 };
 use db::bucket::UpdateBucket;
@@ -27,9 +27,8 @@ use db::file::ListFilesParams;
 use memo::{
     bucket::BucketDto,
     dir::DirDto,
-    file::{FileDto, ORIGINAL_PATH, RemoteUploadDto, SignedFileUploadDto, SignedRemoteUploadDto},
+    file::{FileDto, ORIGINAL_PATH, RemoteUploadDto, SignedRemoteUploadDto},
     pagination::Paginated,
-    utils::slugify_prefixed,
 };
 use yaas::{actor::Actor, role::Permission};
 
@@ -300,28 +299,7 @@ pub async fn create_upload_url_handler(
         msg: "Invalid request payload",
     })?;
 
-    // Low chance of collision but higher than the full uuid v7 string
-    // Prefer a shorter filename for better readability
-    let uniq_filename = slugify_prefixed(&data.filename);
-
-    let token = create_upload_token(
-        data.filename.clone(),
-        uniq_filename.clone(),
-        &state.config.jwt_secret,
-    )?;
-
-    let upload_url = state
-        .storage_client
-        .generate_upload_url(&bucket.name, &dir.name, ORIGINAL_PATH, &uniq_filename, None)
-        .await
-        .context(StorageSnafu)?;
-
-    let dto = SignedFileUploadDto {
-        orig_filename: data.filename.clone(),
-        new_filename: uniq_filename,
-        url: upload_url,
-        token,
-    };
+    let dto = generate_upload_url(state, &bucket, &dir, &data.0).await?;
 
     Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
 }
