@@ -35,6 +35,7 @@ pub struct PhotoVersionDto {
 #[derive(Clone, Deserialize, Serialize)]
 pub struct PrepareUploadPayload {
     pub filename: String,
+    pub content_type: String,
     pub token: String,
 }
 

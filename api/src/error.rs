@@ -125,6 +125,9 @@ pub enum Error {
     #[snafu(display("Invalid upload token"))]
     UploadToken,
 
+    #[snafu(display("Tokio JoinHandle error: {}", source))]
+    TokioJoin { source: tokio::task::JoinError },
+
     #[snafu(display("{}", msg))]
     Whatever { msg: String },
 }

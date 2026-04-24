@@ -50,34 +50,6 @@ impl StorageClient {
         &self.signer
     }
 
-    async fn upload_regular_object(
-        &self,
-        bucket: &BucketDto,
-        dir: &DirDto,
-        source_dir: &PathBuf,
-        file: &FileDto,
-    ) -> Result<()> {
-        let file_path = format!("{}/{}/{}", &dir.name, ORIGINAL_PATH, &file.filename);
-        let bucket_name = bucket_resource_name(&bucket.name);
-
-        let source_path = source_dir.join(ORIGINAL_PATH).join(&file.filename);
-        let Ok(data) = std::fs::read(&source_path) else {
-            return Err("Failed to read file for upload.".into());
-        };
-
-        let upload_res = self
-            .storage
-            .write_object(bucket_name, file_path, Bytes::from(data))
-            .set_content_type(file.content_type.clone())
-            .send_buffered()
-            .await;
-
-        match upload_res {
-            Ok(_) => Ok(()),
-            Err(e) => map_cloud_error(e, "Failed to upload object to cloud storage."),
-        }
-    }
-
     async fn upload_image_object(
         &self,
         bucket: &BucketDto,
@@ -319,7 +291,7 @@ impl StorageClient {
         dir_name: &str,
         version: &str,
         filename: &str,
-        content_type: Option<&str>,
+        content_type: &str,
     ) -> Result<String> {
         let file_path = format!("{}/{}/{}", dir_name, version, filename);
         generate_upload_signed_url(
@@ -387,16 +359,13 @@ async fn generate_upload_signed_url(
     signer: &Signer,
     bucket_name: &str,
     file_path: &str,
-    content_type: Option<&str>,
+    content_type: &str,
 ) -> Result<String> {
     let expires = Duration::from_secs(3600);
-    let mut builder = SignedUrlBuilder::for_object(bucket_name.to_string(), file_path.to_string())
+    let builder = SignedUrlBuilder::for_object(bucket_name.to_string(), file_path.to_string())
         .with_method(Method::PUT)
+        .with_header("content-type", content_type)
         .with_expiration(expires);
-
-    if let Some(content_type) = content_type {
-        builder = builder.with_header("content-type", content_type);
-    }
 
     let res = builder.sign_with(signer).await;
 

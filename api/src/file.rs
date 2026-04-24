@@ -3,6 +3,9 @@ use exif::{In, Tag};
 use image::DynamicImage;
 use image::ImageReader;
 use image::imageops;
+use memo::file::RemoteUploadDto;
+use memo::file::SignedFileUploadDto;
+use memo::utils::slugify_prefixed;
 use snafu::ResultExt;
 use std::fs::File;
 use std::path::PathBuf;
@@ -11,9 +14,11 @@ use tracing::error;
 
 use crate::Result;
 use crate::error::DbSnafu;
+use crate::error::TokioJoinSnafu;
 use crate::error::{ExifInfoSnafu, StorageSnafu, UploadFileSnafu, ValidationSnafu};
 
 use crate::state::AppState;
+use crate::token::create_upload_token;
 use db::file::MAX_FILES;
 use memo::bucket::BucketDto;
 use memo::dir::DirDto;
@@ -37,6 +42,76 @@ impl Default for PhotoExif {
             img_taken_at: None,
         }
     }
+}
+
+pub async fn generate_upload_url(
+    state: AppState,
+    bucket: &BucketDto,
+    dir: &DirDto,
+    data: &RemoteUploadDto,
+) -> Result<SignedFileUploadDto> {
+    // Limit the number of files per dir
+    let count = state
+        .db
+        .files
+        .retry_count_by_dir(&dir.id, 5)
+        .await
+        .context(DbSnafu)?;
+
+    if count >= MAX_FILES as i64 {
+        return ValidationSnafu {
+            msg: "Directory already has maximum files".to_string(),
+        }
+        .fail();
+    }
+
+    // Name must be unique for the dir (not filename)
+    if state
+        .db
+        .files
+        .retry_find_by_name(&dir.id, &data.filename, 5)
+        .await
+        .context(DbSnafu)?
+        .is_some()
+    {
+        // Show error but ensure name is not too long
+        let short_name = truncate_string(&data.filename, 20);
+        return ValidationSnafu {
+            msg: format!("{} already exists", short_name),
+        }
+        .fail();
+    }
+
+    // Low chance of collision but higher than the full uuid v7 string
+    // Prefer a shorter filename for better readability
+    let uniq_filename = slugify_prefixed(&data.filename);
+
+    let token = create_upload_token(
+        data.filename.clone(),
+        uniq_filename.clone(),
+        data.content_type.clone(),
+        &state.config.jwt_secret,
+    )?;
+
+    let upload_url = state
+        .storage_client
+        .generate_upload_url(
+            &bucket.name,
+            &dir.name,
+            ORIGINAL_PATH,
+            &uniq_filename,
+            &data.content_type,
+        )
+        .await
+        .context(StorageSnafu)?;
+
+    Ok(SignedFileUploadDto {
+        orig_filename: data.filename.clone(),
+        new_filename: uniq_filename,
+        content_type: data.content_type.clone(),
+        url: upload_url,
+        token,
+    })
 }
 
 pub async fn create_file(
@@ -99,21 +174,38 @@ pub async fn create_file(
     }
 
     if file_dto.is_image {
-        let exif_info = parse_exif_info(&data.path).unwrap_or_default();
+        let data_copy = data.clone();
 
-        match create_versions(data, &exif_info) {
-            Ok(versions) => {
-                if !versions.is_empty() {
-                    file_dto.img_versions = Some(versions);
+        // Process image in blocking task to avoid blocking the async runtime
+        let versions_proc = tokio::task::spawn_blocking(move || {
+            let exif_info = parse_exif_info(&data_copy.path).unwrap_or_default();
+            let img_taken_at = exif_info.img_taken_at;
+
+            let mut img_versions: Option<Vec<ImgVersionDto>> = None;
+
+            match create_versions(&data_copy, &exif_info) {
+                Ok(versions) => {
+                    if !versions.is_empty() {
+                        img_versions = Some(versions);
+                    }
                 }
+                Err(e) => return Err(e),
+            };
+
+            Ok((img_versions, img_taken_at))
+        });
+
+        let versions_res = versions_proc.await.context(TokioJoinSnafu)?;
+        match versions_res {
+            Ok((img_versions, img_taken_at)) => {
+                file_dto.img_versions = img_versions;
+                file_dto.img_taken_at = img_taken_at;
             }
             Err(e) => {
                 cleanup(data, None);
                 return Err(e);
             }
-        };
-
-        file_dto.img_taken_at = exif_info.img_taken_at;
+        }
     }
 
     if let Err(upload_err) = state
