@@ -410,6 +410,8 @@ impl FileRepo {
         max_retries: usize,
     ) -> Result<Option<FileDto>> {
         let mut attempts = 0;
+        let mut delay = Duration::from_millis(100);
+        let max_delay = Duration::from_secs(2);
 
         loop {
             match self.find_by_name(dir_id, name).await {
@@ -421,6 +423,8 @@ impl FileRepo {
                             return Err(Error::DbResult { source });
                         }
 
+                        sleep(delay).await;
+                        delay = min(delay.saturating_mul(2), max_delay);
                         // Retries...
                     }
                     _ => {
@@ -450,6 +454,8 @@ impl FileRepo {
 
     pub async fn retry_count_by_dir(&self, dir_id: &str, max_retries: usize) -> Result<i64> {
         let mut attempts = 0;
+        let mut delay = Duration::from_millis(100);
+        let max_delay = Duration::from_secs(2);
 
         loop {
             match self.count_by_dir(dir_id).await {
@@ -461,6 +467,8 @@ impl FileRepo {
                             return Err(Error::DbResult { source });
                         }
 
+                        sleep(delay).await;
+                        delay = min(delay.saturating_mul(2), max_delay);
                         // Retries...
                     }
                     _ => {

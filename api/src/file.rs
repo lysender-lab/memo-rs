@@ -11,6 +11,7 @@ use tracing::error;
 
 use crate::Result;
 use crate::error::DbSnafu;
+use crate::error::TokioJoinSnafu;
 use crate::error::{ExifInfoSnafu, StorageSnafu, UploadFileSnafu, ValidationSnafu};
 
 use crate::state::AppState;
@@ -99,21 +100,41 @@ pub async fn create_file(
     }
 
     if file_dto.is_image {
-        let exif_info = parse_exif_info(&data.path).unwrap_or_default();
+        let data_copy = data.clone();
 
-        match create_versions(data, &exif_info) {
-            Ok(versions) => {
-                if !versions.is_empty() {
-                    file_dto.img_versions = Some(versions);
+        // Process image in blocking task to avoid blocking the async runtime
+        let versions_proc = tokio::task::spawn_blocking(move || {
+            let exif_info = parse_exif_info(&data_copy.path).unwrap_or_default();
+            let img_taken_at = exif_info.img_taken_at;
+
+            let mut img_versions: Option<Vec<ImgVersionDto>> = None;
+
+            match create_versions(&data_copy, &exif_info) {
+                Ok(versions) => {
+                    if !versions.is_empty() {
+                        img_versions = Some(versions);
+                    }
                 }
+                Err(e) => {
+                    cleanup(&data_copy, None);
+                    return Err(e);
+                }
+            };
+
+            Ok((img_versions, img_taken_at))
+        });
+
+        let versions_res = versions_proc.await.context(TokioJoinSnafu)?;
+        match versions_res {
+            Ok((img_versions, img_taken_at)) => {
+                file_dto.img_versions = img_versions;
+                file_dto.img_taken_at = img_taken_at;
             }
             Err(e) => {
                 cleanup(data, None);
                 return Err(e);
             }
-        };
-
-        file_dto.img_taken_at = exif_info.img_taken_at;
+        }
     }
 
     if let Err(upload_err) = state

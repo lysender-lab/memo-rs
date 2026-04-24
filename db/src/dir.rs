@@ -307,6 +307,8 @@ impl DirRepo {
 
     pub async fn retry_get(&self, id: &str, max_retries: usize) -> Result<Option<DirDto>> {
         let mut attempts = 0;
+        let mut delay = Duration::from_millis(100);
+        let max_delay = Duration::from_secs(2);
 
         loop {
             match self.get(id).await {
@@ -318,6 +320,8 @@ impl DirRepo {
                             return Err(Error::DbResult { source });
                         }
 
+                        sleep(delay).await;
+                        delay = min(delay.saturating_mul(2), max_delay);
                         // Retries...
                     }
                     _ => {
