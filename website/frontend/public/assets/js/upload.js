@@ -204,15 +204,21 @@ async function uploadPhotos() {
         failedCount++;
         updateOverallProgress();
 
-        if (err.response && err.response.data) {
-          errorsContainer.appendChild(createDomElement(err.response.data));
-        } else {
-          errorsContainer.appendChild(
-            createDomElement(
-              `<p class="has-text-danger">Failed to upload photo</div>`,
-            ),
-          );
+        let errorMessage =
+          '<p class="has-text-danger">Failed to upload photo</div>';
+
+        if (err.response.data) {
+          if (typeof err.response.data === 'string') {
+            errorMessage = err.response.data;
+          } else if (
+            typeof err.response.data === 'object' &&
+            err.response.data.message
+          ) {
+            errorMessage = `<p class="has-text-danger">${err.response.data.message}</div>`;
+          }
         }
+
+        errorsContainer.appendChild(createDomElement(errorMessage));
 
         return { ok: false };
       });
