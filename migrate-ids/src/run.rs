@@ -21,6 +21,7 @@ pub async fn run() -> Result<()> {
     let state = AppState { db: Arc::new(db) };
 
     migrate_dirs(&state).await?;
+    migrate_files(&state).await?;
 
     Ok(())
 }
@@ -60,6 +61,52 @@ async fn migrate_dir(state: &AppState, old_dir_id: &str) -> Result<()> {
 
     // Delete old dir
     state.db.dirs.delete(old_dir_id).await.context(DbSnafu)?;
+
+    Ok(())
+}
+
+async fn migrate_files(state: &AppState) -> Result<()> {
+    info!("Migrating files...");
+
+    // List all files in paginated way
+    let mut last_id: Option<String> = None;
+    let mut total: i64 = 0;
+
+    loop {
+        // Fetch a batch of files
+        let files = state
+            .db
+            .files
+            .cursor_list(100, last_id.clone())
+            .await
+            .context(DbSnafu)?;
+
+        total += files.len() as i64;
+
+        if files.is_empty() {
+            info!("No more files to migrate.");
+            // No more files to process...
+            break;
+        }
+
+        // Migrate files here
+        for file in files.iter() {
+            let new_id = generate_prefixed_id(IdPrefix::File);
+            state
+                .db
+                .files
+                .update_id(&file.id, &new_id)
+                .await
+                .context(DbSnafu)?;
+        }
+
+        info!("Migrating batch of {} files", files.len());
+
+        // Set the last id
+        last_id = Some(files.last().unwrap().id.clone());
+    }
+
+    info!("Finished migrating {} files", total);
 
     Ok(())
 }

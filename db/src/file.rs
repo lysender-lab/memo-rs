@@ -187,6 +187,45 @@ impl FileRepo {
         collect_count(row_result)
     }
 
+    pub async fn cursor_list(
+        &self,
+        per_page: i64,
+        last_id: Option<String>,
+    ) -> Result<Vec<FileDto>> {
+        let mut query = r#"
+            SELECT
+                id,
+                dir_id,
+                name,
+                filename,
+                content_type,
+                size,
+                is_image,
+                img_versions,
+                img_taken_at,
+                created_at,
+                updated_at
+            FROM files
+        "#
+        .to_string();
+
+        let mut q_params = new_query_params();
+
+        if let Some(id) = last_id {
+            query.push_str(" WHERE id > :last_id");
+            q_params.push(text_param(":last_id", id));
+        }
+
+        query.push_str(" ORDER BY id ASC LIMIT :per_page");
+        q_params.push(integer_param(":per_page", per_page as i64));
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let mut rows = stmt.query(q_params).await.context(DbStatementSnafu)?;
+        let items: Vec<FileDto> = collect_rows(&mut rows).await?;
+
+        Ok(items)
+    }
+
     pub async fn list(&self, dir: &DirDto, params: &ListFilesParams) -> Result<Paginated<FileDto>> {
         let errors = params.validate();
         ensure!(
@@ -489,6 +528,21 @@ impl FileRepo {
         let mut q_params = new_query_params();
         q_params.push(text_param(":new_dir_id", new_dir_id.to_owned()));
         q_params.push(text_param(":old_dir_id", old_dir_id.to_owned()));
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        stmt.execute(q_params).await.context(DbStatementSnafu)?;
+        Ok(())
+    }
+
+    pub async fn update_id(&self, old_id: &str, new_id: &str) -> Result<()> {
+        let query = r#"
+            UPDATE files
+            SET id = :new_id
+            WHERE id = :old_id
+        "#;
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":new_id", new_id.to_owned()));
+        q_params.push(text_param(":old_id", old_id.to_owned()));
 
         let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
         stmt.execute(q_params).await.context(DbStatementSnafu)?;
