@@ -160,6 +160,18 @@ impl FromTursoRow for FileDto {
 pub const MAX_PER_PAGE: i32 = 50;
 pub const MAX_FILES: i32 = 1000;
 
+struct FileIdDto {
+    id: String,
+}
+
+impl FromTursoRow for FileIdDto {
+    fn from_row(row: &Row) -> Result<Self> {
+        Ok(Self {
+            id: row_text(row, 0)?,
+        })
+    }
+}
+
 pub struct FileRepo {
     db_pool: Connection,
 }
@@ -167,6 +179,17 @@ pub struct FileRepo {
 impl FileRepo {
     pub fn new(db_pool: Connection) -> Self {
         Self { db_pool }
+    }
+
+    pub async fn list_file_ids(&self) -> Result<Vec<String>> {
+        let query =
+            "SELECT id FROM files WHERE deleted_at IS NULL ORDER BY created_at ASC".to_string();
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let mut rows = stmt.query({}).await.context(DbStatementSnafu)?;
+        let items: Vec<FileIdDto> = collect_rows(&mut rows).await?;
+
+        Ok(items.into_iter().map(|item| item.id).collect())
     }
 
     pub async fn listing_count(&self, dir_id: &str, params: &ListFilesParams) -> Result<i64> {
@@ -478,6 +501,36 @@ impl FileRepo {
                 Err(e) => return Err(e),
             }
         }
+    }
+
+    pub async fn move_to_dir(&self, old_dir_id: &str, new_dir_id: &str) -> Result<()> {
+        let query = r#"
+            UPDATE files
+            SET dir_id = :new_dir_id
+            WHERE dir_id = :old_dir_id
+        "#;
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":new_dir_id", new_dir_id.to_owned()));
+        q_params.push(text_param(":old_dir_id", old_dir_id.to_owned()));
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        stmt.execute(q_params).await.context(DbStatementSnafu)?;
+        Ok(())
+    }
+
+    pub async fn update_id(&self, old_id: &str, new_id: &str) -> Result<()> {
+        let query = r#"
+            UPDATE files
+            SET id = :new_id
+            WHERE id = :old_id
+        "#;
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":new_id", new_id.to_owned()));
+        q_params.push(text_param(":old_id", old_id.to_owned()));
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        stmt.execute(q_params).await.context(DbStatementSnafu)?;
+        Ok(())
     }
 
     pub async fn delete(&self, id: &str) -> Result<()> {

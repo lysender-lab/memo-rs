@@ -10,9 +10,9 @@ use crate::error::{DbPrepareSnafu, DbStatementSnafu};
 use crate::turso_decode::{
     FromTursoRow, collect_count, collect_row, collect_rows, row_integer, row_text,
 };
-use crate::turso_params::{integer_param, new_query_params, opt_integer_param, text_param};
+use crate::turso_params::{new_query_params, opt_integer_param, text_param};
 use crate::{Error, Result};
-use memo::{bucket::BucketDto, utils::generate_id};
+use memo::bucket::BucketDto;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Bucket {
@@ -132,58 +132,6 @@ impl BucketRepo {
         let items: Vec<BucketDto> = collect_rows(&mut rows).await?;
 
         Ok(items)
-    }
-
-    pub async fn create(&self, client_id: &str, data: &NewBucket) -> Result<BucketDto> {
-        let today = chrono::Utc::now().timestamp();
-
-        let query = r#"
-            INSERT INTO buckets
-            (
-                id,
-                client_id,
-                name,
-                label,
-                images_only,
-                created_at,
-                updated_at,
-                deleted_at
-            )
-            VALUES
-            (
-                :id,
-                :client_id,
-                :name,
-                :label,
-                :images_only,
-                :created_at,
-                NULL
-            )
-        "#;
-
-        let id = generate_id();
-        let images_only: i64 = if data.images_only { 1 } else { 0 };
-
-        let mut params = new_query_params();
-        params.push(text_param(":id", id.clone()));
-        params.push(text_param(":client_id", client_id.to_owned()));
-        params.push(text_param(":name", data.name.clone()));
-        params.push(text_param(":label", data.label.clone()));
-        params.push(integer_param(":images_only", images_only));
-        params.push(integer_param(":created_at", today));
-        params.push(integer_param(":updated_at", today));
-
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
-        stmt.execute(params).await.context(DbStatementSnafu)?;
-
-        Ok(BucketDto {
-            id,
-            client_id: client_id.to_owned(),
-            name: data.name.clone(),
-            label: data.label.clone(),
-            images_only: data.images_only,
-            created_at: today,
-        })
     }
 
     pub async fn get(&self, id: &str) -> Result<Option<BucketDto>> {
