@@ -160,6 +160,18 @@ impl FromTursoRow for FileDto {
 pub const MAX_PER_PAGE: i32 = 50;
 pub const MAX_FILES: i32 = 1000;
 
+struct FileIdDto {
+    id: String,
+}
+
+impl FromTursoRow for FileIdDto {
+    fn from_row(row: &Row) -> Result<Self> {
+        Ok(Self {
+            id: row_text(row, 0)?,
+        })
+    }
+}
+
 pub struct FileRepo {
     db_pool: Connection,
 }
@@ -167,6 +179,17 @@ pub struct FileRepo {
 impl FileRepo {
     pub fn new(db_pool: Connection) -> Self {
         Self { db_pool }
+    }
+
+    pub async fn list_file_ids(&self) -> Result<Vec<String>> {
+        let query =
+            "SELECT id FROM files WHERE deleted_at IS NULL ORDER BY created_at ASC".to_string();
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let mut rows = stmt.query({}).await.context(DbStatementSnafu)?;
+        let items: Vec<FileIdDto> = collect_rows(&mut rows).await?;
+
+        Ok(items.into_iter().map(|item| item.id).collect())
     }
 
     pub async fn listing_count(&self, dir_id: &str, params: &ListFilesParams) -> Result<i64> {
@@ -185,45 +208,6 @@ impl FileRepo {
         let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
         let row_result = stmt.query_row(q_params).await;
         collect_count(row_result)
-    }
-
-    pub async fn cursor_list(
-        &self,
-        per_page: i64,
-        last_id: Option<String>,
-    ) -> Result<Vec<FileDto>> {
-        let mut query = r#"
-            SELECT
-                id,
-                dir_id,
-                name,
-                filename,
-                content_type,
-                size,
-                is_image,
-                img_versions,
-                img_taken_at,
-                created_at,
-                updated_at
-            FROM files
-        "#
-        .to_string();
-
-        let mut q_params = new_query_params();
-
-        if let Some(id) = last_id {
-            query.push_str(" WHERE id > :last_id");
-            q_params.push(text_param(":last_id", id));
-        }
-
-        query.push_str(" ORDER BY id ASC LIMIT :per_page");
-        q_params.push(integer_param(":per_page", per_page as i64));
-
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
-        let mut rows = stmt.query(q_params).await.context(DbStatementSnafu)?;
-        let items: Vec<FileDto> = collect_rows(&mut rows).await?;
-
-        Ok(items)
     }
 
     pub async fn list(&self, dir: &DirDto, params: &ListFilesParams) -> Result<Paginated<FileDto>> {

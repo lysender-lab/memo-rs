@@ -55,7 +55,7 @@ async fn migrate_dir(state: &AppState, old_dir_id: &str) -> Result<()> {
     state
         .db
         .files
-        .move_to_dir(&new_dir_id, old_dir_id)
+        .move_to_dir(old_dir_id, &new_dir_id)
         .await
         .context(DbSnafu)?;
 
@@ -68,45 +68,31 @@ async fn migrate_dir(state: &AppState, old_dir_id: &str) -> Result<()> {
 async fn migrate_files(state: &AppState) -> Result<()> {
     info!("Migrating files...");
 
-    // List all files in paginated way
-    let mut last_id: Option<String> = None;
-    let mut total: i64 = 0;
+    // List all files
+    let files = state.db.files.list_file_ids().await.context(DbSnafu)?;
 
-    loop {
-        // Fetch a batch of files
-        let files = state
-            .db
-            .files
-            .cursor_list(100, last_id.clone())
-            .await
-            .context(DbSnafu)?;
+    info!("Migrating {} files", files.len());
 
-        total += files.len() as i64;
-
-        if files.is_empty() {
-            info!("No more files to migrate.");
-            // No more files to process...
-            break;
-        }
-
-        // Migrate files here
-        for file in files.iter() {
-            let new_id = generate_prefixed_id(IdPrefix::File);
-            state
-                .db
-                .files
-                .update_id(&file.id, &new_id)
-                .await
-                .context(DbSnafu)?;
-        }
-
-        info!("Migrating batch of {} files", files.len());
-
-        // Set the last id
-        last_id = Some(files.last().unwrap().id.clone());
+    for file_id in files.iter() {
+        migrate_file(state, &file_id).await?;
     }
 
-    info!("Finished migrating {} files", total);
+    info!("Finished migrating {} files", files.len());
+
+    Ok(())
+}
+
+async fn migrate_file(state: &AppState, old_file_id: &str) -> Result<()> {
+    // Create a new file copy with a new ID
+    let new_file_id = generate_prefixed_id(IdPrefix::File);
+
+    // Update file id
+    state
+        .db
+        .files
+        .update_id(old_file_id, &new_file_id)
+        .await
+        .context(DbSnafu)?;
 
     Ok(())
 }
