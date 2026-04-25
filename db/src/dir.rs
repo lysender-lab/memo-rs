@@ -14,7 +14,7 @@ use crate::turso_params::{integer_param, new_query_params, opt_integer_param, te
 use crate::{Error, Result};
 use memo::dir::DirDto;
 use memo::pagination::Paginated;
-use memo::utils::generate_id;
+use memo::utils::{IdPrefix, generate_prefixed_id};
 use memo::validators::flatten_errors;
 use turso::Connection;
 
@@ -102,6 +102,18 @@ pub struct ListDirsParams {
 pub const MAX_DIRS: i32 = 1000;
 pub const MAX_PER_PAGE: i32 = 50;
 
+struct DirIdDto {
+    id: String,
+}
+
+impl FromTursoRow for DirIdDto {
+    fn from_row(row: &Row) -> Result<Self> {
+        Ok(Self {
+            id: row_text(row, 0)?,
+        })
+    }
+}
+
 pub struct DirRepo {
     db_pool: Connection,
 }
@@ -109,6 +121,17 @@ pub struct DirRepo {
 impl DirRepo {
     pub fn new(db_pool: Connection) -> Self {
         Self { db_pool }
+    }
+
+    pub async fn list_dir_ids(&self) -> Result<Vec<String>> {
+        let query =
+            "SELECT id FROM dirs WHERE deleted_at IS NULL ORDER BY created_at ASC".to_string();
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let mut rows = stmt.query({}).await.context(DbStatementSnafu)?;
+        let items: Vec<DirIdDto> = collect_rows(&mut rows).await?;
+
+        Ok(items.into_iter().map(|item| item.id).collect())
     }
 
     async fn listing_count(&self, bucket_id: &str, params: &ListDirsParams) -> Result<i64> {
@@ -228,9 +251,50 @@ impl DirRepo {
         collect_count(row_result)
     }
 
+    pub async fn create_full(&self, data: DirDto) -> Result<()> {
+        let query = r#"
+            INSERT INTO dirs
+            (
+                id,
+                bucket_id,
+                name,
+                label,
+                file_count,
+                created_at,
+                updated_at,
+                deleted_at
+            )
+            VALUES
+            (
+                :id,
+                :bucket_id,
+                :name,
+                :label,
+                :file_count,
+                :created_at,
+                :updated_at,
+                NULL
+            )
+        "#;
+
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":id", data.id.clone()));
+        q_params.push(text_param(":bucket_id", data.bucket_id.clone()));
+        q_params.push(text_param(":name", data.name.clone()));
+        q_params.push(text_param(":label", data.label.clone()));
+        q_params.push(integer_param(":file_count", 0));
+        q_params.push(integer_param(":created_at", data.created_at));
+        q_params.push(integer_param(":updated_at", data.updated_at));
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        stmt.execute(q_params).await.context(DbStatementSnafu)?;
+
+        Ok(())
+    }
+
     pub async fn create(&self, bucket_id: &str, data: &NewDir) -> Result<DirDto> {
         let today = chrono::Utc::now().timestamp();
-        let id = generate_id();
+        let id = generate_prefixed_id(IdPrefix::Dir);
 
         let query = r#"
             INSERT INTO dirs

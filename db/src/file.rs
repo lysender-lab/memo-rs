@@ -480,6 +480,21 @@ impl FileRepo {
         }
     }
 
+    pub async fn move_to_dir(&self, old_dir_id: &str, new_dir_id: &str) -> Result<()> {
+        let query = r#"
+            UPDATE files
+            SET dir_id = :new_dir_id
+            WHERE dir_id = :old_dir_id
+        "#;
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":new_dir_id", new_dir_id.to_owned()));
+        q_params.push(text_param(":old_dir_id", old_dir_id.to_owned()));
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        stmt.execute(q_params).await.context(DbStatementSnafu)?;
+        Ok(())
+    }
+
     pub async fn delete(&self, id: &str) -> Result<()> {
         let query = "DELETE FROM files WHERE id = :id".to_string();
         let mut q_params = new_query_params();
