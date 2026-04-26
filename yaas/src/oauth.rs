@@ -42,7 +42,7 @@ pub struct OauthTokenRequestDto {
     pub redirect_uri: String,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct OauthTokenResponseDto {
     pub access_token: String,
     pub scope: String,

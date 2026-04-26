@@ -72,7 +72,6 @@ pub async fn auth_middleware(
 }
 
 pub async fn require_auth_middleware(
-    State(state): State<AppState>,
     Extension(ctx): Extension<Ctx>,
     req: Request,
     next: Next,
@@ -81,8 +80,7 @@ pub async fn require_auth_middleware(
 
     if !ctx.is_authenticated() {
         if full_page {
-            let authorize_url = build_oauth_authorize_url(&state);
-            return Ok(Redirect::to(&authorize_url).into_response());
+            return Ok(Redirect::to("/login").into_response());
         } else {
             return Err(Error::LoginRequired);
         }
@@ -93,7 +91,7 @@ pub async fn require_auth_middleware(
 
 pub fn build_oauth_authorize_url(state: &AppState) -> String {
     let callback_url = format!("{}/auth/callback", &state.config.server.public_url);
-    let scope = encode("auth oauth");
+    let scope = encode("oauth");
     let oauth_state = Utc::now().timestamp_millis();
 
     format!(

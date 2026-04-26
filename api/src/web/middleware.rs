@@ -55,7 +55,7 @@ pub async fn require_auth_middleware(
     request: Request,
     next: Next,
 ) -> Result<Response<Body>> {
-    ensure!(actor.has_auth_scope(), InsufficientAuthScopeSnafu);
+    ensure!(actor.has_oauth_scope(), InsufficientAuthScopeSnafu);
 
     Ok(next.run(request).await)
 }

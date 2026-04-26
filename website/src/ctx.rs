@@ -1,6 +1,6 @@
 use yaas::actor::Actor;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Ctx {
     token: Option<String>,
     actor: Actor,
@@ -20,7 +20,7 @@ impl Ctx {
     }
 
     pub fn is_authenticated(&self) -> bool {
-        self.token.is_some() && self.actor.has_auth_scope()
+        self.token.is_some() && self.actor.has_oauth_scope()
     }
 }
 
