@@ -233,7 +233,7 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ErrorInfo {
     pub status_code: StatusCode,
     pub title: String,

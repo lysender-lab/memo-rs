@@ -24,7 +24,7 @@ pub struct ActorPayloadDto {
     pub scopes: Vec<Scope>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Actor {
     pub actor: Option<ActorDto>,
 }
@@ -54,8 +54,8 @@ impl Actor {
         }
     }
 
-    pub fn has_auth_scope(&self) -> bool {
-        self.has_scope(Scope::Auth)
+    pub fn has_oauth_scope(&self) -> bool {
+        self.has_scope(Scope::Oauth)
     }
 
     pub fn has_vault_scope(&self) -> bool {

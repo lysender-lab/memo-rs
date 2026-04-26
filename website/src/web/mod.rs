@@ -13,8 +13,8 @@ pub mod pref;
 pub mod profile;
 pub mod routes;
 
-pub const AUTH_TOKEN_COOKIE: &str = "auth_token";
-pub const THEME_COOKIE: &str = "theme";
+pub const AUTH_TOKEN_COOKIE: &str = "memo_auth";
+pub const THEME_COOKIE: &str = "memo_theme";
 
 pub use error::*;
 pub use index::*;

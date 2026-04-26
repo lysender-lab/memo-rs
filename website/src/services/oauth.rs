@@ -17,8 +17,10 @@ pub async fn authenticate_token(state: &AppState, token: &str) -> Result<Actor> 
     // Decode token to get user ID (sub claim)
     let claims = decode_auth_token(token)?;
 
+    let cache_key = format!("{}:{}:{}", claims.sub, claims.oid, claims.scope);
+
     // Get from cache first
-    if let Some(actor) = state.auth_cache.get(&claims.sub) {
+    if let Some(actor) = state.auth_cache.get(&cache_key) {
         return Ok(actor);
     }
 
@@ -45,7 +47,7 @@ pub async fn authenticate_token(state: &AppState, token: &str) -> Result<Actor> 
 
             // Store to cache
             state.auth_cache.insert(
-                claims.sub,
+                cache_key,
                 Actor {
                     actor: Some(actor.clone()),
                 },

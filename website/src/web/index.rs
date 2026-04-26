@@ -1,10 +1,5 @@
 use askama::Template;
-use axum::{
-    Extension,
-    body::Body,
-    extract::State,
-    response::{IntoResponse, Redirect, Response},
-};
+use axum::{Extension, body::Body, extract::State, response::Response};
 use memo::bucket::BucketDto;
 use snafu::ResultExt;
 
@@ -33,11 +28,6 @@ pub async fn index_handler(
 ) -> Result<Response<Body>> {
     let actor = ctx.actor();
     enforce_policy(actor, Resource::Bucket, Action::Read)?;
-
-    if actor.is_system_admin() {
-        // Redirect to clients page
-        return Ok(Redirect::to("/clients").into_response());
-    }
 
     let mut t = TemplateData::new(&state, actor, &pref);
     t.title = String::from("Home");
