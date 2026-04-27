@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use snafu::{ResultExt, ensure};
 use std::cmp::min;
 use std::time::Duration;
@@ -12,7 +12,7 @@ use crate::turso_decode::{
 };
 use crate::turso_params::{integer_param, new_query_params, opt_integer_param, text_param};
 use crate::{Error, Result};
-use memo::dir::DirDto;
+use memo::dir::{DirDto, DirType};
 use memo::pagination::Paginated;
 use memo::utils::{IdPrefix, generate_prefixed_id};
 use memo::validators::flatten_errors;
@@ -63,18 +63,6 @@ pub struct ListDirsParams {
 pub const MAX_DIRS: i32 = 1000;
 pub const MAX_PER_PAGE: i32 = 50;
 
-struct DirIdDto {
-    id: String,
-}
-
-impl FromTursoRow for DirIdDto {
-    fn from_row(row: &Row) -> Result<Self> {
-        Ok(Self {
-            id: row_text(row, 0)?,
-        })
-    }
-}
-
 pub struct DirRepo {
     db_pool: Connection,
 }
@@ -84,31 +72,27 @@ impl DirRepo {
         Self { db_pool }
     }
 
-    pub async fn list_dir_ids(&self) -> Result<Vec<String>> {
-        let query =
-            "SELECT id FROM dirs WHERE deleted_at IS NULL ORDER BY created_at ASC".to_string();
-
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
-        let mut rows = stmt.query({}).await.context(DbStatementSnafu)?;
-        let items: Vec<DirIdDto> = collect_rows(&mut rows).await?;
-
-        Ok(items.into_iter().map(|item| item.id).collect())
-    }
-
-    async fn listing_count(&self, bucket_id: &str, params: &ListDirsParams) -> Result<i64> {
+    async fn listing_count(
+        &self,
+        org_id: &str,
+        dir_type: &DirType,
+        params: &ListDirsParams,
+    ) -> Result<i64> {
         let mut query = r#"
             SELECT
                 COUNT(*) AS total_count
             FROM
                 dirs
             WHERE
-                bucket_id = :bucket_id
+                org_id = :org_id
+                AND dir_type = :dir_type
                 AND deleted_at IS NULL
         "#
         .to_string();
 
         let mut q_params = new_query_params();
-        q_params.push(text_param(":bucket_id", bucket_id.to_owned()));
+        q_params.push(text_param(":org_id", org_id.to_owned()));
+        q_params.push(text_param(":dir_type", dir_type.to_string()));
 
         if let Some(keyword) = &params.keyword
             && !keyword.is_empty()
@@ -124,7 +108,8 @@ impl DirRepo {
 
     pub async fn list(
         &self,
-        bucket_id: &str,
+        org_id: &str,
+        dir_type: &DirType,
         params: &ListDirsParams,
     ) -> Result<Paginated<DirDto>> {
         let valid_res = params.validate();
@@ -135,7 +120,7 @@ impl DirRepo {
             }
         );
 
-        let total_records = self.listing_count(bucket_id, params).await?;
+        let total_records = self.listing_count(org_id, dir_type, params).await?;
         let mut page: i32 = 1;
         let mut per_page: i32 = MAX_PER_PAGE;
         let mut offset: i64 = 0;
@@ -164,19 +149,23 @@ impl DirRepo {
         let mut query = r#"
             SELECT
                 id,
-                bucket_id,
+                org_id,
+                dir_type,
                 name,
                 label,
-                file_count,
                 created_at,
                 updated_at
             FROM dirs
-            WHERE bucket_id = :bucket_id AND deleted_at IS NULL
+            WHERE
+                org_id = :org_id
+                AND dir_type = :dir_type
+                AND deleted_at IS NULL
         "#
         .to_string();
 
         let mut q_params = new_query_params();
-        q_params.push(text_param(":bucket_id", bucket_id.to_owned()));
+        q_params.push(text_param(":org_id", org_id.to_owned()));
+        q_params.push(text_param(":dir_type", dir_type.to_string()));
 
         if let Some(keyword) = &params.keyword
             && !keyword.is_empty()
@@ -196,16 +185,17 @@ impl DirRepo {
         Ok(Paginated::new(items, page, per_page, total_records))
     }
 
-    pub async fn count(&self, bucket_id: &str) -> Result<i64> {
+    pub async fn count(&self, org_id: &str, dir_type: &DirType) -> Result<i64> {
         let query = r#"
             SELECT COUNT(*) AS total_count
             FROM dirs
-            WHERE bucket_id = :bucket_id AND deleted_at IS NULL
+            WHERE org_id = :org_id AND dir_type = :dir_type AND deleted_at IS NULL
         "#
         .to_string();
 
         let mut q_params = new_query_params();
-        q_params.push(text_param(":bucket_id", bucket_id.to_owned()));
+        q_params.push(text_param(":org_id", org_id.to_owned()));
+        q_params.push(text_param(":dir_type", dir_type.to_string()));
 
         let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
         let row_result = stmt.query_row(q_params).await;
@@ -217,10 +207,10 @@ impl DirRepo {
             INSERT INTO dirs
             (
                 id,
-                bucket_id,
+                org_id,
+                dir_type,
                 name,
                 label,
-                file_count,
                 created_at,
                 updated_at,
                 deleted_at
@@ -228,10 +218,10 @@ impl DirRepo {
             VALUES
             (
                 :id,
-                :bucket_id,
+                :org_id,
+                :dir_type,
                 :name,
                 :label,
-                :file_count,
                 :created_at,
                 :updated_at,
                 NULL
@@ -240,10 +230,10 @@ impl DirRepo {
 
         let mut q_params = new_query_params();
         q_params.push(text_param(":id", data.id.clone()));
-        q_params.push(text_param(":bucket_id", data.bucket_id.clone()));
+        q_params.push(text_param(":org_id", data.org_id.clone()));
+        q_params.push(text_param(":dir_type", data.dir_type.to_string()));
         q_params.push(text_param(":name", data.name.clone()));
         q_params.push(text_param(":label", data.label.clone()));
-        q_params.push(integer_param(":file_count", 0));
         q_params.push(integer_param(":created_at", data.created_at));
         q_params.push(integer_param(":updated_at", data.updated_at));
 
@@ -253,7 +243,7 @@ impl DirRepo {
         Ok(())
     }
 
-    pub async fn create(&self, bucket_id: &str, data: &NewDir) -> Result<DirDto> {
+    pub async fn create(&self, org_id: &str, dir_type: &DirType, data: &NewDir) -> Result<DirDto> {
         let today = chrono::Utc::now().timestamp();
         let id = generate_prefixed_id(IdPrefix::Dir);
 
@@ -261,10 +251,10 @@ impl DirRepo {
             INSERT INTO dirs
             (
                 id,
-                bucket_id,
+                org_id,
+                dir_type,
                 name,
                 label,
-                file_count,
                 created_at,
                 updated_at,
                 deleted_at
@@ -272,10 +262,10 @@ impl DirRepo {
             VALUES
             (
                 :id,
-                :bucket_id,
+                :org_id,
+                :dir_type,
                 :name,
                 :label,
-                :file_count,
                 :created_at,
                 :updated_at,
                 NULL
@@ -284,10 +274,10 @@ impl DirRepo {
 
         let mut q_params = new_query_params();
         q_params.push(text_param(":id", id.clone()));
-        q_params.push(text_param(":bucket_id", bucket_id.to_owned()));
+        q_params.push(text_param(":org_id", org_id.to_owned()));
+        q_params.push(text_param(":dir_type", dir_type.to_string()));
         q_params.push(text_param(":name", data.name.clone()));
         q_params.push(text_param(":label", data.label.clone()));
-        q_params.push(integer_param(":file_count", 0));
         q_params.push(integer_param(":created_at", today));
         q_params.push(integer_param(":updated_at", today));
 
@@ -296,10 +286,10 @@ impl DirRepo {
 
         Ok(DirDto {
             id,
-            bucket_id: bucket_id.to_owned(),
+            org_id: org_id.to_owned(),
+            dir_type: dir_type.clone(),
             name: data.name.clone(),
             label: data.label.clone(),
-            file_count: 0,
             created_at: today,
             updated_at: today,
         })
@@ -309,10 +299,10 @@ impl DirRepo {
         let query = r#"
             SELECT
                 id,
-                bucket_id,
+                org_id,
+                dir_type,
                 name,
                 label,
-                file_count,
                 created_at,
                 updated_at
             FROM dirs
@@ -358,20 +348,26 @@ impl DirRepo {
         }
     }
 
-    pub async fn find_by_name(&self, bucket_id: &str, name: &str) -> Result<Option<DirDto>> {
+    pub async fn find_by_name(
+        &self,
+        org_id: &str,
+        dir_type: &DirType,
+        name: &str,
+    ) -> Result<Option<DirDto>> {
         let query = r#"
             SELECT
                 id,
-                bucket_id,
+                org_id,
+                dir_type,
                 name,
                 label,
-                file_count,
                 created_at,
                 updated_at
             FROM
                 dirs
             WHERE
-                bucket_id = :bucket_id
+                org_id = :org_id
+                AND dir_type = :dir_type
                 AND name = :name
                 AND deleted_at IS NULL
             LIMIT 1
@@ -379,7 +375,8 @@ impl DirRepo {
         .to_string();
 
         let mut q_params = new_query_params();
-        q_params.push(text_param(":bucket_id", bucket_id.to_owned()));
+        q_params.push(text_param(":org_id", org_id.to_owned()));
+        q_params.push(text_param(":dir_type", dir_type.to_string()));
         q_params.push(text_param(":name", name.to_owned()));
 
         let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
