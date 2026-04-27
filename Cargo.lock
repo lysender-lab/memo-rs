@@ -2528,25 +2528,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "migrate-ids"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "db",
- "jsonwebtoken",
- "memo",
- "password",
- "serde",
- "serde_json",
- "snafu",
- "storage",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "yaas",
-]
-
-[[package]]
 name = "mimalloc"
 version = "0.1.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"

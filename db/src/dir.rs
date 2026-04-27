@@ -8,7 +8,7 @@ use validator::Validate;
 
 use crate::error::{DbPrepareSnafu, DbStatementSnafu, ValidationSnafu};
 use crate::turso_decode::{
-    FromTursoRow, collect_count, collect_row, collect_rows, row_integer, row_text,
+    FromTursoRow, collect_count, collect_row, collect_rows, row_dir_type, row_integer, row_text,
 };
 use crate::turso_params::{integer_param, new_query_params, opt_integer_param, text_param};
 use crate::{Error, Result};
@@ -18,53 +18,14 @@ use memo::utils::{IdPrefix, generate_prefixed_id};
 use memo::validators::flatten_errors;
 use turso::Connection;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Dir {
-    pub id: String,
-    pub bucket_id: String,
-    pub name: String,
-    pub label: String,
-    pub file_count: i32,
-    pub created_at: i64,
-    pub updated_at: i64,
-}
-
-impl From<DirDto> for Dir {
-    fn from(dto: DirDto) -> Self {
-        Self {
-            id: dto.id,
-            bucket_id: dto.bucket_id,
-            name: dto.name,
-            label: dto.label,
-            file_count: dto.file_count,
-            created_at: dto.created_at,
-            updated_at: dto.updated_at,
-        }
-    }
-}
-
-impl From<Dir> for DirDto {
-    fn from(dir: Dir) -> Self {
-        Self {
-            id: dir.id,
-            bucket_id: dir.bucket_id,
-            name: dir.name,
-            label: dir.label,
-            file_count: dir.file_count,
-            created_at: dir.created_at,
-            updated_at: dir.updated_at,
-        }
-    }
-}
-
 impl FromTursoRow for DirDto {
     fn from_row(row: &Row) -> Result<Self> {
         Ok(Self {
             id: row_text(row, 0)?,
-            bucket_id: row_text(row, 1)?,
-            name: row_text(row, 2)?,
-            label: row_text(row, 3)?,
-            file_count: row_integer(row, 4)? as i32,
+            org_id: row_text(row, 1)?,
+            dir_type: row_dir_type(row, 2)?,
+            name: row_text(row, 3)?,
+            label: row_text(row, 4)?,
             created_at: row_integer(row, 5)?,
             updated_at: row_integer(row, 6)?,
         })
