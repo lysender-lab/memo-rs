@@ -19,6 +19,7 @@ pub struct Config {
 pub struct CloudConfig {
     pub project_id: String,
     pub credentials: String,
+    pub bucket: String,
 }
 
 #[derive(Debug, Clone)]
@@ -53,6 +54,7 @@ impl Config {
             cloud: CloudConfig {
                 project_id: required_env("GOOGLE_PROJECT_ID")?,
                 credentials: required_env("GOOGLE_APPLICATION_CREDENTIALS")?,
+                bucket: required_env("GOOGLE_STORAGE_BUCKET")?,
             },
             server: ServerConfig {
                 address: required_env("SERVER_ADDRESS")?,
