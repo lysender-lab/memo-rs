@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::Result;
 use crate::provider::{DownloadRequest, DownloadedFile, ProviderClient, UploadUrlRequest};
 use crate::providers::GoogleStorageProvider;
-use memo::dir::DirDto;
+use memo::dir::DirMeta;
 use memo::file::FileDto;
 
 pub struct StorageClient {
@@ -16,22 +16,13 @@ impl StorageClient {
         Ok(Self { provider })
     }
 
-    pub async fn upload(
-        &self,
-        bucket_name: &str,
-        dir: &DirDto,
-        source_dir: &Path,
-        file: &FileDto,
-    ) -> Result<()> {
-        self.provider
-            .upload(bucket_name, dir, source_dir, file)
-            .await
+    pub async fn upload(&self, dir: &DirMeta, source_dir: &Path, file: &FileDto) -> Result<()> {
+        self.provider.upload(dir, source_dir, file).await
     }
 
     pub async fn download(
         &self,
-        bucket_name: &str,
-        dir_name: &str,
+        dir: &DirMeta,
         version: &str,
         orig_filename: &str,
         new_filename: &str,
@@ -39,8 +30,10 @@ impl StorageClient {
     ) -> Result<DownloadedFile> {
         self.provider
             .download(DownloadRequest {
-                bucket_name,
-                dir_name,
+                bucket_name: &dir.bucket_name,
+                org_id: &dir.org_id,
+                dir_type: &dir.dir_type.to_string(),
+                dir_name: &dir.dir_name,
                 version,
                 orig_filename,
                 new_filename,
@@ -49,42 +42,31 @@ impl StorageClient {
             .await
     }
 
-    pub async fn delete(&self, bucket_name: &str, dir_name: &str, file: &FileDto) -> Result<()> {
-        self.provider.delete(bucket_name, dir_name, file).await
+    pub async fn delete(&self, dir: &DirMeta, file: &FileDto) -> Result<()> {
+        self.provider.delete(dir, file).await
     }
 
-    pub async fn attach_urls(
-        &self,
-        bucket_name: &str,
-        dir_name: &str,
-        files: Vec<FileDto>,
-    ) -> Result<Vec<FileDto>> {
-        self.provider
-            .attach_urls(bucket_name, dir_name, files)
-            .await
+    pub async fn attach_urls(&self, dir: &DirMeta, files: Vec<FileDto>) -> Result<Vec<FileDto>> {
+        self.provider.attach_urls(dir, files).await
     }
 
-    pub async fn attach_url(
-        &self,
-        bucket_name: &str,
-        dir_name: &str,
-        file: FileDto,
-    ) -> Result<FileDto> {
-        self.provider.attach_url(bucket_name, dir_name, file).await
+    pub async fn attach_url(&self, dir: &DirMeta, file: FileDto) -> Result<FileDto> {
+        self.provider.attach_url(dir, file).await
     }
 
     pub async fn generate_upload_url(
         &self,
-        bucket_name: &str,
-        dir_name: &str,
+        dir: &DirMeta,
         version: &str,
         filename: &str,
         content_type: &str,
     ) -> Result<String> {
         self.provider
             .generate_upload_url(UploadUrlRequest {
-                bucket_name,
-                dir_name,
+                bucket_name: &dir.bucket_name,
+                org_id: &dir.org_id,
+                dir_type: &dir.dir_type.to_string(),
+                dir_name: &dir.dir_name,
                 version,
                 filename,
                 content_type,
