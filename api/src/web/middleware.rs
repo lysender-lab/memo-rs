@@ -15,9 +15,12 @@ use crate::{
     },
     oauth::authenticate_token,
     state::AppState,
-    web::params::Params,
+    web::params::{DirTypeParams, Params},
 };
-use memo::{bucket::BucketDto, dir::DirDto, file::FileDto};
+use memo::{
+    dir::{DirDto, DirType},
+    file::FileDto,
+};
 use yaas::{actor::Actor, role::Permission};
 
 pub async fn auth_middleware(
@@ -60,62 +63,18 @@ pub async fn require_auth_middleware(
     Ok(next.run(request).await)
 }
 
-pub async fn bucket_middleware(
-    State(state): State<AppState>,
-    Extension(actor): Extension<Actor>,
-    Path(params): Path<Params>,
-    mut request: Request,
+/// Ensure that dir_type is valid
+pub async fn dir_type_middleware(
+    Path(params): Path<DirTypeParams>,
+    request: Request,
     next: Next,
 ) -> Result<Response<Body>> {
-    let permissions = vec![Permission::BucketsView];
-    ensure!(
-        actor.has_permissions(&permissions),
-        ForbiddenSnafu {
-            msg: "Insufficient permissions"
-        }
-    );
-
-    // ensure!(
-    //     valid_id(&params.bucket_id),
-    //     BadRequestSnafu {
-    //         msg: "Invalid bucket id"
-    //     }
-    // );
-
-    let mut bucket_res: Option<BucketDto> = state.bucket_cache.get(&params.bucket_id);
-
-    if bucket_res.is_none() {
-        // Fetch from database
-        bucket_res = state
-            .db
-            .buckets
-            .retry_get(&params.bucket_id, 5)
-            .await
-            .context(DbSnafu)?;
-
-        if let Some(b) = bucket_res.clone() {
-            // Store to cache if present
-            state.bucket_cache.insert(params.bucket_id.clone(), b);
-        }
-    }
-
-    let bucket = bucket_res.context(NotFoundSnafu {
-        msg: "Bucket not found",
-    })?;
-
-    let Some(actor) = actor.actor.as_ref() else {
-        return Err(Error::InvalidAuthToken);
+    let Ok(_) = DirType::try_from(params.dir_type.as_str()) else {
+        return Err(Error::BadRequest {
+            msg: format!("Invalid dir type: {}", params.dir_type),
+        });
     };
 
-    ensure!(
-        bucket.client_id == actor.org_id,
-        NotFoundSnafu {
-            msg: "Bucket not found"
-        }
-    );
-
-    // Forward to the next middleware/handler passing the bucket information
-    request.extensions_mut().insert(bucket);
     let response = next.run(request).await;
     Ok(response)
 }

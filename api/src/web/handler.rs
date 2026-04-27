@@ -19,7 +19,10 @@ use crate::{
     health::{check_liveness, check_readiness},
     state::AppState,
     token::verify_upload_token,
-    web::{params::Params, response::JsonResponse},
+    web::{
+        params::{DirTypeParams, Params},
+        response::JsonResponse,
+    },
 };
 use db::bucket::UpdateBucket;
 use db::dir::{ListDirsParams, NewDir, UpdateDir};
@@ -74,71 +77,10 @@ pub async fn health_ready_handler(State(state): State<AppState>) -> Result<JsonR
     ))
 }
 
-pub async fn list_buckets_handler(
-    State(state): State<AppState>,
-    Extension(actor): Extension<Actor>,
-) -> Result<JsonResponse> {
-    let permissions = vec![Permission::BucketsView];
-    ensure!(
-        actor.has_permissions(&permissions),
-        ForbiddenSnafu {
-            msg: "Insufficient permissions"
-        }
-    );
-    let actor = actor.actor.expect("Actor is required");
-    let buckets = state
-        .db
-        .buckets
-        .list(&actor.org_id)
-        .await
-        .context(DbSnafu)?;
-
-    Ok(JsonResponse::new(serde_json::to_string(&buckets).unwrap()))
-}
-
-pub async fn get_bucket_handler(Extension(bucket): Extension<BucketDto>) -> Result<JsonResponse> {
-    Ok(JsonResponse::new(serde_json::to_string(&bucket).unwrap()))
-}
-
-pub async fn update_bucket_handler(
-    State(state): State<AppState>,
-    Extension(actor): Extension<Actor>,
-    Extension(bucket): Extension<BucketDto>,
-    payload: CoreResult<Json<UpdateBucket>, JsonRejection>,
-) -> Result<JsonResponse> {
-    let permissions = vec![Permission::BucketsEdit];
-    ensure!(
-        actor.has_permissions(&permissions),
-        ForbiddenSnafu {
-            msg: "Insufficient permissions"
-        }
-    );
-
-    let data = payload.context(JsonRejectionSnafu {
-        msg: "Invalid request payload",
-    })?;
-
-    let updated = update_bucket(&state, &bucket.id, &data).await?;
-    let updated_bucket = match updated {
-        true => {
-            let mut b = bucket.clone();
-            if let Some(label) = &data.label {
-                b.label = label.clone();
-            }
-            b
-        }
-        false => bucket,
-    };
-
-    Ok(JsonResponse::new(
-        serde_json::to_string(&updated_bucket).unwrap(),
-    ))
-}
-
 pub async fn list_dirs_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
-    Extension(bucket): Extension<BucketDto>,
+    Path(params): Path<DirTypeParams>,
     query: Query<ListDirsParams>,
 ) -> Result<JsonResponse> {
     let permissions = vec![Permission::DirsList];

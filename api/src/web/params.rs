@@ -6,3 +6,21 @@ pub struct Params {
     pub dir_id: Option<String>,
     pub file_id: Option<String>,
 }
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct DirTypeParams {
+    pub dir_type: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct DirParams {
+    pub dir_type: String,
+    pub dir_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct FileParams {
+    pub dir_type: String,
+    pub dir_id: String,
+    pub file_id: String,
+}
