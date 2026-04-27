@@ -1,15 +1,15 @@
+use core::result::Result as CoreResult;
+
 use axum::{
     Extension,
     extract::{Json, Path, Query, State, rejection::JsonRejection},
     http::StatusCode,
     response::IntoResponse,
 };
-use core::result::Result as CoreResult;
 use serde::Serialize;
 use snafu::{OptionExt, ResultExt, ensure};
 
 use crate::{
-    bucket::update_bucket,
     dir::{create_dir, delete_dir, update_dir},
     error::{
         DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, Result, StorageSnafu,
@@ -24,7 +24,6 @@ use crate::{
         response::JsonResponse,
     },
 };
-use db::bucket::UpdateBucket;
 use db::dir::{ListDirsParams, NewDir, UpdateDir};
 use db::file::ListFilesParams;
 use memo::{

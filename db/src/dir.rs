@@ -474,6 +474,27 @@ impl DirRepo {
         stmt.execute(q_params).await.context(DbStatementSnafu)?;
         Ok(())
     }
+    pub async fn test_read(&self) -> Result<()> {
+        let query = r#"
+            SELECT
+                id,
+                org_id,
+                dir_type,
+                name,
+                label,
+                created_at,
+                updated_at
+            FROM dirs
+            LIMIT 1
+        "#
+        .to_string();
+
+        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let row_result = stmt.query_row({}).await;
+        let _: Option<DirDto> = collect_row(row_result)?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

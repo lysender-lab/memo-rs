@@ -1,7 +1,6 @@
 use std::{process, str::FromStr};
 use tracing::Level;
 
-mod bucket;
 mod config;
 mod dir;
 mod error;

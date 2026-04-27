@@ -1,15 +1,13 @@
+use std::fs::File;
+use std::path::PathBuf;
+
 use chrono::{DateTime, NaiveDateTime};
 use exif::{In, Tag};
 use image::DynamicImage;
 use image::ImageReader;
 use image::imageops;
-use memo::file::RemoteUploadDto;
-use memo::file::SignedFileUploadDto;
-use memo::utils::slugify_prefixed;
 use snafu::ResultExt;
-use std::fs::File;
-use std::path::PathBuf;
-use storage::storage::DownloadedFile;
+use storage::DownloadedFile;
 use tracing::error;
 
 use crate::Result;
@@ -20,13 +18,17 @@ use crate::error::{ExifInfoSnafu, StorageSnafu, UploadFileSnafu, ValidationSnafu
 use crate::state::AppState;
 use crate::token::create_upload_token;
 use db::file::MAX_FILES;
-use memo::bucket::BucketDto;
 use memo::dir::DirDto;
+use memo::dir::DirMeta;
+use memo::dir::DirType;
+use memo::file::RemoteUploadDto;
+use memo::file::SignedFileUploadDto;
 use memo::file::{
     ALLOWED_IMAGE_TYPES, FileDto, ImgDimension, ImgVersion, ImgVersionDto, MAX_DIMENSION,
     MAX_PREVIEW_DIMENSION, MAX_THUMB_DIMENSION, ORIGINAL_PATH,
 };
 use memo::utils::generate_id;
+use memo::utils::slugify_prefixed;
 use memo::utils::truncate_string;
 
 #[derive(Debug, Clone)]
@@ -46,7 +48,7 @@ impl Default for PhotoExif {
 
 pub async fn generate_upload_url(
     state: AppState,
-    bucket: &BucketDto,
+    dir_meta: &DirMeta,
     dir: &DirDto,
     data: &RemoteUploadDto,
 ) -> Result<SignedFileUploadDto> {
@@ -95,13 +97,7 @@ pub async fn generate_upload_url(
 
     let upload_url = state
         .storage_client
-        .generate_upload_url(
-            &bucket.name,
-            &dir.name,
-            ORIGINAL_PATH,
-            &uniq_filename,
-            &data.content_type,
-        )
+        .generate_upload_url(dir_meta, ORIGINAL_PATH, &uniq_filename, &data.content_type)
         .await
         .context(StorageSnafu)?;
 
@@ -116,7 +112,7 @@ pub async fn generate_upload_url(
 
 pub async fn create_file(
     state: AppState,
-    bucket: &BucketDto,
+    dir_meta: &DirMeta,
     dir: &DirDto,
     data: &DownloadedFile,
 ) -> Result<FileDto> {
@@ -128,11 +124,11 @@ pub async fn create_file(
         }
     };
 
-    if bucket.images_only && !file_dto.is_image {
+    if dir_meta.dir_type == DirType::Photos && !file_dto.is_image {
         cleanup(data, None);
 
         return ValidationSnafu {
-            msg: "Bucket only accepts images".to_string(),
+            msg: "Only photos are allowed".to_string(),
         }
         .fail();
     }
@@ -210,7 +206,7 @@ pub async fn create_file(
 
     if let Err(upload_err) = state
         .storage_client
-        .upload(bucket, dir, &data.upload_dir, &file_dto)
+        .upload(dir_meta, &data.upload_dir, &file_dto)
         .await
         .context(StorageSnafu)
     {

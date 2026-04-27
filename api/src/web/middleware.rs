@@ -15,7 +15,7 @@ use crate::{
     },
     oauth::authenticate_token,
     state::AppState,
-    web::params::{DirTypeParams, Params},
+    web::params::{DirParams, DirTypeParams, FileParams},
 };
 use memo::{
     dir::{DirDto, DirType},
@@ -82,7 +82,7 @@ pub async fn dir_type_middleware(
 pub async fn dir_middleware(
     state: State<AppState>,
     Extension(actor): Extension<Actor>,
-    Path(params): Path<Params>,
+    Path(params): Path<DirParams>,
     mut request: Request,
     next: Next,
 ) -> Result<Response<Body>> {
@@ -94,17 +94,20 @@ pub async fn dir_middleware(
         }
     );
 
-    let did = params.dir_id.clone().expect("dir_id is required");
-
-    let mut dir_res: Option<DirDto> = state.dir_cache.get(&did);
+    let mut dir_res: Option<DirDto> = state.dir_cache.get(&params.dir_id);
 
     if dir_res.is_none() {
         // Fetch from database
-        dir_res = state.db.dirs.retry_get(&did, 5).await.context(DbSnafu)?;
+        dir_res = state
+            .db
+            .dirs
+            .retry_get(&params.dir_id, 5)
+            .await
+            .context(DbSnafu)?;
 
         if let Some(d) = dir_res.clone() {
             // Store to cache if present
-            state.dir_cache.insert(did.clone(), d);
+            state.dir_cache.insert(params.dir_id.clone(), d);
         }
     }
 
@@ -114,8 +117,13 @@ pub async fn dir_middleware(
 
     let dto: DirDto = dir;
 
+    // Org must match
+    let actor = actor
+        .actor
+        .expect("Actor must be present in auth middleware");
+
     ensure!(
-        dto.bucket_id == params.bucket_id,
+        dto.org_id == actor.org_id,
         NotFoundSnafu {
             msg: "Directory not found"
         }
@@ -130,7 +138,7 @@ pub async fn dir_middleware(
 pub async fn file_middleware(
     state: State<AppState>,
     Extension(actor): Extension<Actor>,
-    Path(params): Path<Params>,
+    Path(params): Path<FileParams>,
     mut request: Request,
     next: Next,
 ) -> Result<Response<Body>> {
@@ -142,18 +150,15 @@ pub async fn file_middleware(
         }
     );
 
-    let did = params.dir_id.clone().expect("dir_id is required");
-    let fid = params.file_id.clone().expect("file_id is required");
-
-    let mut file_res: Option<FileDto> = state.file_cache.get(&fid);
+    let mut file_res: Option<FileDto> = state.file_cache.get(&params.file_id);
 
     if file_res.is_none() {
         // Fetch from database
-        file_res = state.db.files.get(&fid).await.context(DbSnafu)?;
+        file_res = state.db.files.get(&params.file_id).await.context(DbSnafu)?;
 
         if let Some(f) = file_res.clone() {
             // Store to cache if present
-            state.file_cache.insert(fid.clone(), f);
+            state.file_cache.insert(params.file_id.clone(), f);
         }
     }
 
@@ -162,7 +167,7 @@ pub async fn file_middleware(
     })?;
 
     ensure!(
-        file.dir_id == did,
+        file.dir_id == params.file_id,
         NotFoundSnafu {
             msg: "File not found"
         }
