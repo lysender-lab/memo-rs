@@ -8,7 +8,7 @@
                 <li><a href="/">Home</a></li>
                 <li><a href="/{{ dir.dir_type }}">{{ dir.dir_type | titlecase }}</a></li>
                 <li class="is-active">
-                    <a href="/{{ dir.dir_type }}/dirs/{{ dir.id }}" aria-current="page">
+                    <a href="/{{ dir.dir_type }}/{{ dir.id }}" aria-current="page">
                         <span id="breadcrumb-album-label">{{ dir.label }}</span>
                     </a>
                 </li>
@@ -30,7 +30,7 @@
         <div class="photo-gallery-container">
             <div
                 id="photo-gallery"
-                hx-get="/{{ dir.dir_type }}/dirs/{{ dir.id }}/photo_grid?page=1"
+                hx-get="/{{ dir.dir_type }}/{{ dir.id }}/photo_grid?page=1"
                 hx-trigger="load"
                 :class="edit_photos ? 'photo-grid photo-grid-edit' : 'photo-grid'"
             >

@@ -1,7 +1,7 @@
 <form
     method="post"
-    action="/{{ dir.dir_type }}/dirs/{{ dir.id }}/delete"
-    hx-post="/{{ dir.dir_type }}/dirs/{{ dir.id }}/delete"
+    action="/{{ dir.dir_type }}/{{ dir.id }}/delete"
+    hx-post="/{{ dir.dir_type }}/{{ dir.id }}/delete"
     hx-target="#edit-dir-container"
 >
     <div class="columns">
@@ -37,7 +37,7 @@
                         <div class="control">
                             <button
                                 class="button is-link is-light"
-                                hx-get="/{{ dir.dir_type }}/dirs/{{ dir.id }}/edit_controls"
+                                hx-get="/{{ dir.dir_type }}/{{ dir.id }}/edit_controls"
                                 hx-target="#edit-dir-container"
                             >
                                 Cancel

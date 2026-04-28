@@ -9,7 +9,7 @@
                 <span>Back</span>
             </a>
 
-            <a href="/{{ dir.dir_type }}/dirs/{{ dir.id }}/upload" class="button is-primary">
+            <a href="/{{ dir.dir_type }}/{{ dir.id }}/upload" class="button is-primary">
                 <span class="icon is-small">
                     <i class="fas fa-plus"></i>
                 </span>
@@ -60,7 +60,7 @@
                 {% if can_edit %}
                 <a
                     class="dropdown-item"
-                    hx-get="/{{ dir.dir_type }}/dirs/{{ dir.id }}/edit"
+                    hx-get="/{{ dir.dir_type }}/{{ dir.id }}/edit"
                     hx-target="#edit-dir-container"
                 >
                     <span class="icon is-small">
@@ -74,7 +74,7 @@
                 <hr class="dropdown-divider" />
                 <a
                     class="dropdown-item has-text-danger"
-                    hx-get="/{{ dir.dir_type }}/dirs/{{ dir.id }}/delete"
+                    hx-get="/{{ dir.dir_type }}/{{ dir.id }}/delete"
                     hx-target="#edit-dir-container"
                 >
                     <span class="icon is-small">

@@ -7,9 +7,9 @@
             <ul>
                 <li><a href="/">Home</a></li>
                 <li><a href="/{{ dir.dir_type }}">{{ dir.dir_type | titlecase }}</a></li>
-                <li><a href="/{{ dir.dir_type }}/dirs/{{ dir.id }}">{{ dir.label }}</a></li>
+                <li><a href="/{{ dir.dir_type }}/{{ dir.id }}">{{ dir.label }}</a></li>
                 <li class="is-active">
-                    <a href="/{{ dir.dir_type }}/dirs/{{ dir.id }}/upload" aria-current="page">
+                    <a href="/{{ dir.dir_type }}/{{ dir.id }}/upload" aria-current="page">
                         Upload
                     </a>
                 </li>
@@ -18,7 +18,7 @@
 
         <h1 class="title">Upload Photos</h1>
 
-        <form method="post" action="/{{ dir.dir_type }}/dirs/{{ dir.id }}/upload" id="upload-photos-form">
+        <form method="post" action="/{{ dir.dir_type }}/{{ dir.id }}/upload" id="upload-photos-form">
             <div id="photos-input-w">
                 <div class="columns">
                     <div class="column is-half">
@@ -50,7 +50,7 @@
                                 </div>
 
                                 <div class="is-boxed">
-                                    <a class="button mr-2" href="/{{ dir.dir_type }}/dirs/{{ dir.id }}">
+                                    <a class="button mr-2" href="/{{ dir.dir_type }}/{{ dir.id }}">
                                         <span class="icon is-small">
                                             <i class="fas fa-arrow-left"></i>
                                         </span>
@@ -72,7 +72,7 @@
                                         type="hidden"
                                         id="prepare-upload-url"
                                         name="prepare-upload-url"
-                                        value="/{{ dir.dir_type }}/dirs/{{ dir.id }}/upload-url"
+                                        value="/{{ dir.dir_type }}/{{ dir.id }}/upload-url"
                                     />
                                 </div>
                             </div>
@@ -109,13 +109,13 @@
                 </div>
 
                 <div id="upload-more-w" class="is-hidden is-boxed mb-5">
-                    <a class="button mr-2" href="/{{ dir.dir_type }}/dirs/{{ dir.id }}">
+                    <a class="button mr-2" href="/{{ dir.dir_type }}/{{ dir.id }}">
                         <span class="icon is-small">
                             <i class="fas fa-arrow-left"></i>
                         </span>
                         <span>Back</span>
                     </a>
-                    <a class="button is-primary" href="/{{ dir.dir_type }}/dirs/{{ dir.id }}/upload">
+                    <a class="button is-primary" href="/{{ dir.dir_type }}/{{ dir.id }}/upload">
                         <span class="icon is-small">
                             <i class="fas fa-plus"></i>
                         </span>

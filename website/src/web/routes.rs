@@ -95,7 +95,7 @@ fn my_bucket_routes(state: AppState) -> Router<AppState> {
         .route("/", get(my_bucket_page_handler))
         .route("/search_dirs", get(search_dirs_handler))
         .route("/new_dir", get(new_dir_handler).post(post_new_dir_handler))
-        .nest("/dirs/{dir_id}", my_dir_inner_routes(state.clone()))
+        .nest("/{dir_id}", my_dir_inner_routes(state.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             dir_type_middleware,
