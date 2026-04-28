@@ -66,14 +66,17 @@ pub async fn require_auth_middleware(
 /// Ensure that dir_type is valid
 pub async fn dir_type_middleware(
     Path(params): Path<DirTypeParams>,
-    request: Request,
+    mut request: Request,
     next: Next,
 ) -> Result<Response<Body>> {
-    let Ok(_) = DirType::try_from(params.dir_type.as_str()) else {
+    let Ok(dir_type) = DirType::try_from(params.dir_type.as_str()) else {
         return Err(Error::BadRequest {
             msg: format!("Invalid dir type: {}", params.dir_type),
         });
     };
+
+    // Forward to the next middleware/handler passing the dir_type information
+    request.extensions_mut().insert(dir_type);
 
     let response = next.run(request).await;
     Ok(response)
@@ -82,6 +85,7 @@ pub async fn dir_type_middleware(
 pub async fn dir_middleware(
     state: State<AppState>,
     Extension(actor): Extension<Actor>,
+    Extension(dir_type): Extension<DirType>,
     Path(params): Path<DirParams>,
     mut request: Request,
     next: Next,
@@ -129,6 +133,14 @@ pub async fn dir_middleware(
         }
     );
 
+    // Dir type must match
+    ensure!(
+        dto.dir_type == dir_type,
+        NotFoundSnafu {
+            msg: "Directory not found"
+        }
+    );
+
     // Forward to the next middleware/handler passing the directory information
     request.extensions_mut().insert(dto);
     let response = next.run(request).await;
@@ -167,7 +179,7 @@ pub async fn file_middleware(
     })?;
 
     ensure!(
-        file.dir_id == params.file_id,
+        file.dir_id == params.dir_id,
         NotFoundSnafu {
             msg: "File not found"
         }
