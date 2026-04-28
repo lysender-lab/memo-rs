@@ -246,14 +246,7 @@ pub async fn create_upload_url_handler(
         msg: "Invalid request payload",
     })?;
 
-    let actor = actor.actor.expect("Actor must be present");
-    let dir_meta = DirMeta {
-        bucket_name: state.config.cloud.bucket.clone(),
-        org_id: actor.org_id,
-        dir_type: dir.dir_type.clone(),
-        dir_name: dir.name.clone(),
-    };
-    let dto = generate_upload_url(state, &dir_meta, &dir, &data.0).await?;
+    let dto = generate_upload_url(state, &dir, &data.0).await?;
 
     Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
 }
@@ -303,7 +296,7 @@ pub async fn create_file_handler(
         .context(StorageSnafu)?;
 
     let storage_client = state.storage_client.clone();
-    let file = create_file(state, &dir_meta, &dir, &downloaded).await?;
+    let file = create_file(state, &dir, &downloaded).await?;
     let file_dto: FileDto = file;
     let file_dto = storage_client
         .attach_url(&dir_meta, file_dto)

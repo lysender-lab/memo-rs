@@ -14,7 +14,6 @@ use crate::Result;
 use crate::error::DbSnafu;
 use crate::error::TokioJoinSnafu;
 use crate::error::{ExifInfoSnafu, StorageSnafu, UploadFileSnafu, ValidationSnafu};
-
 use crate::state::AppState;
 use crate::token::create_upload_token;
 use db::file::MAX_FILES;
@@ -48,10 +47,16 @@ impl Default for PhotoExif {
 
 pub async fn generate_upload_url(
     state: AppState,
-    dir_meta: &DirMeta,
     dir: &DirDto,
     data: &RemoteUploadDto,
 ) -> Result<SignedFileUploadDto> {
+    let dir_meta = DirMeta {
+        bucket_name: state.config.cloud.bucket,
+        org_id: dir.org_id.clone(),
+        dir_type: dir.dir_type.clone(),
+        dir_name: dir.name.clone(),
+    };
+
     // Limit the number of files per dir
     let count = state
         .db
@@ -97,7 +102,7 @@ pub async fn generate_upload_url(
 
     let upload_url = state
         .storage_client
-        .generate_upload_url(dir_meta, ORIGINAL_PATH, &uniq_filename, &data.content_type)
+        .generate_upload_url(&dir_meta, ORIGINAL_PATH, &uniq_filename, &data.content_type)
         .await
         .context(StorageSnafu)?;
 
@@ -110,12 +115,14 @@ pub async fn generate_upload_url(
     })
 }
 
-pub async fn create_file(
-    state: AppState,
-    dir_meta: &DirMeta,
-    dir: &DirDto,
-    data: &DownloadedFile,
-) -> Result<FileDto> {
+pub async fn create_file(state: AppState, dir: &DirDto, data: &DownloadedFile) -> Result<FileDto> {
+    let dir_meta = DirMeta {
+        bucket_name: state.config.cloud.bucket,
+        org_id: dir.org_id.clone(),
+        dir_type: dir.dir_type.clone(),
+        dir_name: dir.name.clone(),
+    };
+
     let mut file_dto = init_file(dir, data)?;
 
     let cleanup = |data: &DownloadedFile, file: Option<&FileDto>| {
@@ -206,7 +213,7 @@ pub async fn create_file(
 
     if let Err(upload_err) = state
         .storage_client
-        .upload(dir_meta, &data.upload_dir, &file_dto)
+        .upload(&dir_meta, &data.upload_dir, &file_dto)
         .await
         .context(StorageSnafu)
     {
