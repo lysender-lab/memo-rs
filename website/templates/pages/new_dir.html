@@ -6,10 +6,10 @@
         <nav class="breadcrumb" aria-label="breadcrumbs">
             <ul>
                 <li><a href="/">Home</a></li>
-                <li><a href="/buckets/{{ bucket.id }}">{{ bucket.label }}</a></li>
+                <li><a href="/{{ dir_type }}">{{ dir_type | titlecase }}</a></li>
                 <li class="is-active">
-                    <a href="/buckets/{{ bucket.id }}/new_dir" aria-current="page">
-                        {% if bucket.images_only %}
+                    <a href="/{{ dir_type }}/new_dir" aria-current="page">
+                        {% if dir_type == DirType::Photos %}
                         New Album
                         {% else %}
                         New Directory
@@ -20,7 +20,7 @@
         </nav>
 
         <h1 class="title">
-            {% if bucket.images_only %}
+            {% if dir_type == DirType::Photos %}
             Create new album
             {% else %}
             Create new directory

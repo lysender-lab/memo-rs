@@ -3,16 +3,15 @@ use urlencoding::encode;
 
 use serde::Deserialize;
 
-#[derive(Deserialize)]
-pub struct MyBucketParams {
-    pub bucket_id: String,
+#[derive(Clone, Debug, Deserialize)]
+pub struct DirTypeParams {
+    pub dir_type: String,
 }
 
 #[derive(Deserialize)]
-pub struct MyDirParams {
+pub struct DirParams {
     #[allow(dead_code)]
-    pub bucket_id: String,
-
+    pub dir_type: String,
     pub dir_id: String,
 }
 

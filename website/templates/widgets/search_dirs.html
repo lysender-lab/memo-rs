@@ -9,11 +9,11 @@
 {% endmatch %}
 
 {% if can_create %}
-<a class="panel-block has-text-primary" href="/buckets/{{ bucket.id }}/new_dir">
+<a class="panel-block has-text-primary" href="/{{ dir_type }}/new_dir">
     <span class="panel-icon">
         <i class="fas fa-plus has-text-primary" aria-hidden="true"></i>
     </span>
-    {% if bucket.images_only %}
+    {% if dir_type == DirType::Photos %}
     Create new album
     {% else %}
     Create new directory
@@ -22,7 +22,7 @@
 {% endif %}
 
 {% for dir in dirs %}
-    <a class="panel-block" href="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}">
+    <a class="panel-block" href="/{{ dir_type }}/dirs/{{ dir.id }}">
         <span class="panel-icon">
             <i class="fas fa-book" aria-hidden="true"></i>
         </span>
@@ -36,9 +36,9 @@
         {% match pg.prev %}
             {% when Some with (prev) %}
             <a
-                href="/buckets/{{ bucket.id }}{{ prev.url }}"
-                hx-push-url="/buckets/{{ bucket.id }}{{ prev.url }}"
-                hx-get="/buckets/{{ bucket.id }}/search_dirs{{ prev.url }}"
+                href="/{{ dir_type }}{{ prev.url }}"
+                hx-push-url="/{{ dir_type }}{{ prev.url }}"
+                hx-get="/{{ dir_type }}/search_dirs{{ prev.url }}"
                 hx-target=".album-items"
                 class="pagination-previous"
             >
@@ -50,9 +50,9 @@
         {% match pg.next %}
             {% when Some with (next) %}
             <a
-                href="/buckets/{{ bucket.id }}{{ next.url }}"
-                hx-push-url="/buckets/{{ bucket.id }}{{ next.url }}"
-                hx-get="/buckets/{{ bucket.id }}/search_dirs{{ next.url }}"
+                href="/{{ dir_type }}{{ next.url }}"
+                hx-push-url="/{{ dir_type }}{{ next.url }}"
+                hx-get="/{{ dir_type }}/search_dirs{{ next.url }}"
                 hx-target=".album-items"
                 class="pagination-previous"
             >
@@ -67,9 +67,9 @@
                 {% when Some with (link) %}
                 <li>
                     <a
-                        href="/buckets/{{ bucket.id }}{{ link.url }}"
-                        hx-push-url="/buckets/{{ bucket.id }}{{ link.url }}"
-                        hx-get="/buckets/{{ bucket.id }}/search_dirs{{ link.url }}"
+                        href="/{{ dir_type }}{{ link.url }}"
+                        hx-push-url="/{{ dir_type }}{{ link.url }}"
+                        hx-get="/{{ dir_type }}/search_dirs{{ link.url }}"
                         hx-target=".album-items"
                         {% if link.active %}
                         class="pagination-link is-current"

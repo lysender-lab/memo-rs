@@ -1,12 +1,12 @@
 <form
     method="post"
-    action="/buckets/{{ bucket.id }}/new_dir"
-    hx-post="/buckets/{{ bucket.id }}/new_dir"
+    action="/{{ dir_type }}/new_dir"
+    hx-post="/{{ dir_type }}/new_dir"
 >
     <div class="card">
         <div class="card-content">
             <h1 class="title is-4 has-text-weight-bold">
-                {% if bucket.images_only %}
+                {% if dir_type == DirType::Photos %}
                 Album
                 {% else %}
                 Directory
@@ -63,7 +63,7 @@
                     <button class="button is-link" type="submit" name="submit">Submit</button>
                 </div>
                 <div class="control">
-                    <a class="button is-link is-light" href="/buckets/{{ bucket.id }}">Cancel</a>
+                    <a class="button is-link is-light" href="/{{ dir_type }}">Cancel</a>
                 </div>
             </div>
         </div>

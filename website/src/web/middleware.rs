@@ -12,14 +12,12 @@ use crate::{
     Error, Result,
     ctx::Ctx,
     error::ErrorInfo,
-    models::{MyBucketParams, MyDirParams, MyFileParams, Pref},
+    models::{DirParams, DirTypeParams, MyFileParams, Pref},
     run::AppState,
-    services::{
-        buckets::get_bucket, dirs::get_dir, files::get_photo_svc, oauth::authenticate_token,
-    },
+    services::{dirs::get_dir_svc, files::get_photo_svc, oauth::authenticate_token},
     web::{Action, Resource, enforce_policy, handle_error},
 };
-use memo::{bucket::BucketDto, dir::DirDto};
+use memo::dir::{DirDto, DirType};
 use yaas::actor::Actor;
 
 use super::{AUTH_TOKEN_COOKIE, THEME_COOKIE};
@@ -100,11 +98,30 @@ pub fn build_oauth_authorize_url(state: &AppState) -> String {
     )
 }
 
+/// Ensure that dir_type is valid
+pub async fn dir_type_middleware(
+    Path(params): Path<DirTypeParams>,
+    mut request: Request,
+    next: Next,
+) -> Result<Response> {
+    let Ok(dir_type) = DirType::try_from(params.dir_type.as_str()) else {
+        return Err(Error::BadRequest {
+            msg: format!("Invalid dir type: {}", params.dir_type),
+        });
+    };
+
+    // Forward to the next middleware/handler passing the dir_type information
+    request.extensions_mut().insert(dir_type);
+
+    let response = next.run(request).await;
+    Ok(response)
+}
+
 pub async fn dir_middleware(
     Extension(ctx): Extension<Ctx>,
-    Extension(bucket): Extension<BucketDto>,
+    Extension(dir_type): Extension<DirType>,
     State(state): State<AppState>,
-    Path(params): Path<MyDirParams>,
+    Path(params): Path<DirParams>,
     mut req: Request,
     next: Next,
 ) -> Result<Response> {
@@ -116,14 +133,14 @@ pub async fn dir_middleware(
     let mut dir_res = state.dir_cache.get(&params.dir_id);
     if dir_res.is_none() {
         // Fetch from api
-        let dir = get_dir(&state, token, &bucket.id, &params.dir_id).await?;
+        let dir = get_dir_svc(&state, token, &dir_type, &params.dir_id).await?;
 
         state.dir_cache.insert(params.dir_id.clone(), dir.clone());
 
         dir_res = Some(dir);
     }
 
-    let dir = dir_res.expect("dir should be present at this point");
+    let dir = dir_res.expect("Dir is required");
 
     req.extensions_mut().insert(dir);
     Ok(next.run(req).await)
@@ -132,7 +149,6 @@ pub async fn dir_middleware(
 pub async fn file_middleware(
     State(state): State<AppState>,
     Extension(ctx): Extension<Ctx>,
-    Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
     Path(params): Path<MyFileParams>,
     mut req: Request,
@@ -147,7 +163,7 @@ pub async fn file_middleware(
 
     if photo_res.is_none() {
         // Fetch from api
-        let photo = get_photo_svc(&state, token, &bucket.id, &dir.id, &params.file_id).await?;
+        let photo = get_photo_svc(&state, token, &dir.dir_type, &dir.id, &params.file_id).await?;
 
         state
             .file_cache
@@ -159,38 +175,6 @@ pub async fn file_middleware(
     let photo = photo_res.expect("photo should be present at this point");
 
     req.extensions_mut().insert(photo);
-    Ok(next.run(req).await)
-}
-
-pub async fn my_bucket_middleware(
-    State(state): State<AppState>,
-    Extension(ctx): Extension<Ctx>,
-    Path(params): Path<MyBucketParams>,
-    mut req: Request,
-    next: Next,
-) -> Result<Response> {
-    let actor = ctx.actor();
-
-    enforce_policy(actor, Resource::Bucket, Action::Read)?;
-
-    let token = ctx.token().expect("token is required");
-
-    let mut bucket_res: Option<BucketDto> = state.bucket_cache.get(&params.bucket_id);
-
-    if bucket_res.is_none() {
-        // Fetch from api
-        let bucket = get_bucket(&state, token, &params.bucket_id).await?;
-
-        state
-            .bucket_cache
-            .insert(params.bucket_id.clone(), bucket.clone());
-
-        bucket_res = Some(bucket);
-    }
-
-    let bucket = bucket_res.expect("bucket should be present at this point");
-
-    req.extensions_mut().insert(bucket);
     Ok(next.run(req).await)
 }
 

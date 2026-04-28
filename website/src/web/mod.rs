@@ -1,5 +1,4 @@
 pub mod auth;
-pub mod buckets;
 pub mod dirs;
 pub mod error;
 pub mod files;

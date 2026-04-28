@@ -2,18 +2,18 @@
     {% if can_add_files %}
     <div>
         <div class="buttons">
-            <a class="button" href="/buckets/{{ bucket.id }}">
+            <a class="button" href="/{{ dir.dir_type }}">
                 <span class="icon is-small">
                     <i class="fas fa-arrow-left"></i>
                 </span>
                 <span>Back</span>
             </a>
 
-            <a href="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/upload" class="button is-primary">
+            <a href="/{{ dir.dir_type }}/dirs/{{ dir.id }}/upload" class="button is-primary">
                 <span class="icon is-small">
                     <i class="fas fa-plus"></i>
                 </span>
-                {% if bucket.images_only %}
+                {% if dir.dir_type == DirType::Photos %}
                 <span>Add Photos</span>
                 {% else %}
                 <span>Add Files</span>
@@ -60,7 +60,7 @@
                 {% if can_edit %}
                 <a
                     class="dropdown-item"
-                    hx-get="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/edit"
+                    hx-get="/{{ dir.dir_type }}/dirs/{{ dir.id }}/edit"
                     hx-target="#edit-dir-container"
                 >
                     <span class="icon is-small">
@@ -74,13 +74,13 @@
                 <hr class="dropdown-divider" />
                 <a
                     class="dropdown-item has-text-danger"
-                    hx-get="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/delete"
+                    hx-get="/{{ dir.dir_type }}/dirs/{{ dir.id }}/delete"
                     hx-target="#edit-dir-container"
                 >
                     <span class="icon is-small">
                         <i class="fas fa-times" aria-hidden="true"></i>
                     </span>
-                    {% if bucket.images_only %}
+                    {% if dir.dir_type == DirType::Photos %}
                     Delete Album
                     {% else %}
                     Delete Directory 
