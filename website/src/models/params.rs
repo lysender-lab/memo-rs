@@ -16,13 +16,11 @@ pub struct DirParams {
 }
 
 #[derive(Deserialize)]
-pub struct MyFileParams {
+pub struct FileParams {
     #[allow(dead_code)]
-    pub bucket_id: String,
-
+    pub dir_type: String,
     #[allow(dead_code)]
     pub dir_id: String,
-
     pub file_id: String,
 }
 

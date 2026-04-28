@@ -12,7 +12,7 @@ use crate::{
     Error, Result,
     ctx::Ctx,
     error::ErrorInfo,
-    models::{DirParams, DirTypeParams, MyFileParams, Pref},
+    models::{DirParams, DirTypeParams, FileParams, Pref},
     run::AppState,
     services::{dirs::get_dir_svc, files::get_photo_svc, oauth::authenticate_token},
     web::{Action, Resource, enforce_policy, handle_error},
@@ -150,7 +150,7 @@ pub async fn file_middleware(
     State(state): State<AppState>,
     Extension(ctx): Extension<Ctx>,
     Extension(dir): Extension<DirDto>,
-    Path(params): Path<MyFileParams>,
+    Path(params): Path<FileParams>,
     mut req: Request,
     next: Next,
 ) -> Result<Response> {
