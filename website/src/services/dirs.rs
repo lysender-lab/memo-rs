@@ -47,7 +47,7 @@ pub async fn list_dirs_svc(
     dir_type: &DirType,
     params: &SearchDirsParams,
 ) -> Result<Paginated<DirDto>> {
-    let url = format!("{}/{}/dirs", &state.config.api_url, dir_type);
+    let url = format!("{}/{}", &state.config.api_url, dir_type);
     let mut page = "1".to_string();
     let mut per_page = "10".to_string();
 
@@ -95,7 +95,7 @@ pub async fn create_dir_svc(
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(csrf_result == "new_dir", CsrfTokenSnafu);
 
-    let url = format!("{}/{}/dirs", &state.config.api_url, dir_type);
+    let url = format!("{}/{}", &state.config.api_url, dir_type);
 
     let data = NewDirData {
         name: form.name,
@@ -132,7 +132,7 @@ pub async fn get_dir_svc(
     dir_type: &DirType,
     dir_id: &str,
 ) -> Result<DirDto> {
-    let url = format!("{}/{}/dirs/{}", &state.config.api_url, dir_type, dir_id);
+    let url = format!("{}/{}/{}", &state.config.api_url, dir_type, dir_id);
     let response = state
         .client
         .get(url)
@@ -167,7 +167,7 @@ pub async fn update_dir_svc(
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(csrf_result == dir_id, CsrfTokenSnafu);
 
-    let url = format!("{}/{}/dirs/{}", &state.config.api_url, dir_type, dir_id);
+    let url = format!("{}/{}/{}", &state.config.api_url, dir_type, dir_id);
     let data = UpdateDirData {
         label: form.label.clone(),
     };
@@ -207,7 +207,7 @@ pub async fn delete_dir_svc(
 ) -> Result<()> {
     let csrf_result = verify_csrf_token(csrf_token, &state.config.jwt_secret)?;
     ensure!(csrf_result == dir_id, CsrfTokenSnafu);
-    let url = format!("{}/{}/dirs/{}", &state.config.api_url, dir_type, dir_id);
+    let url = format!("{}/{}/{}", &state.config.api_url, dir_type, dir_id);
     let response = state
         .client
         .delete(url)

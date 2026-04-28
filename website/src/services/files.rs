@@ -110,10 +110,7 @@ pub async fn list_files_svc(
     dir_id: &str,
     params: &ListFilesParams,
 ) -> Result<Paginated<Photo>> {
-    let url = format!(
-        "{}/{}/dirs/{}/files",
-        &state.config.api_url, dir_type, dir_id
-    );
+    let url = format!("{}/{}/{}/files", &state.config.api_url, dir_type, dir_id);
     let mut page = "1".to_string();
     let per_page = "50".to_string();
 
@@ -163,7 +160,7 @@ pub async fn get_photo_svc(
     file_id: &str,
 ) -> Result<Photo> {
     let url = format!(
-        "{}/{}/dirs/{}/files/{}",
+        "{}/{}/{}/files/{}",
         &state.config.api_url, dir_type, dir_id, file_id
     );
     let response = state
@@ -196,7 +193,7 @@ pub async fn prepare_upload_svc(
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(csrf_result == dir_id, CsrfTokenSnafu);
     let url = format!(
-        "{}/{}/dirs/{}/upload-url",
+        "{}/{}/{}/upload-url",
         &state.config.api_url, dir_type, dir_id
     );
 
@@ -235,10 +232,7 @@ pub async fn add_file_svc(
 ) -> Result<Photo> {
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(csrf_result == dir_id, CsrfTokenSnafu);
-    let url = format!(
-        "{}/{}/dirs/{}/files",
-        &state.config.api_url, dir_type, dir_id
-    );
+    let url = format!("{}/{}/{}/files", &state.config.api_url, dir_type, dir_id);
 
     let payload = SignedRemoteUploadDto {
         token: form.upload_token,
@@ -280,7 +274,7 @@ pub async fn delete_file_svc(
     let csrf_result = verify_csrf_token(csrf_token, &state.config.jwt_secret)?;
     ensure!(csrf_result == photo_id, CsrfTokenSnafu);
     let url = format!(
-        "{}/{}/dirs/{}/files/{}",
+        "{}/{}/{}/files/{}",
         &state.config.api_url, dir_type, dir_id, photo_id
     );
     let _ = state
