@@ -110,6 +110,13 @@ pub async fn dir_type_middleware(
         });
     };
 
+    // For now, only allow photos
+    if dir_type != DirType::Photos {
+        return Err(Error::BadRequest {
+            msg: format!("Unsupported dir type: {}", params.dir_type),
+        });
+    }
+
     // Forward to the next middleware/handler passing the dir_type information
     request.extensions_mut().insert(dir_type);
 
