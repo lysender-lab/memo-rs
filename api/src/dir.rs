@@ -5,10 +5,15 @@ use crate::Result;
 use crate::error::{DbSnafu, MaxDirsReachedSnafu, ValidationSnafu};
 use crate::state::AppState;
 use db::dir::{MAX_DIRS, NewDir, UpdateDir};
-use memo::dir::DirDto;
+use memo::dir::{DirDto, DirType};
 use memo::validators::flatten_errors;
 
-pub async fn create_dir(state: &AppState, bucket_id: &str, data: &NewDir) -> Result<DirDto> {
+pub async fn create_dir(
+    state: &AppState,
+    org_id: &str,
+    dir_type: &DirType,
+    data: &NewDir,
+) -> Result<DirDto> {
     let valid_res = data.validate();
     ensure!(
         valid_res.is_ok(),
@@ -18,14 +23,19 @@ pub async fn create_dir(state: &AppState, bucket_id: &str, data: &NewDir) -> Res
     );
 
     // Limit the number of directories per bucket
-    let count = state.db.dirs.count(bucket_id).await.context(DbSnafu)?;
+    let count = state
+        .db
+        .dirs
+        .count(org_id, dir_type)
+        .await
+        .context(DbSnafu)?;
     ensure!(count < MAX_DIRS as i64, MaxDirsReachedSnafu,);
 
     // Directory name must be unique for the bucket
     let existing = state
         .db
         .dirs
-        .find_by_name(bucket_id, data.name.as_str())
+        .find_by_name(org_id, dir_type, &data.name)
         .await
         .context(DbSnafu)?;
 
@@ -36,7 +46,12 @@ pub async fn create_dir(state: &AppState, bucket_id: &str, data: &NewDir) -> Res
         }
     );
 
-    state.db.dirs.create(bucket_id, data).await.context(DbSnafu)
+    state
+        .db
+        .dirs
+        .create(org_id, dir_type, data)
+        .await
+        .context(DbSnafu)
 }
 
 pub async fn update_dir(state: &AppState, id: &str, data: &UpdateDir) -> Result<bool> {

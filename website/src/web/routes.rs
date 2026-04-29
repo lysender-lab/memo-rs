@@ -16,6 +16,7 @@ use crate::run::AppState;
 use crate::web::auth::auth_callback_handler;
 use crate::web::files::{add_file_handler, generate_upload_url_handler};
 use crate::web::login::{login_handler, login_page_handler};
+use crate::web::middleware::dir_type_middleware;
 use crate::web::{error_handler, index_handler, logout_handler};
 
 use super::dirs::{
@@ -28,8 +29,7 @@ use super::files::{
     pre_delete_photo_handler, upload_page_handler,
 };
 use super::middleware::{
-    auth_middleware, dir_middleware, file_middleware, my_bucket_middleware, pref_middleware,
-    require_auth_middleware,
+    auth_middleware, dir_middleware, file_middleware, pref_middleware, require_auth_middleware,
 };
 use super::my_bucket::my_bucket_page_handler;
 use super::profile::profile_page_handler;
@@ -73,7 +73,7 @@ pub fn private_routes(state: AppState) -> Router {
         .route("/prefs/theme/light", post(light_theme_handler))
         .route("/prefs/theme/dark", post(dark_theme_handler))
         .route("/profile", get(profile_page_handler))
-        .nest("/buckets/{bucket_id}", my_bucket_routes(state.clone()))
+        .nest("/{dir_type}", my_bucket_routes(state.clone()))
         .layer(middleware::map_response_with_state(
             state.clone(),
             response_mapper,
@@ -95,10 +95,10 @@ fn my_bucket_routes(state: AppState) -> Router<AppState> {
         .route("/", get(my_bucket_page_handler))
         .route("/search_dirs", get(search_dirs_handler))
         .route("/new_dir", get(new_dir_handler).post(post_new_dir_handler))
-        .nest("/dirs/{dir_id}", my_dir_inner_routes(state.clone()))
+        .nest("/{dir_id}", my_dir_inner_routes(state.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
-            my_bucket_middleware,
+            dir_type_middleware,
         ))
         .with_state(state)
 }

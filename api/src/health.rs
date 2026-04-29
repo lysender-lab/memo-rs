@@ -75,7 +75,7 @@ async fn perform_checks(_config: &Config, db: Arc<DbMapper>) -> Result<HealthChe
 }
 
 async fn check_database(db: Arc<DbMapper>) -> Result<String> {
-    match db.buckets.test_read().await {
+    match db.dirs.test_read().await {
         Ok(_) => Ok("UP".to_string()),
         Err(e) => {
             let msg = format!("{}", e);

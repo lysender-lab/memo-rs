@@ -20,7 +20,6 @@ use crate::{
     services::token::create_csrf_token,
     web::{Action, Resource, enforce_policy},
 };
-use memo::bucket::BucketDto;
 use memo::dir::DirDto;
 use memo::file::SignedFileUploadDto;
 use memo::pagination::PaginatedMeta;
@@ -31,7 +30,6 @@ use super::handle_error_message;
 #[template(path = "widgets/photo_grid.html")]
 struct PhotoGridTemnplate {
     theme: String,
-    bucket: BucketDto,
     dir: DirDto,
     photos: Vec<Photo>,
     meta: Option<PaginatedMeta>,
@@ -43,7 +41,6 @@ struct PhotoGridTemnplate {
 pub async fn photo_listing_v2_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(pref): Extension<Pref>,
-    Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
     Query(query): Query<ListFilesParams>,
     State(state): State<AppState>,
@@ -51,13 +48,12 @@ pub async fn photo_listing_v2_handler(
     let actor = ctx.actor();
     enforce_policy(actor, Resource::Photo, Action::Read)?;
 
-    let bid = bucket.id.clone();
     let dir_id = dir.id.clone();
+    let dir_type = dir.dir_type.clone();
 
     let mut tpl = PhotoGridTemnplate {
         theme: pref.theme,
-        bucket,
-        dir,
+        dir: dir,
         photos: Vec::new(),
         meta: None,
         error_message: None,
@@ -66,7 +62,7 @@ pub async fn photo_listing_v2_handler(
     };
 
     let auth_token = ctx.token().expect("token is required");
-    let result = list_files_svc(&state, auth_token, &bid, &dir_id, &query).await;
+    let result = list_files_svc(&state, auth_token, &dir_type, &dir_id, &query).await;
 
     match result {
         Ok(listing) => {
@@ -103,7 +99,6 @@ pub async fn photo_listing_v2_handler(
 #[template(path = "pages/upload_photos.html")]
 struct UploadPageTemplate {
     t: TemplateData,
-    bucket: BucketDto,
     dir: DirDto,
     token: String,
 }
@@ -118,7 +113,6 @@ struct UploadedPhotoTemplate {
 pub async fn upload_page_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(pref): Extension<Pref>,
-    Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
@@ -132,12 +126,7 @@ pub async fn upload_page_handler(
 
     t.title = format!("Photos - {} - Upload Photos", &dir.label);
 
-    let tpl = UploadPageTemplate {
-        t,
-        bucket,
-        dir,
-        token,
-    };
+    let tpl = UploadPageTemplate { t, dir, token };
 
     Response::builder()
         .status(200)
@@ -155,7 +144,7 @@ pub async fn generate_upload_url_handler(
     enforce_policy(actor, Resource::Photo, Action::Create)?;
 
     let auth_token = ctx.token().expect("token is required");
-    let dto = prepare_upload_svc(&state, auth_token, &dir.bucket_id, &dir.id, payload.0).await?;
+    let dto = prepare_upload_svc(&state, auth_token, &dir.dir_type, &dir.id, payload.0).await?;
 
     Ok((StatusCode::OK, Json(dto)))
 }
@@ -174,7 +163,7 @@ pub async fn add_file_handler(
     let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
 
     let auth_token = ctx.token().expect("token is required");
-    let result = add_file_svc(&state, auth_token, &dir.bucket_id, &dir.id, payload.0).await;
+    let result = add_file_svc(&state, auth_token, &dir.dir_type, &dir.id, payload.0).await;
 
     match result {
         Ok(photo) => {
@@ -195,7 +184,6 @@ pub async fn add_file_handler(
 #[derive(Template)]
 #[template(path = "widgets/pre_delete_photo_form.html")]
 struct PreDeletePhotoTemplate {
-    bucket: BucketDto,
     dir: DirDto,
     photo: Photo,
 }
@@ -203,7 +191,6 @@ struct PreDeletePhotoTemplate {
 #[derive(Template)]
 #[template(path = "widgets/confirm_delete_photo_form.html")]
 struct ConfirmDeletePhotoTemplate {
-    bucket: BucketDto,
     dir: DirDto,
     photo: Photo,
     payload: TokenFormData,
@@ -213,7 +200,6 @@ struct ConfirmDeletePhotoTemplate {
 /// Shows pre-delete form controls
 pub async fn pre_delete_photo_handler(
     Extension(ctx): Extension<Ctx>,
-    Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
     Extension(photo): Extension<Photo>,
 ) -> Result<Response<Body>> {
@@ -224,7 +210,7 @@ pub async fn pre_delete_photo_handler(
     }
 
     // Just render the form on first load or on error
-    let tpl = PreDeletePhotoTemplate { bucket, dir, photo };
+    let tpl = PreDeletePhotoTemplate { dir, photo };
 
     Response::builder()
         .status(200)
@@ -235,7 +221,6 @@ pub async fn pre_delete_photo_handler(
 /// Shows delete/cancel form controls
 pub async fn confirm_delete_photo_handler(
     Extension(ctx): Extension<Ctx>,
-    Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
     Extension(photo): Extension<Photo>,
     State(state): State<AppState>,
@@ -256,7 +241,6 @@ pub async fn confirm_delete_photo_handler(
 
     // Just render the form on first load or on error
     let tpl = ConfirmDeletePhotoTemplate {
-        bucket,
         dir,
         photo,
         payload: TokenFormData { token },
@@ -271,7 +255,6 @@ pub async fn confirm_delete_photo_handler(
 
 pub async fn exec_delete_photo_handler(
     Extension(ctx): Extension<Ctx>,
-    Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
     Extension(photo): Extension<Photo>,
     State(state): State<AppState>,
@@ -279,8 +262,8 @@ pub async fn exec_delete_photo_handler(
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
     let actor = ctx.actor();
-    let bid = bucket.id.clone();
     let dir_id = dir.id.clone();
+    let dir_type = dir.dir_type.clone();
 
     if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Delete) {
         return Ok(handle_error_message(&err));
@@ -293,8 +276,15 @@ pub async fn exec_delete_photo_handler(
     };
 
     let auth_token = ctx.token().expect("token is required");
-    let result =
-        delete_file_svc(&state, auth_token, &bid, &dir_id, &photo.id, &payload.token).await;
+    let result = delete_file_svc(
+        &state,
+        auth_token,
+        &dir_type,
+        &dir_id,
+        &photo.id,
+        &payload.token,
+    )
+    .await;
     match result {
         Ok(_) => Response::builder()
             .status(204)
@@ -307,7 +297,6 @@ pub async fn exec_delete_photo_handler(
             // Re-render the form with a new token
             // We may need to render an error message somewhere in the page
             let tpl = ConfirmDeletePhotoTemplate {
-                bucket,
                 dir,
                 photo,
                 payload: TokenFormData { token },

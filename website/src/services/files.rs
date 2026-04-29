@@ -1,3 +1,4 @@
+use memo::dir::DirType;
 use memo::file::{FileDto, ImgDimension, ImgVersion, SignedFileUploadDto, SignedRemoteUploadDto};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
@@ -105,14 +106,11 @@ impl TryFrom<FileDto> for Photo {
 pub async fn list_files_svc(
     state: &AppState,
     token: &str,
-    bucket_id: &str,
+    dir_type: &DirType,
     dir_id: &str,
     params: &ListFilesParams,
 ) -> Result<Paginated<Photo>> {
-    let url = format!(
-        "{}/buckets/{}/dirs/{}/files",
-        &state.config.api_url, bucket_id, dir_id
-    );
+    let url = format!("{}/{}/{}/files", &state.config.api_url, dir_type, dir_id);
     let mut page = "1".to_string();
     let per_page = "50".to_string();
 
@@ -157,13 +155,13 @@ pub async fn list_files_svc(
 pub async fn get_photo_svc(
     state: &AppState,
     token: &str,
-    bucket_id: &str,
-    album_id: &str,
-    photo_id: &str,
+    dir_type: &DirType,
+    dir_id: &str,
+    file_id: &str,
 ) -> Result<Photo> {
     let url = format!(
-        "{}/buckets/{}/dirs/{}/files/{}",
-        &state.config.api_url, bucket_id, album_id, photo_id
+        "{}/{}/{}/files/{}",
+        &state.config.api_url, dir_type, dir_id, file_id
     );
     let response = state
         .client
@@ -188,15 +186,15 @@ pub async fn get_photo_svc(
 pub async fn prepare_upload_svc(
     state: &AppState,
     token: &str,
-    bucket_id: &str,
-    album_id: &str,
+    dir_type: &DirType,
+    dir_id: &str,
     form: PrepareUploadPayload,
 ) -> Result<SignedFileUploadDto> {
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
-    ensure!(csrf_result == album_id, CsrfTokenSnafu);
+    ensure!(csrf_result == dir_id, CsrfTokenSnafu);
     let url = format!(
-        "{}/buckets/{}/dirs/{}/upload-url",
-        &state.config.api_url, bucket_id, album_id
+        "{}/{}/{}/upload-url",
+        &state.config.api_url, dir_type, dir_id
     );
 
     let response = state
@@ -228,16 +226,13 @@ pub async fn prepare_upload_svc(
 pub async fn add_file_svc(
     state: &AppState,
     token: &str,
-    bucket_id: &str,
-    album_id: &str,
+    dir_type: &DirType,
+    dir_id: &str,
     form: CommitUploadPayload,
 ) -> Result<Photo> {
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
-    ensure!(csrf_result == album_id, CsrfTokenSnafu);
-    let url = format!(
-        "{}/buckets/{}/dirs/{}/files",
-        &state.config.api_url, bucket_id, album_id
-    );
+    ensure!(csrf_result == dir_id, CsrfTokenSnafu);
+    let url = format!("{}/{}/{}/files", &state.config.api_url, dir_type, dir_id);
 
     let payload = SignedRemoteUploadDto {
         token: form.upload_token,
@@ -271,16 +266,16 @@ pub async fn add_file_svc(
 pub async fn delete_file_svc(
     state: &AppState,
     token: &str,
-    bucket_id: &str,
-    album_id: &str,
+    dir_type: &DirType,
+    dir_id: &str,
     photo_id: &str,
     csrf_token: &str,
 ) -> Result<()> {
     let csrf_result = verify_csrf_token(csrf_token, &state.config.jwt_secret)?;
     ensure!(csrf_result == photo_id, CsrfTokenSnafu);
     let url = format!(
-        "{}/buckets/{}/dirs/{}/files/{}",
-        &state.config.api_url, bucket_id, album_id, photo_id
+        "{}/{}/{}/files/{}",
+        &state.config.api_url, dir_type, dir_id, photo_id
     );
     let _ = state
         .client

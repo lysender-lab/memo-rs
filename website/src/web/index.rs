@@ -1,6 +1,5 @@
 use askama::Template;
 use axum::{Extension, body::Body, extract::State, response::Response};
-use memo::bucket::BucketDto;
 use snafu::ResultExt;
 
 use crate::{
@@ -8,7 +7,6 @@ use crate::{
     ctx::Ctx,
     error::{ResponseBuilderSnafu, TemplateSnafu},
     models::TemplateData,
-    services::buckets::list_buckets,
 };
 use crate::{models::Pref, run::AppState};
 
@@ -18,7 +16,6 @@ use super::{Action, Resource, enforce_policy};
 #[template(path = "pages/index.html")]
 struct IndexTemplate {
     t: TemplateData,
-    buckets: Vec<BucketDto>,
 }
 
 pub async fn index_handler(
@@ -32,10 +29,7 @@ pub async fn index_handler(
     let mut t = TemplateData::new(&state, actor, &pref);
     t.title = String::from("Home");
 
-    let token = ctx.token().expect("token is required");
-    let buckets = list_buckets(&state, token).await?;
-
-    let tpl = IndexTemplate { t, buckets };
+    let tpl = IndexTemplate { t };
 
     Response::builder()
         .status(200)

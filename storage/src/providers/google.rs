@@ -1,3 +1,6 @@
+use std::path::Path;
+use std::time::Duration;
+
 use bytes::Bytes;
 use google_cloud_auth::credentials::Builder as CredentialsBuilder;
 use google_cloud_auth::signer::Signer;
@@ -6,34 +9,21 @@ use google_cloud_storage::builder::storage::SignedUrlBuilder;
 use google_cloud_storage::client::{Storage, StorageControl};
 use google_cloud_storage::http::Method;
 use snafu::ResultExt;
-use std::path::PathBuf;
-use std::time::Duration;
 use tokio::{fs::File, fs::create_dir_all, io::AsyncWriteExt};
 
-use crate::error::{CreateFileSnafu, GoogleSnafu, UploadDirSnafu, ValidationSnafu};
+use crate::error::{CreateFileSnafu, GoogleSnafu, UploadDirSnafu};
+use crate::provider::{DownloadRequest, DownloadedFile, UploadUrlRequest};
 use crate::{Error, Result};
-use memo::bucket::BucketDto;
-use memo::dir::DirDto;
-use memo::file::{FileDto, ImgVersionDto};
-use memo::file::{ImgVersion, ORIGINAL_PATH};
+use memo::dir::DirMeta;
+use memo::file::{FileDto, ImgVersion, ImgVersionDto, ORIGINAL_PATH};
 
-#[derive(Debug, Clone)]
-pub struct DownloadedFile {
-    pub upload_dir: PathBuf,
-    pub name: String,
-    pub filename: String,
-    pub path: PathBuf,
-    pub size: i64,
-}
-
-pub struct StorageClient {
+pub struct GoogleStorageProvider {
     storage: Storage,
     control: StorageControl,
     signer: Signer,
 }
 
-impl StorageClient {
-    /// Creates a new storage client using default credentials from ENV.
+impl GoogleStorageProvider {
     pub async fn new() -> Result<Self> {
         let storage = create_data_storage_client().await?;
         let control = create_storage_client().await?;
@@ -52,16 +42,14 @@ impl StorageClient {
 
     async fn upload_image_object(
         &self,
-        bucket: &BucketDto,
-        dir: &DirDto,
-        source_dir: &PathBuf,
+        dir: &DirMeta,
+        source_dir: &Path,
         file: &FileDto,
     ) -> Result<()> {
         if let Some(versions) = &file.img_versions {
             for version in versions.iter() {
-                // Skip the original version as it is already uploaded remotely
                 if version.version != ImgVersion::Original {
-                    self.upload_image_version(bucket, dir, source_dir, file, version)
+                    self.upload_image_version(dir, source_dir, file, version)
                         .await?;
                 }
             }
@@ -72,15 +60,17 @@ impl StorageClient {
 
     async fn upload_image_version(
         &self,
-        bucket: &BucketDto,
-        dir: &DirDto,
-        source_dir: &PathBuf,
+        dir: &DirMeta,
+        source_dir: &Path,
         file: &FileDto,
         version: &ImgVersionDto,
     ) -> Result<()> {
         let version_dir: String = version.version.to_string();
-        let file_path = format!("{}/{}/{}", &dir.name, &version_dir, &file.filename);
-        let bucket_name = bucket_resource_name(&bucket.name);
+        let file_path = format!(
+            "{}/{}/{}/{}/{}",
+            &dir.org_id, &dir.dir_type, &dir.dir_name, &version_dir, &file.filename
+        );
+        let bucket_name = bucket_resource_name(&dir.bucket_name);
 
         let source_path = source_dir.join(&version_dir).join(&file.filename);
         let Ok(data) = std::fs::read(&source_path) else {
@@ -116,87 +106,33 @@ impl StorageClient {
         }
     }
 
-    /// Reads a bucket to check its status.
-    pub async fn read_bucket(&self, name: &str) -> Result<String> {
-        let bucket_name = bucket_resource_name(name);
-
-        let res = self.control.get_bucket().set_name(bucket_name).send().await;
-
-        match res {
-            Ok(bucket) => Ok(bucket.name),
-            Err(e) => {
-                if let Some(code) = e.http_status_code() {
-                    match code {
-                        401 => ValidationSnafu {
-                            msg: "Cloud Storage: Unauthorized",
-                        }
-                        .fail(),
-                        403 => ValidationSnafu {
-                            msg: "Cloud Storage: Forbidden",
-                        }
-                        .fail(),
-                        404 => ValidationSnafu {
-                            msg: "Cloud Storage: Bucket not found",
-                        }
-                        .fail(),
-                        _ if (400..500).contains(&code) => {
-                            ValidationSnafu { msg: e.to_string() }.fail()
-                        }
-                        _ => GoogleSnafu { msg: e.to_string() }.fail(),
-                    }
-                } else {
-                    GoogleSnafu { msg: e.to_string() }.fail()
-                }
-            }
-        }
-    }
-
-    /// Uploads a file to cloud storage directly.
-    pub async fn upload(
-        &self,
-        bucket: &BucketDto,
-        dir: &DirDto,
-        source_dir: &PathBuf,
-        file: &FileDto,
-    ) -> Result<()> {
+    pub async fn upload(&self, dir: &DirMeta, source_dir: &Path, file: &FileDto) -> Result<()> {
         if file.is_image {
-            return self
-                .upload_image_object(bucket, dir, source_dir, file)
-                .await;
+            return self.upload_image_object(dir, source_dir, file).await;
         }
 
-        // For regular files, no need to upload as it is already uploaded remotely.
         Ok(())
     }
 
-    /// Downloads an object from cloud storage into a local file.
-    pub async fn download(
-        &self,
-        bucket_name: &str,
-        dir_name: &str,
-        version: &str,
-        orig_filename: &str,
-        new_filename: &str,
-        upload_dir: &PathBuf,
-    ) -> Result<DownloadedFile> {
-        let file_path = format!("{}/{}/{}", dir_name, version, new_filename);
+    pub async fn download(&self, req: DownloadRequest<'_>) -> Result<DownloadedFile> {
+        let file_path = format!(
+            "{}/{}/{}/{}/{}",
+            req.org_id, req.dir_type, req.dir_name, req.version, req.new_filename
+        );
         let res = self
             .storage
-            .read_object(bucket_resource_name(bucket_name), file_path)
+            .read_object(bucket_resource_name(req.bucket_name), file_path)
             .send()
             .await;
 
         match res {
             Ok(mut data) => {
-                // Ensure upload dir exists
-                let version_dir = upload_dir.clone().join(version);
-
+                let version_dir = req.upload_dir.join(req.version);
                 create_dir_all(version_dir.clone())
                     .await
                     .context(UploadDirSnafu)?;
 
-                // Prepare to save to file
-                let file_path = version_dir.as_path().join(&new_filename);
+                let file_path = version_dir.as_path().join(req.new_filename);
                 let mut size: usize = 0;
                 let mut file = File::create(&file_path)
                     .await
@@ -213,10 +149,10 @@ impl StorageClient {
                 }
 
                 Ok(DownloadedFile {
-                    upload_dir: upload_dir.clone(),
-                    name: orig_filename.to_owned(),
-                    filename: new_filename.to_owned(),
-                    path: version_dir.clone().join(new_filename),
+                    upload_dir: req.upload_dir.to_path_buf(),
+                    name: req.orig_filename.to_owned(),
+                    filename: req.new_filename.to_owned(),
+                    path: version_dir.clone().join(req.new_filename),
                     size: size as i64,
                 })
             }
@@ -224,42 +160,36 @@ impl StorageClient {
         }
     }
 
-    /// Deletes an object from cloud storage. If the file is an image, all versions will be deleted.
-    pub async fn delete(&self, bucket_name: &str, dir_name: &str, file: &FileDto) -> Result<()> {
+    pub async fn delete(&self, dir: &DirMeta, file: &FileDto) -> Result<()> {
         if file.is_image {
-            // Delete all versions
             if let Some(versions) = &file.img_versions {
                 for version in versions.iter() {
-                    let path = format!("{}/{}/{}", dir_name, version.version, &file.filename);
-                    let _ = self.delete_object_by_path(bucket_name, &path).await?;
+                    let path = format!(
+                        "{}/{}/{}/{}/{}",
+                        &dir.org_id, &dir.dir_type, &dir.dir_name, version.version, &file.filename
+                    );
+                    self.delete_object_by_path(&dir.bucket_name, &path).await?;
                 }
             }
         } else {
-            let path = format!("{}/{}/{}", dir_name, ORIGINAL_PATH, &file.filename);
-            let _ = self.delete_object_by_path(bucket_name, &path).await?;
+            let path = format!("{}/{}/{}", &dir.dir_name, ORIGINAL_PATH, &file.filename);
+            self.delete_object_by_path(&dir.bucket_name, &path).await?;
         }
 
         Ok(())
     }
 
-    pub async fn attach_urls(
-        &self,
-        bucket_name: &str,
-        dir_name: &str,
-        files: Vec<FileDto>,
-    ) -> Result<Vec<FileDto>> {
+    pub async fn attach_urls(&self, dir: &DirMeta, files: Vec<FileDto>) -> Result<Vec<FileDto>> {
         let signer = self.get_signer();
-        let bucket_resource = bucket_resource_name(bucket_name);
 
         let mut tasks = Vec::with_capacity(files.len());
         for file in files.iter() {
             let signer_copy = signer.clone();
             let file_copy = file.clone();
-            let bname = bucket_resource.clone();
-            let dir_name_copy = dir_name.to_string();
+            let dir_copy = dir.clone();
 
             tasks.push(tokio::spawn(async move {
-                format_file_single(&signer_copy, &bname, &dir_name_copy, file_copy).await
+                format_file_single(&signer_copy, &dir_copy, file_copy).await
             }));
         }
 
@@ -275,30 +205,20 @@ impl StorageClient {
         Ok(updated_files)
     }
 
-    pub async fn attach_url(
-        &self,
-        bucket_name: &str,
-        dir_name: &str,
-        file: FileDto,
-    ) -> Result<FileDto> {
-        let bucket_resource = bucket_resource_name(bucket_name);
-        format_file_single(self.get_signer(), &bucket_resource, dir_name, file).await
+    pub async fn attach_url(&self, dir: &DirMeta, file: FileDto) -> Result<FileDto> {
+        format_file_single(self.get_signer(), dir, file).await
     }
 
-    pub async fn generate_upload_url(
-        &self,
-        bucket_name: &str,
-        dir_name: &str,
-        version: &str,
-        filename: &str,
-        content_type: &str,
-    ) -> Result<String> {
-        let file_path = format!("{}/{}/{}", dir_name, version, filename);
+    pub async fn generate_upload_url(&self, req: UploadUrlRequest<'_>) -> Result<String> {
+        let file_path = format!(
+            "{}/{}/{}/{}/{}",
+            req.org_id, req.dir_type, req.dir_name, req.version, req.filename
+        );
         generate_upload_signed_url(
             self.get_signer(),
-            &bucket_resource_name(bucket_name),
+            &bucket_resource_name(req.bucket_name),
             &file_path,
-            content_type,
+            req.content_type,
         )
         .await
     }
@@ -378,12 +298,9 @@ async fn generate_upload_signed_url(
     }
 }
 
-async fn format_file_single(
-    signer: &Signer,
-    bucket_name: &str,
-    dir_name: &str,
-    mut file: FileDto,
-) -> Result<FileDto> {
+async fn format_file_single(signer: &Signer, dir: &DirMeta, mut file: FileDto) -> Result<FileDto> {
+    let bucket_name = bucket_resource_name(&dir.bucket_name);
+
     if file.is_image {
         if let Some(versions) = &file.img_versions
             && !versions.is_empty()
@@ -393,9 +310,11 @@ async fn format_file_single(
             for i in 0..versions.len() {
                 let mut version = versions[i].clone();
                 let signer_copy = signer.clone();
-                let bname = bucket_name.to_string();
-                let file_path = format!("{}/{}/{}", dir_name, version.version, file.filename);
-                let url = generate_signed_url(&signer_copy, &bname, &file_path).await?;
+                let file_path = format!(
+                    "{}/{}/{}/{}/{}",
+                    dir.org_id, dir.dir_type, dir.dir_name, version.version, file.filename
+                );
+                let url = generate_signed_url(&signer_copy, &bucket_name, &file_path).await?;
                 version.url = Some(url);
 
                 updated_versions.push(version);
@@ -407,9 +326,12 @@ async fn format_file_single(
         }
     } else {
         let url = generate_signed_url(
-            &signer,
-            bucket_name,
-            &format!("{}/{}/{}", dir_name, ORIGINAL_PATH, file.filename),
+            signer,
+            &bucket_name,
+            &format!(
+                "{}/{}/{}/{}/{}",
+                dir.org_id, dir.dir_type, dir.dir_name, ORIGINAL_PATH, file.filename
+            ),
         )
         .await?;
         file.url = Some(url);

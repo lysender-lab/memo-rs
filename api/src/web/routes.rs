@@ -6,18 +6,14 @@ use axum::{
 use super::{
     handler::{
         create_dir_handler, create_file_handler, delete_dir_handler, delete_file_handler,
-        get_bucket_handler, get_dir_handler, get_file_handler, health_live_handler,
-        health_ready_handler, home_handler, list_buckets_handler, list_dirs_handler,
-        list_files_handler, not_found_handler, update_dir_handler,
+        get_dir_handler, get_file_handler, health_live_handler, health_ready_handler, home_handler,
+        list_dirs_handler, list_files_handler, not_found_handler, update_dir_handler,
     },
-    middleware::{
-        auth_middleware, bucket_middleware, dir_middleware, file_middleware,
-        require_auth_middleware,
-    },
+    middleware::{auth_middleware, dir_middleware, file_middleware, require_auth_middleware},
 };
 use crate::{
     state::AppState,
-    web::handler::{create_upload_url_handler, update_bucket_handler},
+    web::{handler::create_upload_url_handler, middleware::dir_type_middleware},
 };
 
 pub fn all_routes(state: AppState) -> Router {
@@ -38,7 +34,11 @@ fn public_routes(state: AppState) -> Router<AppState> {
 
 fn private_routes(state: AppState) -> Router<AppState> {
     Router::new()
-        .nest("/buckets", buckets_routes(state.clone()))
+        .nest("/{dir_type}", dir_routes(state.clone()))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            dir_type_middleware,
+        ))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             require_auth_middleware,
@@ -46,24 +46,6 @@ fn private_routes(state: AppState) -> Router<AppState> {
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
-        ))
-        .with_state(state)
-}
-
-fn buckets_routes(state: AppState) -> Router<AppState> {
-    Router::new()
-        .route("/", get(list_buckets_handler))
-        .nest("/{bucket_id}", inner_bucket_routes(state.clone()))
-        .with_state(state)
-}
-
-fn inner_bucket_routes(state: AppState) -> Router<AppState> {
-    Router::new()
-        .route("/", get(get_bucket_handler).patch(update_bucket_handler))
-        .nest("/dirs", dir_routes(state.clone()))
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            bucket_middleware,
         ))
         .with_state(state)
 }

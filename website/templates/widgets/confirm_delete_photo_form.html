@@ -1,7 +1,7 @@
 <form
     method="post"
-    action="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/photos/{{ photo.id }}/delete"
-    hx-post="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/photos/{{ photo.id }}/delete"
+    action="/{{ dir.dir_type }}/{{ dir.id }}/photos/{{ photo.id }}/delete"
+    hx-post="/{{ dir.dir_type }}/{{ dir.id }}/photos/{{ photo.id }}/delete"
     hx-target="closest .photo-grid-item"
     hx-swap="outerHTML"
 >
@@ -15,7 +15,7 @@
         <input type="hidden" name="token" value="{{ payload.token }}" />
         <button
             class="button is-small mr-2"
-            hx-get="/buckets/{{ bucket.id }}/dirs/{{ dir.id }}/photos/{{ photo.id }}/delete_controls"
+            hx-get="/{{ dir.dir_type }}/{{ dir.id }}/photos/{{ photo.id }}/delete_controls"
             hx-target="closest .photo-item-controls"
             hx-swap="innnerHTML"
         >

@@ -4,7 +4,6 @@ use snafu::ResultExt;
 use turso::{Builder, Connection};
 
 use crate::any::AnyRepo;
-use crate::bucket::BucketRepo;
 use crate::dir::DirRepo;
 use crate::error::{DbBuilderSnafu, DbConnectSnafu};
 use crate::file::FileRepo;
@@ -26,7 +25,6 @@ pub async fn create_db_pool(filename: &Path) -> Result<Connection> {
 }
 
 pub struct DbMapper {
-    pub buckets: BucketRepo,
     pub dirs: DirRepo,
     pub files: FileRepo,
     pub any: AnyRepo,
@@ -35,7 +33,6 @@ pub struct DbMapper {
 pub async fn create_db_mapper(filename: &Path) -> Result<DbMapper> {
     let pool = create_db_pool(filename).await?;
     Ok(DbMapper {
-        buckets: BucketRepo::new(pool.clone()),
         dirs: DirRepo::new(pool.clone()),
         files: FileRepo::new(pool.clone()),
         any: AnyRepo::new(pool.clone()),

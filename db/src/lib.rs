@@ -1,5 +1,4 @@
 mod any;
-pub mod bucket;
 pub mod db;
 pub mod dir;
 pub mod error;

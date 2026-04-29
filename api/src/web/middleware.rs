@@ -15,9 +15,12 @@ use crate::{
     },
     oauth::authenticate_token,
     state::AppState,
-    web::params::Params,
+    web::params::{DirParams, DirTypeParams, FileParams},
 };
-use memo::{bucket::BucketDto, dir::DirDto, file::FileDto};
+use memo::{
+    dir::{DirDto, DirType},
+    file::FileDto,
+};
 use yaas::{actor::Actor, role::Permission};
 
 pub async fn auth_middleware(
@@ -60,62 +63,21 @@ pub async fn require_auth_middleware(
     Ok(next.run(request).await)
 }
 
-pub async fn bucket_middleware(
-    State(state): State<AppState>,
-    Extension(actor): Extension<Actor>,
-    Path(params): Path<Params>,
+/// Ensure that dir_type is valid
+pub async fn dir_type_middleware(
+    Path(params): Path<DirTypeParams>,
     mut request: Request,
     next: Next,
 ) -> Result<Response<Body>> {
-    let permissions = vec![Permission::BucketsView];
-    ensure!(
-        actor.has_permissions(&permissions),
-        ForbiddenSnafu {
-            msg: "Insufficient permissions"
-        }
-    );
-
-    // ensure!(
-    //     valid_id(&params.bucket_id),
-    //     BadRequestSnafu {
-    //         msg: "Invalid bucket id"
-    //     }
-    // );
-
-    let mut bucket_res: Option<BucketDto> = state.bucket_cache.get(&params.bucket_id);
-
-    if bucket_res.is_none() {
-        // Fetch from database
-        bucket_res = state
-            .db
-            .buckets
-            .retry_get(&params.bucket_id, 5)
-            .await
-            .context(DbSnafu)?;
-
-        if let Some(b) = bucket_res.clone() {
-            // Store to cache if present
-            state.bucket_cache.insert(params.bucket_id.clone(), b);
-        }
-    }
-
-    let bucket = bucket_res.context(NotFoundSnafu {
-        msg: "Bucket not found",
-    })?;
-
-    let Some(actor) = actor.actor.as_ref() else {
-        return Err(Error::InvalidAuthToken);
+    let Ok(dir_type) = DirType::try_from(params.dir_type.as_str()) else {
+        return Err(Error::BadRequest {
+            msg: format!("Invalid dir type: {}", params.dir_type),
+        });
     };
 
-    ensure!(
-        bucket.client_id == actor.org_id,
-        NotFoundSnafu {
-            msg: "Bucket not found"
-        }
-    );
+    // Forward to the next middleware/handler passing the dir_type information
+    request.extensions_mut().insert(dir_type);
 
-    // Forward to the next middleware/handler passing the bucket information
-    request.extensions_mut().insert(bucket);
     let response = next.run(request).await;
     Ok(response)
 }
@@ -123,7 +85,8 @@ pub async fn bucket_middleware(
 pub async fn dir_middleware(
     state: State<AppState>,
     Extension(actor): Extension<Actor>,
-    Path(params): Path<Params>,
+    Extension(dir_type): Extension<DirType>,
+    Path(params): Path<DirParams>,
     mut request: Request,
     next: Next,
 ) -> Result<Response<Body>> {
@@ -135,17 +98,20 @@ pub async fn dir_middleware(
         }
     );
 
-    let did = params.dir_id.clone().expect("dir_id is required");
-
-    let mut dir_res: Option<DirDto> = state.dir_cache.get(&did);
+    let mut dir_res: Option<DirDto> = state.dir_cache.get(&params.dir_id);
 
     if dir_res.is_none() {
         // Fetch from database
-        dir_res = state.db.dirs.retry_get(&did, 5).await.context(DbSnafu)?;
+        dir_res = state
+            .db
+            .dirs
+            .retry_get(&params.dir_id, 5)
+            .await
+            .context(DbSnafu)?;
 
         if let Some(d) = dir_res.clone() {
             // Store to cache if present
-            state.dir_cache.insert(did.clone(), d);
+            state.dir_cache.insert(params.dir_id.clone(), d);
         }
     }
 
@@ -155,8 +121,21 @@ pub async fn dir_middleware(
 
     let dto: DirDto = dir;
 
+    // Org must match
+    let actor = actor
+        .actor
+        .expect("Actor must be present in auth middleware");
+
     ensure!(
-        dto.bucket_id == params.bucket_id,
+        dto.org_id == actor.org_id,
+        NotFoundSnafu {
+            msg: "Directory not found"
+        }
+    );
+
+    // Dir type must match
+    ensure!(
+        dto.dir_type == dir_type,
         NotFoundSnafu {
             msg: "Directory not found"
         }
@@ -171,7 +150,7 @@ pub async fn dir_middleware(
 pub async fn file_middleware(
     state: State<AppState>,
     Extension(actor): Extension<Actor>,
-    Path(params): Path<Params>,
+    Path(params): Path<FileParams>,
     mut request: Request,
     next: Next,
 ) -> Result<Response<Body>> {
@@ -183,18 +162,15 @@ pub async fn file_middleware(
         }
     );
 
-    let did = params.dir_id.clone().expect("dir_id is required");
-    let fid = params.file_id.clone().expect("file_id is required");
-
-    let mut file_res: Option<FileDto> = state.file_cache.get(&fid);
+    let mut file_res: Option<FileDto> = state.file_cache.get(&params.file_id);
 
     if file_res.is_none() {
         // Fetch from database
-        file_res = state.db.files.get(&fid).await.context(DbSnafu)?;
+        file_res = state.db.files.get(&params.file_id).await.context(DbSnafu)?;
 
         if let Some(f) = file_res.clone() {
             // Store to cache if present
-            state.file_cache.insert(fid.clone(), f);
+            state.file_cache.insert(params.file_id.clone(), f);
         }
     }
 
@@ -203,7 +179,7 @@ pub async fn file_middleware(
     })?;
 
     ensure!(
-        file.dir_id == did,
+        file.dir_id == params.dir_id,
         NotFoundSnafu {
             msg: "File not found"
         }

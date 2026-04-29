@@ -1,6 +1,5 @@
 use axum::Router;
 use axum::extract::FromRef;
-use memo::bucket::BucketDto;
 use moka::sync::Cache;
 use reqwest::{Client, ClientBuilder};
 use std::sync::Arc;
@@ -23,7 +22,6 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub client: Client,
     pub auth_cache: Cache<String, Actor>,
-    pub bucket_cache: Cache<String, BucketDto>,
     pub dir_cache: Cache<String, DirDto>,
     pub file_cache: Cache<String, Photo>,
 }
@@ -37,12 +35,6 @@ pub async fn run(config: Config) -> Result<()> {
         .expect("HTTP Client is required");
 
     let auth_cache = Cache::builder()
-        .time_to_live(Duration::from_secs(10 * 60))
-        .time_to_idle(Duration::from_secs(60))
-        .max_capacity(100)
-        .build();
-
-    let bucket_cache = Cache::builder()
         .time_to_live(Duration::from_secs(10 * 60))
         .time_to_idle(Duration::from_secs(60))
         .max_capacity(100)
@@ -64,7 +56,6 @@ pub async fn run(config: Config) -> Result<()> {
         config: Arc::new(config),
         client,
         auth_cache,
-        bucket_cache,
         dir_cache,
         file_cache,
     };

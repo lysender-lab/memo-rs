@@ -1,15 +1,15 @@
+use core::result::Result as CoreResult;
+
 use axum::{
     Extension,
-    extract::{Json, Path, Query, State, rejection::JsonRejection},
+    extract::{Json, Query, State, rejection::JsonRejection},
     http::StatusCode,
     response::IntoResponse,
 };
-use core::result::Result as CoreResult;
 use serde::Serialize;
 use snafu::{OptionExt, ResultExt, ensure};
 
 use crate::{
-    bucket::update_bucket,
     dir::{create_dir, delete_dir, update_dir},
     error::{
         DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, Result, StorageSnafu,
@@ -19,14 +19,12 @@ use crate::{
     health::{check_liveness, check_readiness},
     state::AppState,
     token::verify_upload_token,
-    web::{params::Params, response::JsonResponse},
+    web::response::JsonResponse,
 };
-use db::bucket::UpdateBucket;
 use db::dir::{ListDirsParams, NewDir, UpdateDir};
 use db::file::ListFilesParams;
 use memo::{
-    bucket::BucketDto,
-    dir::DirDto,
+    dir::{DirDto, DirMeta, DirType},
     file::{FileDto, ORIGINAL_PATH, RemoteUploadDto, SignedRemoteUploadDto},
     pagination::Paginated,
 };
@@ -74,71 +72,10 @@ pub async fn health_ready_handler(State(state): State<AppState>) -> Result<JsonR
     ))
 }
 
-pub async fn list_buckets_handler(
-    State(state): State<AppState>,
-    Extension(actor): Extension<Actor>,
-) -> Result<JsonResponse> {
-    let permissions = vec![Permission::BucketsView];
-    ensure!(
-        actor.has_permissions(&permissions),
-        ForbiddenSnafu {
-            msg: "Insufficient permissions"
-        }
-    );
-    let actor = actor.actor.expect("Actor is required");
-    let buckets = state
-        .db
-        .buckets
-        .list(&actor.org_id)
-        .await
-        .context(DbSnafu)?;
-
-    Ok(JsonResponse::new(serde_json::to_string(&buckets).unwrap()))
-}
-
-pub async fn get_bucket_handler(Extension(bucket): Extension<BucketDto>) -> Result<JsonResponse> {
-    Ok(JsonResponse::new(serde_json::to_string(&bucket).unwrap()))
-}
-
-pub async fn update_bucket_handler(
-    State(state): State<AppState>,
-    Extension(actor): Extension<Actor>,
-    Extension(bucket): Extension<BucketDto>,
-    payload: CoreResult<Json<UpdateBucket>, JsonRejection>,
-) -> Result<JsonResponse> {
-    let permissions = vec![Permission::BucketsEdit];
-    ensure!(
-        actor.has_permissions(&permissions),
-        ForbiddenSnafu {
-            msg: "Insufficient permissions"
-        }
-    );
-
-    let data = payload.context(JsonRejectionSnafu {
-        msg: "Invalid request payload",
-    })?;
-
-    let updated = update_bucket(&state, &bucket.id, &data).await?;
-    let updated_bucket = match updated {
-        true => {
-            let mut b = bucket.clone();
-            if let Some(label) = &data.label {
-                b.label = label.clone();
-            }
-            b
-        }
-        false => bucket,
-    };
-
-    Ok(JsonResponse::new(
-        serde_json::to_string(&updated_bucket).unwrap(),
-    ))
-}
-
 pub async fn list_dirs_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
-    Extension(bucket): Extension<BucketDto>,
+    Extension(dir_type): Extension<DirType>,
     query: Query<ListDirsParams>,
 ) -> Result<JsonResponse> {
     let permissions = vec![Permission::DirsList];
@@ -149,10 +86,12 @@ pub async fn list_dirs_handler(
         }
     );
 
+    let actor = actor.actor.expect("Actor must be present");
+
     let dirs = state
         .db
         .dirs
-        .list(bucket.id.as_str(), &query)
+        .list(&actor.org_id, &dir_type, &query)
         .await
         .context(DbSnafu)?;
 
@@ -162,7 +101,7 @@ pub async fn list_dirs_handler(
 pub async fn create_dir_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
-    Extension(bucket): Extension<BucketDto>,
+    Extension(dir_type): Extension<DirType>,
     payload: CoreResult<Json<NewDir>, JsonRejection>,
 ) -> Result<JsonResponse> {
     let permissions = vec![Permission::DirsCreate];
@@ -177,7 +116,9 @@ pub async fn create_dir_handler(
         msg: "Invalid request payload",
     })?;
 
-    let dir = create_dir(&state, &bucket.id, &data).await?;
+    let actor = actor.actor.expect("Actor must be present");
+
+    let dir = create_dir(&state, &actor.org_id, &dir_type, &data).await?;
 
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,
@@ -228,7 +169,7 @@ async fn get_dir_as_response(state: &AppState, id: &str) -> Result<JsonResponse>
 pub async fn delete_dir_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
-    Path(params): Path<Params>,
+    Extension(dir): Extension<DirDto>,
 ) -> Result<JsonResponse> {
     let permissions = vec![Permission::DirsDelete];
     ensure!(
@@ -238,8 +179,7 @@ pub async fn delete_dir_handler(
         }
     );
 
-    let dir_id = params.dir_id.clone().expect("dir_id is required");
-    delete_dir(&state, &dir_id).await?;
+    delete_dir(&state, &dir.id).await?;
     Ok(JsonResponse::with_status(
         StatusCode::NO_CONTENT,
         "".to_string(),
@@ -249,7 +189,6 @@ pub async fn delete_dir_handler(
 pub async fn list_files_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
-    Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
     query: Query<ListFilesParams>,
 ) -> Result<JsonResponse> {
@@ -264,9 +203,18 @@ pub async fn list_files_handler(
     let files = state.db.files.list(&dir, &query).await.context(DbSnafu)?;
     let storage_client = state.storage_client.clone();
 
+    let actor = actor.actor.expect("Actor must be present");
+
+    let dir_meta = DirMeta {
+        bucket_name: state.config.cloud.bucket.clone(),
+        org_id: actor.org_id,
+        dir_type: dir.dir_type,
+        dir_name: dir.name,
+    };
+
     // Generate download urls for each files
     let items = storage_client
-        .attach_urls(&bucket.name, &dir.name, files.data)
+        .attach_urls(&dir_meta, files.data)
         .await
         .context(StorageSnafu)?;
 
@@ -283,7 +231,6 @@ pub async fn list_files_handler(
 pub async fn create_upload_url_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
-    Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
     payload: CoreResult<Json<RemoteUploadDto>, JsonRejection>,
 ) -> Result<JsonResponse> {
@@ -299,7 +246,7 @@ pub async fn create_upload_url_handler(
         msg: "Invalid request payload",
     })?;
 
-    let dto = generate_upload_url(state, &bucket, &dir, &data.0).await?;
+    let dto = generate_upload_url(state, &dir, &data.0).await?;
 
     Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
 }
@@ -307,7 +254,6 @@ pub async fn create_upload_url_handler(
 pub async fn create_file_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
-    Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
     payload: CoreResult<Json<SignedRemoteUploadDto>, JsonRejection>,
 ) -> Result<JsonResponse> {
@@ -328,12 +274,19 @@ pub async fn create_file_handler(
     let orig_filename = upload_claims.orig_filename;
     let new_filename = upload_claims.new_filename;
 
+    let actor = actor.actor.expect("Actor must be present");
+    let dir_meta = DirMeta {
+        bucket_name: state.config.cloud.bucket.clone(),
+        org_id: actor.org_id,
+        dir_type: dir.dir_type.clone(),
+        dir_name: dir.name.clone(),
+    };
+
     // Download file locally
     let downloaded = state
         .storage_client
         .download(
-            &bucket.name,
-            &dir.name,
+            &dir_meta,
             ORIGINAL_PATH,
             &orig_filename,
             &new_filename,
@@ -343,10 +296,10 @@ pub async fn create_file_handler(
         .context(StorageSnafu)?;
 
     let storage_client = state.storage_client.clone();
-    let file = create_file(state, &bucket, &dir, &downloaded).await?;
+    let file = create_file(state, &dir, &downloaded).await?;
     let file_dto: FileDto = file;
     let file_dto = storage_client
-        .attach_url(&bucket.name, &dir.name, file_dto)
+        .attach_url(&dir_meta, file_dto)
         .await
         .context(StorageSnafu)?;
 
@@ -358,14 +311,22 @@ pub async fn create_file_handler(
 
 pub async fn get_file_handler(
     State(state): State<AppState>,
-    Extension(bucket): Extension<BucketDto>,
+    Extension(actor): Extension<Actor>,
     Extension(dir): Extension<DirDto>,
     Extension(file): Extension<FileDto>,
 ) -> Result<JsonResponse> {
+    let actor = actor.actor.expect("Actor must be present");
+    let dir_meta = DirMeta {
+        bucket_name: state.config.cloud.bucket.clone(),
+        org_id: actor.org_id,
+        dir_type: dir.dir_type.clone(),
+        dir_name: dir.name.clone(),
+    };
+
     let storage_client = state.storage_client.clone();
     // Extract dir from the middleware extension
     let file_dto = storage_client
-        .attach_url(&bucket.name, &dir.name, file)
+        .attach_url(&dir_meta, file)
         .await
         .context(StorageSnafu)?;
     Ok(JsonResponse::new(serde_json::to_string(&file_dto).unwrap()))
@@ -374,7 +335,6 @@ pub async fn get_file_handler(
 pub async fn delete_file_handler(
     State(state): State<AppState>,
     Extension(actor): Extension<Actor>,
-    Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
     Extension(file): Extension<FileDto>,
 ) -> Result<JsonResponse> {
@@ -386,6 +346,14 @@ pub async fn delete_file_handler(
         }
     );
 
+    let actor = actor.actor.expect("Actor must be present");
+    let dir_meta = DirMeta {
+        bucket_name: state.config.cloud.bucket.clone(),
+        org_id: actor.org_id,
+        dir_type: dir.dir_type.clone(),
+        dir_name: dir.name.clone(),
+    };
+
     // Delete record
     state.db.files.delete(&file.id).await.context(DbSnafu)?;
     state.file_cache.remove(&file.id);
@@ -393,7 +361,7 @@ pub async fn delete_file_handler(
     // Delete file(s) from storage
     let storage_client = state.storage_client.clone();
     storage_client
-        .delete(&bucket.name, &dir.name, &file)
+        .delete(&dir_meta, &file)
         .await
         .context(StorageSnafu)?;
 

@@ -1,3 +1,4 @@
+use memo::dir::DirType;
 use snafu::ResultExt;
 use turso::{Row, Rows, Value};
 
@@ -52,6 +53,15 @@ pub fn row_text(row: &Row, idx: usize) -> Result<String> {
         .as_text()
         .cloned()
         .ok_or_else(|| format!("Expected text value at column index {idx}").into())
+}
+
+pub fn row_dir_type(row: &Row, idx: usize) -> Result<DirType> {
+    let value = row_text(row, idx)?;
+    let Ok(dir_type) = DirType::try_from(value.as_str()) else {
+        return Err(format!("Invalid dir type value: {}", value).into());
+    };
+
+    Ok(dir_type)
 }
 
 pub fn row_integer(row: &Row, idx: usize) -> Result<i64> {

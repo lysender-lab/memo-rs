@@ -6,7 +6,7 @@ use crate::Result;
 use crate::error::{DbPrepareSnafu, DbStatementSnafu};
 use crate::turso_decode::{FromTursoRow, collect_count, collect_rows};
 
-/// Allows running artitrary queries/executions against any table.
+/// Allows running arbitrary queries/executions against any table.
 pub struct AnyRepo {
     db_pool: Connection,
 }

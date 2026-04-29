@@ -2,16 +2,15 @@ use askama::Template;
 use axum::extract::Query;
 use axum::http::StatusCode;
 use axum::{Extension, Form, body::Body, extract::State, response::Response};
-use memo::bucket::BucketDto;
-use memo::dir::DirDto;
+use memo::dir::{DirDto, DirType};
 use snafu::ResultExt;
 use urlencoding::encode;
 
 use crate::models::PaginationLinks;
 use crate::models::tokens::TokenFormData;
 use crate::services::dirs::{
-    NewDirFormData, SearchDirsParams, UpdateDirFormData, create_dir, delete_dir, list_dirs,
-    update_dir,
+    NewDirFormData, SearchDirsParams, UpdateDirFormData, create_dir_svc, delete_dir_svc,
+    list_dirs_svc, update_dir_svc,
 };
 use crate::{
     Error, Result,
@@ -26,7 +25,7 @@ use crate::{
 #[derive(Template)]
 #[template(path = "widgets/search_dirs.html")]
 struct SearchDirsTemplate {
-    bucket: BucketDto,
+    dir_type: DirType,
     dirs: Vec<DirDto>,
     pagination: Option<PaginationLinks>,
     can_create: bool,
@@ -35,17 +34,15 @@ struct SearchDirsTemplate {
 
 pub async fn search_dirs_handler(
     Extension(ctx): Extension<Ctx>,
-    Extension(bucket): Extension<BucketDto>,
+    Extension(dir_type): Extension<DirType>,
     State(state): State<AppState>,
     Query(query): Query<SearchDirsParams>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor();
     enforce_policy(actor, Resource::Album, Action::Read)?;
 
-    let bid = bucket.id.clone();
-
     let mut tpl = SearchDirsTemplate {
-        bucket,
+        dir_type: dir_type.clone(),
         dirs: Vec::new(),
         pagination: None,
         can_create: enforce_policy(actor, Resource::Album, Action::Create).is_ok(),
@@ -53,7 +50,7 @@ pub async fn search_dirs_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    match list_dirs(&state, token, &bid, &query).await {
+    match list_dirs_svc(&state, token, &dir_type, &query).await {
         Ok(dirs) => {
             let mut keyword_param: String = "".to_string();
             if let Some(keyword) = &query.keyword {
@@ -83,7 +80,7 @@ pub async fn search_dirs_handler(
 #[template(path = "pages/new_dir.html")]
 struct NewDirTemplate {
     t: TemplateData,
-    bucket: BucketDto,
+    dir_type: DirType,
     payload: NewDirFormData,
     error_message: Option<String>,
 }
@@ -91,7 +88,7 @@ struct NewDirTemplate {
 #[derive(Template)]
 #[template(path = "widgets/new_dir_form.html")]
 struct DirFormTemplate {
-    bucket: BucketDto,
+    dir_type: DirType,
     payload: NewDirFormData,
     error_message: Option<String>,
 }
@@ -99,7 +96,7 @@ struct DirFormTemplate {
 pub async fn new_dir_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(pref): Extension<Pref>,
-    Extension(bucket): Extension<BucketDto>,
+    Extension(dir_type): Extension<DirType>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
@@ -108,16 +105,16 @@ pub async fn new_dir_handler(
     enforce_policy(actor, Resource::Album, Action::Create)?;
 
     let mut t = TemplateData::new(&state, actor, &pref);
-    t.title = String::from(match bucket.images_only {
-        true => "Create New Album",
-        false => "Create New Directory",
+    t.title = String::from(match dir_type {
+        DirType::Videos => "Create New Album",
+        _ => "Create New Directory",
     });
 
     let token = create_csrf_token("new_dir", &config.jwt_secret)?;
 
     let tpl = NewDirTemplate {
         t,
-        bucket,
+        dir_type,
         payload: NewDirFormData {
             name: "".to_string(),
             label: "".to_string(),
@@ -134,7 +131,7 @@ pub async fn new_dir_handler(
 
 pub async fn post_new_dir_handler(
     Extension(ctx): Extension<Ctx>,
-    Extension(bucket): Extension<BucketDto>,
+    Extension(dir_type): Extension<DirType>,
     State(state): State<AppState>,
     payload: Form<NewDirFormData>,
 ) -> Result<Response<Body>> {
@@ -144,10 +141,9 @@ pub async fn post_new_dir_handler(
     enforce_policy(actor, Resource::Album, Action::Create)?;
 
     let token = create_csrf_token("new_dir", &config.jwt_secret)?;
-    let bid = bucket.id.clone();
 
     let mut tpl = DirFormTemplate {
-        bucket,
+        dir_type: dir_type.clone(),
         payload: NewDirFormData {
             name: "".to_string(),
             label: "".to_string(),
@@ -165,11 +161,11 @@ pub async fn post_new_dir_handler(
     };
 
     let token = ctx.token().expect("token is required");
-    let result = create_dir(&state, token, &bid, dir).await;
+    let result = create_dir_svc(&state, token, &dir_type, dir).await;
 
     match result {
         Ok(_) => {
-            let next_url = format!("/buckets/{}", &bid);
+            let next_url = format!("/{}", &dir_type);
             // Weird but can't do a redirect here, let htmx handle it
             Ok(Response::builder()
                 .status(200)
@@ -198,7 +194,6 @@ pub async fn post_new_dir_handler(
 #[template(path = "pages/dir.html")]
 struct DirTemplate {
     t: TemplateData,
-    bucket: BucketDto,
     dir: DirDto,
     updated: bool,
     can_edit: bool,
@@ -210,7 +205,6 @@ struct DirTemplate {
 pub async fn dir_page_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(pref): Extension<Pref>,
-    Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
@@ -221,7 +215,6 @@ pub async fn dir_page_handler(
 
     let tpl = DirTemplate {
         t,
-        bucket,
         dir,
         updated: false,
         can_edit: enforce_policy(actor, Resource::Album, Action::Update).is_ok(),
@@ -239,7 +232,6 @@ pub async fn dir_page_handler(
 #[derive(Template)]
 #[template(path = "widgets/edit_dir_controls.html")]
 struct EditDirControlsTemplate {
-    bucket: BucketDto,
     dir: DirDto,
     updated: bool,
     can_edit: bool,
@@ -251,14 +243,12 @@ struct EditDirControlsTemplate {
 /// Simply re-renders the edit and delete dir controls
 pub async fn edit_dir_controls_handler(
     Extension(ctx): Extension<Ctx>,
-    Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor();
     enforce_policy(actor, Resource::Album, Action::Update)?;
 
     let tpl = EditDirControlsTemplate {
-        bucket,
         dir,
         updated: false,
         can_edit: enforce_policy(actor, Resource::Album, Action::Update).is_ok(),
@@ -277,7 +267,6 @@ pub async fn edit_dir_controls_handler(
 #[template(path = "widgets/edit_dir_form.html")]
 struct EditDirFormTemplate {
     payload: UpdateDirFormData,
-    bucket: BucketDto,
     dir: DirDto,
     error_message: Option<String>,
 }
@@ -285,7 +274,6 @@ struct EditDirFormTemplate {
 /// Renders the edit album form
 pub async fn edit_dir_handler(
     Extension(ctx): Extension<Ctx>,
-    Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
@@ -298,7 +286,6 @@ pub async fn edit_dir_handler(
 
     let label = dir.label.clone();
     let tpl = EditDirFormTemplate {
-        bucket,
         dir,
         payload: UpdateDirFormData { label, token },
         error_message: None,
@@ -313,13 +300,11 @@ pub async fn edit_dir_handler(
 /// Handles the edit album submission
 pub async fn post_edit_dir_handler(
     Extension(ctx): Extension<Ctx>,
-    Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
     payload: Form<UpdateDirFormData>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
-    let bid = bucket.id.clone();
     let dir_id = dir.id.clone();
     let actor = ctx.actor();
 
@@ -328,7 +313,6 @@ pub async fn post_edit_dir_handler(
     let token = create_csrf_token(&dir_id, &config.jwt_secret)?;
 
     let mut tpl = EditDirFormTemplate {
-        bucket: bucket.clone(),
         dir: dir.clone(),
         payload: UpdateDirFormData {
             label: "".to_string(),
@@ -340,12 +324,11 @@ pub async fn post_edit_dir_handler(
     tpl.payload.label = payload.label.clone();
 
     let token = ctx.token().expect("token is required");
-    let result = update_dir(&state, token, &bid, &dir_id, &payload).await;
+    let result = update_dir_svc(&state, token, &dir.dir_type, &dir_id, &payload).await;
     match result {
         Ok(updated_dir) => {
             // Render the controls again with an out-of-bound swap for title
             let tpl = EditDirControlsTemplate {
-                bucket,
                 dir: updated_dir,
                 updated: true,
                 can_edit: enforce_policy(actor, Resource::Album, Action::Update).is_ok(),
@@ -386,7 +369,6 @@ pub async fn post_edit_dir_handler(
 #[derive(Template)]
 #[template(path = "widgets/delete_dir_form.html")]
 struct DeleteDirTemplate {
-    bucket: BucketDto,
     dir: DirDto,
     payload: TokenFormData,
     error_message: Option<String>,
@@ -394,7 +376,6 @@ struct DeleteDirTemplate {
 
 pub async fn get_delete_dir_handler(
     Extension(ctx): Extension<Ctx>,
-    Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
@@ -405,7 +386,6 @@ pub async fn get_delete_dir_handler(
     let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
 
     let tpl = DeleteDirTemplate {
-        bucket,
         dir,
         payload: TokenFormData { token },
         error_message: None,
@@ -420,7 +400,6 @@ pub async fn get_delete_dir_handler(
 /// Deletes album then redirect or show error
 pub async fn post_delete_dir_handler(
     Extension(ctx): Extension<Ctx>,
-    Extension(bucket): Extension<BucketDto>,
     Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
     payload: Form<TokenFormData>,
@@ -434,16 +413,13 @@ pub async fn post_delete_dir_handler(
 
     let auth_token = ctx.token().expect("token is required");
 
-    let result = delete_dir(&state, auth_token, &bucket.id, &dir.id, &payload.token).await;
+    let result = delete_dir_svc(&state, auth_token, &dir.dir_type, &dir.id, &payload.token).await;
 
     match result {
         Ok(_) => {
-            let bid = bucket.id.clone();
-
             // Render same form but trigger a redirect to home
             let tpl = DeleteDirTemplate {
-                bucket,
-                dir,
+                dir: dir.clone(),
                 payload: TokenFormData {
                     token: "".to_string(),
                 },
@@ -451,7 +427,7 @@ pub async fn post_delete_dir_handler(
             };
             Ok(Response::builder()
                 .status(200)
-                .header("HX-Redirect", format!("/buckets/{}", &bid))
+                .header("HX-Redirect", format!("/{}", &dir.dir_type))
                 .body(Body::from(tpl.render().context(TemplateSnafu)?))
                 .context(ResponseBuilderSnafu)?)
         }
@@ -461,7 +437,6 @@ pub async fn post_delete_dir_handler(
 
             // Just render the form on first load or on error
             let tpl = DeleteDirTemplate {
-                bucket,
                 dir,
                 payload: TokenFormData { token },
                 error_message,

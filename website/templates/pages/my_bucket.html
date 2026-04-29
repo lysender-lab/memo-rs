@@ -7,17 +7,17 @@
             <ul>
                 <li><a href="/">Home</a></li>
                 <li class="is-active">
-                    <a href="/buckets/{{ bucket.id }}" aria-current="page">{{ bucket.label }}</a>
+                    <a href="/{{ dir_type }}" aria-current="page">{{ dir_type | titlecase }}</a>
                 </li>
             </ul>
         </nav>
 
-        <h1 class="title">{{ bucket.label }}</h1>
+        <h1 class="title">{{ dir_type | titlecase }}</h1>
 
         <div class="albums-container">
             <nav class="albums panel is-dark">
                 <p class="panel-heading">
-                    {% if bucket.images_only %}
+                    {% if dir_type == DirType::Photos %}
                     Albums
                     {% else %}
                     Directories
@@ -30,7 +30,7 @@
                             type="search"
                             placeholder="Search"
                             name="keyword"
-                            hx-get="/buckets/{{ bucket.id }}/search_dirs"
+                            hx-get="/{{ dir_type }}/search_dirs"
                             hx-trigger="input changed delay:500ms, search"
                             hx-target=".album-items"
                         />
@@ -42,7 +42,7 @@
 
                 <div
                     class="album-items"
-                    hx-get="/buckets/{{ bucket.id }}/search_dirs?{{ query_params }}"
+                    hx-get="/{{ dir_type }}/search_dirs?{{ query_params }}"
                     hx-trigger="load"
                 >
                     <span class="panel-block is-skeleton">&nbsp;</span>
