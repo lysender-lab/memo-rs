@@ -6,17 +6,21 @@ function handleFilesSelect(e) {
       label.innerText = files.length + ' file(s) selected';
     }
 
-    const container = document.getElementById('photos-input-w');
+    const container =
+      document.getElementById('files-input-w') ||
+      document.getElementById('photos-input-w');
     if (container) {
       container.classList.add('is-success');
     }
   }
 }
 
-function showUploadFinished() {
-  const elem = document.getElementById('h-uploading-photos');
+function showUploadFinished(title) {
+  const elem =
+    document.getElementById('h-uploading-files') ||
+    document.getElementById('h-uploading-photos');
   if (elem) {
-    elem.innerHTML = 'Upload finished';
+    elem.innerHTML = `${title} finished`;
   }
 }
 
@@ -33,6 +37,61 @@ function createDomElement(html) {
   return template.content.firstChild;
 }
 
+function getFileExtension(name) {
+  const normalized = (name || '').toLowerCase();
+  const dotIndex = normalized.lastIndexOf('.');
+  if (dotIndex === -1) {
+    return '';
+  }
+
+  return normalized.slice(dotIndex);
+}
+
+function filterFilesByAllowedExtensions(fileInput, files) {
+  const allowedExtsRaw = fileInput?.dataset?.allowedExts || '';
+  if (!allowedExtsRaw) {
+    return {
+      allowed: files,
+      rejected: [],
+    };
+  }
+
+  const allowedSet = new Set(
+    allowedExtsRaw
+      .split(',')
+      .map((item) => item.trim().toLowerCase())
+      .filter((item) => item.startsWith('.')),
+  );
+
+  const allowed = [];
+  const rejected = [];
+
+  for (const file of files) {
+    const ext = getFileExtension(file.name);
+    if (allowedSet.has(ext)) {
+      allowed.push(file);
+    } else {
+      rejected.push(file.name);
+    }
+  }
+
+  return {
+    allowed,
+    rejected,
+  };
+}
+
+function appendValidationWarning(errorsContainer, rejected) {
+  if (!errorsContainer || rejected.length === 0) {
+    return;
+  }
+
+  const preview = rejected.slice(0, 5).join(', ');
+  const suffix = rejected.length > 5 ? '...' : '';
+  const msg = `<p class="has-text-danger">Skipped unsupported files: ${preview}${suffix}</p>`;
+  errorsContainer.appendChild(createDomElement(msg));
+}
+
 function chunkArray(items, chunkSize) {
   const chunks = [];
 
@@ -43,14 +102,14 @@ function chunkArray(items, chunkSize) {
   return chunks;
 }
 
-function startUploadPhotos() {
-  uploadPhotos()
+function startUpload() {
+  uploadFiles()
     .then(() => {
-      showUploadFinished();
+      showUploadFinished('Upload');
       showUploadMore();
     })
     .catch((_err) => {
-      showUploadFinished();
+      showUploadFinished('Upload');
       showUploadMore();
     });
 }
@@ -114,15 +173,25 @@ async function remoteUploadPhoto(prepareUrl, commitUrl, token, file) {
   return await commitUpload(commitUrl, token, uploadToken);
 }
 
-async function uploadPhotos() {
+async function uploadFiles() {
   // Match chunks with server's core (2)
   const CHUNK_SIZE = 2;
-  const form = document.getElementById('upload-photos-form');
-  const photosInput = document.getElementById('photos-input');
-  const tokenInput = document.getElementById('upload-photos-token');
+  const form =
+    document.getElementById('upload-files-form') ||
+    document.getElementById('upload-photos-form');
+  const filesInput =
+    document.getElementById('files-input') ||
+    document.getElementById('photos-input');
+  const tokenInput =
+    document.getElementById('upload-files-token') ||
+    document.getElementById('upload-photos-token');
   const prepareUploadInput = document.getElementById('prepare-upload-url');
-  const galleryContainer = document.getElementById('photo-gallery');
-  const uploadContainer = document.getElementById('photos-input-w');
+  const galleryContainer =
+    document.getElementById('uploaded-items') ||
+    document.getElementById('photo-gallery');
+  const uploadContainer =
+    document.getElementById('files-input-w') ||
+    document.getElementById('photos-input-w');
   const progressContainer = document.getElementById('upload-progress-w');
   const errorsContainer = document.getElementById('progress-errors-w');
   const successElement = document.getElementById('progress-uploaded-count');
@@ -131,8 +200,9 @@ async function uploadPhotos() {
   if (
     !form ||
     !uploadContainer ||
-    !photosInput ||
+    !filesInput ||
     !tokenInput ||
+    !prepareUploadInput ||
     !galleryContainer ||
     !progressContainer ||
     !errorsContainer ||
@@ -142,7 +212,7 @@ async function uploadPhotos() {
     return;
   }
 
-  const files = photosInput.files;
+  const files = filesInput.files;
   const prepareUploadUrl = prepareUploadInput.value;
   const commitUploadUrl = form.action;
 
@@ -150,11 +220,19 @@ async function uploadPhotos() {
   let token = tokenInput.value.toString();
 
   if (files.length === 0) {
-    alert('Please select photos to upload');
+    alert('Please select files to upload');
     return;
   }
 
-  const totalFiles = files.length;
+  const filesArray = Array.from(files);
+  const filtered = filterFilesByAllowedExtensions(filesInput, filesArray);
+
+  if (filtered.allowed.length === 0) {
+    alert('No supported files selected');
+    return;
+  }
+
+  const totalFiles = filtered.allowed.length;
   let uploadedCount = 0;
   let failedCount = 0;
 
@@ -178,9 +256,9 @@ async function uploadPhotos() {
   // Switch over to progress view
   uploadContainer.classList.add('is-hidden');
   progressContainer.classList.remove('is-hidden');
+  appendValidationWarning(errorsContainer, filtered.rejected);
 
-  const filesArray = Array.from(files);
-  const fileChunks = chunkArray(filesArray, CHUNK_SIZE);
+  const fileChunks = chunkArray(filtered.allowed, CHUNK_SIZE);
 
   const uploadSingleFile = async (file, uploadToken) => {
     return await remoteUploadPhoto(
@@ -241,14 +319,14 @@ async function uploadPhotos() {
 }
 
 document.addEventListener('change', (e) => {
-  if (e.target.closest('#photos-input')) {
+  if (e.target.closest('#photos-input') || e.target.closest('#files-input')) {
     handleFilesSelect(e);
   }
 });
 
 document.addEventListener('click', (e) => {
-  if (e.target.closest('#btn-upload-photos')) {
-    startUploadPhotos();
+  if (e.target.closest('#btn-upload-photos') || e.target.closest('#btn-upload-files')) {
+    startUpload();
     e.preventDefault();
   }
 });

@@ -1,0 +1,13 @@
+<li class="uploaded-file-item">
+    <span class="icon file-type-icon has-text-grey" aria-hidden="true">
+        <i class="fas {{ icon_class }}"></i>
+    </span>
+    {% match url %}
+        {% when Some with (url) %}
+            <a href="{{ url }}" target="_blank" rel="noopener" class="file-link" title="{{ name }}">
+                {{ name }}
+            </a>
+        {% when None %}
+            <span class="file-link-disabled" title="{{ name }}">{{ name }}</span>
+    {% endmatch %}
+</li>

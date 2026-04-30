@@ -1,0 +1,133 @@
+{% extends "layout/base.html" %}
+
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/{{ dir.dir_type }}">{{ dir.dir_type | titlecase }}</a></li>
+                <li><a href="/{{ dir.dir_type }}/{{ dir.id }}">{{ dir.label }}</a></li>
+                <li class="is-active">
+                    <a href="/{{ dir.dir_type }}/{{ dir.id }}/upload" aria-current="page">
+                        Upload
+                    </a>
+                </li>
+            </ul>
+        </nav>
+
+        <h1 class="title">Upload Documents</h1>
+
+        <form method="post" action="/{{ dir.dir_type }}/{{ dir.id }}/upload" id="upload-files-form">
+            <div id="files-input-w">
+                <div class="columns">
+                    <div class="column is-half">
+                        <div class="card">
+                            <div class="card-content">
+                                <div class="file has-name is-boxed">
+                                    <label class="file-label">
+                                        <input
+                                            class="file-input"
+                                            type="file"
+                                            id="files-input"
+                                            name="files[]"
+                                            multiple
+                                            accept="{{ accept_attr }}"
+                                            data-allowed-exts="{{ allowed_exts_attr }}"
+                                        />
+                                        <span class="file-cta">
+                                            <span class="file-icon">
+                                                <i class="fas fa-upload"></i>
+                                            </span>
+                                            <span class="file-label"> Choose files… </span>
+                                        </span>
+                                        <span class="file-name" id="selected-files-label">
+                                            0 file(s) selected
+                                        </span>
+                                    </label>
+                                </div>
+
+                                <p class="is-size-7 has-text-grey mt-2">
+                                    Unsupported extensions are skipped before upload.
+                                </p>
+
+                                <div class="is-boxed mt-3">
+                                    <a class="button mr-2" href="/{{ dir.dir_type }}/{{ dir.id }}">
+                                        <span class="icon is-small">
+                                            <i class="fas fa-arrow-left"></i>
+                                        </span>
+                                        <span>Back</span>
+                                    </a>
+                                    <button class="button is-primary" id="btn-upload-files">
+                                        <span class="icon is-small">
+                                            <i class="fas fa-upload"></i>
+                                        </span>
+                                        <span>Start Upload</span>
+                                    </button>
+                                    <input
+                                        type="hidden"
+                                        id="upload-files-token"
+                                        name="token"
+                                        value="{{ token }}"
+                                    />
+                                    <input
+                                        type="hidden"
+                                        id="prepare-upload-url"
+                                        name="prepare-upload-url"
+                                        value="/{{ dir.dir_type }}/{{ dir.id }}/upload-url"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="upload-progress-w" class="is-hidden">
+                <div class="mb-5 is-boxed">
+                    <div class="columns">
+                        <div class="column is-full">
+                            <h2 id="h-uploading-files" class="is-size-3">Uploading files...</h2>
+                        </div>
+                    </div>
+                    <div class="columns">
+                        <div class="column is-half">
+                            <div>
+                                <span><strong>Uploaded:</strong> <span id="progress-uploaded-count">0</span></span>
+                            </div>
+                            <div class="mb-5">
+                                <span><strong>Failed:</strong> <span id="progress-failed-count">0</span></span>
+                            </div>
+                        </div>
+                        <div id="progress-errors-w" class="column is-half"></div>
+                    </div>
+                    <div class="columns">
+                        <div class="column is-full">
+                            <progress id="upload-progress" class="progress is-link" value="0" max="100">0%</progress>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="upload-more-w" class="is-hidden is-boxed mb-5">
+                    <a class="button mr-2" href="/{{ dir.dir_type }}/{{ dir.id }}">
+                        <span class="icon is-small">
+                            <i class="fas fa-arrow-left"></i>
+                        </span>
+                        <span>Back</span>
+                    </a>
+                    <a class="button is-primary" href="/{{ dir.dir_type }}/{{ dir.id }}/upload">
+                        <span class="icon is-small">
+                            <i class="fas fa-plus"></i>
+                        </span>
+                        <span>Add More Files</span>
+                    </a>
+                </div>
+
+                <div id="uploaded-files-w" class="is-boxed">
+                    <ul id="uploaded-items" class="uploaded-files-list"></ul>
+                </div>
+            </div>
+        </form>
+    </div>
+</section>
+{% endblock %}

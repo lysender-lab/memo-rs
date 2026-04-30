@@ -4,6 +4,7 @@ use axum::http::StatusCode;
 use axum::{Extension, body::Body, extract::State, response::Response};
 use axum::{Form, Json};
 use chrono::{DateTime, Utc};
+use memo::dir::DirType;
 use snafu::ResultExt;
 use urlencoding::encode;
 
@@ -26,6 +27,7 @@ use memo::dir::DirDto;
 use memo::file::SignedFileUploadDto;
 use memo::pagination::PaginatedMeta;
 
+use super::document_whitelist::{document_accept_attr, document_allowed_exts_attr};
 use super::handle_error_message;
 
 #[derive(Template)]
@@ -268,10 +270,20 @@ pub async fn photo_listing_v2_handler(
 
 #[derive(Template)]
 #[template(path = "pages/upload_photos.html")]
-struct UploadPageTemplate {
+struct UploadPhotosPageTemplate {
     t: TemplateData,
     dir: DirDto,
     token: String,
+}
+
+#[derive(Template)]
+#[template(path = "pages/upload_documents.html")]
+struct UploadDocumentsPageTemplate {
+    t: TemplateData,
+    dir: DirDto,
+    token: String,
+    accept_attr: String,
+    allowed_exts_attr: String,
 }
 
 #[derive(Template)]
@@ -279,6 +291,14 @@ struct UploadPageTemplate {
 struct UploadedPhotoTemplate {
     theme: String,
     photo: Photo,
+}
+
+#[derive(Template)]
+#[template(path = "widgets/uploaded_file_item.html")]
+struct UploadedFileTemplate {
+    name: String,
+    icon_class: String,
+    url: Option<String>,
 }
 
 pub async fn upload_page_handler(
@@ -295,13 +315,27 @@ pub async fn upload_page_handler(
     let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
     let mut t = TemplateData::new(&state, actor, &pref);
 
-    t.title = format!("Photos - {} - Upload Photos", &dir.label);
+    let body = if dir.dir_type == DirType::Documents {
+        t.title = format!("Documents - {} - Upload Files", &dir.label);
+        let tpl = UploadDocumentsPageTemplate {
+            t,
+            dir,
+            token,
+            accept_attr: document_accept_attr(),
+            allowed_exts_attr: document_allowed_exts_attr(),
+        };
 
-    let tpl = UploadPageTemplate { t, dir, token };
+        tpl.render().context(TemplateSnafu)?
+    } else {
+        t.title = format!("Photos - {} - Upload Photos", &dir.label);
+        let tpl = UploadPhotosPageTemplate { t, dir, token };
+
+        tpl.render().context(TemplateSnafu)?
+    };
 
     Response::builder()
         .status(200)
-        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .body(Body::from(body))
         .context(ResponseBuilderSnafu)
 }
 
@@ -337,15 +371,31 @@ pub async fn add_file_handler(
     let result = add_file_svc(&state, auth_token, &dir.dir_type, &dir.id, payload.0).await;
 
     match result {
-        Ok(photo) => {
-            let tpl = UploadedPhotoTemplate {
-                photo,
-                theme: pref.theme,
+        Ok(file) => {
+            let html = if dir.dir_type == DirType::Documents {
+                let name = file.name;
+                let icon_class = file_icon_class(&name, &file.content_type).to_string();
+                let tpl = UploadedFileTemplate {
+                    name,
+                    icon_class,
+                    url: file.url,
+                };
+
+                tpl.render().context(TemplateSnafu)?
+            } else {
+                let photo: Photo = Photo::try_from(file).map_err(|msg| Error::Whatever { msg })?;
+                let tpl = UploadedPhotoTemplate {
+                    photo,
+                    theme: pref.theme,
+                };
+
+                tpl.render().context(TemplateSnafu)?
             };
+
             Ok(Response::builder()
                 .status(201)
                 .header("X-Next-Token", token)
-                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .body(Body::from(html))
                 .context(ResponseBuilderSnafu)?)
         }
         Err(err) => Ok(handle_error_message(&err)),

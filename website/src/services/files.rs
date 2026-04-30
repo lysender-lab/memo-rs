@@ -256,7 +256,7 @@ pub async fn add_file_svc(
     dir_type: &DirType,
     dir_id: &str,
     form: CommitUploadPayload,
-) -> Result<Photo> {
+) -> Result<FileDto> {
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(csrf_result == dir_id, CsrfTokenSnafu);
     let url = format!("{}/{}/{}/files", &state.config.api_url, dir_type, dir_id);
@@ -287,7 +287,7 @@ pub async fn add_file_svc(
             msg: "Unable to parse photo information.".to_string(),
         })?;
 
-    Ok(Photo::try_from(file)?)
+    Ok(file)
 }
 
 pub async fn delete_file_svc(
