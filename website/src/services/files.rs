@@ -12,20 +12,6 @@ use crate::{Error, Result};
 use memo::pagination::Paginated;
 
 #[derive(Clone, Deserialize, Serialize)]
-pub struct ListedFile {
-    pub id: String,
-    pub dir_id: String,
-    pub name: String,
-    pub filename: String,
-    pub content_type: String,
-    pub size: i64,
-    pub url: Option<String>,
-    pub is_image: bool,
-    pub created_at: i64,
-    pub updated_at: i64,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
 pub struct Photo {
     pub id: String,
     pub dir_id: String,
@@ -117,30 +103,13 @@ impl TryFrom<FileDto> for Photo {
     }
 }
 
-impl From<FileDto> for ListedFile {
-    fn from(file: FileDto) -> Self {
-        Self {
-            id: file.id,
-            dir_id: file.dir_id,
-            name: file.name,
-            filename: file.filename,
-            content_type: file.content_type,
-            size: file.size,
-            url: file.url,
-            is_image: file.is_image,
-            created_at: file.created_at,
-            updated_at: file.updated_at,
-        }
-    }
-}
-
-pub async fn list_files_svc(
+async fn fetch_files_page(
     state: &AppState,
     token: &str,
     dir_type: &DirType,
     dir_id: &str,
     params: &ListFilesParams,
-) -> Result<Paginated<Photo>> {
+) -> Result<Paginated<FileDto>> {
     let url = format!("{}/{}/{}/files", &state.config.api_url, dir_type, dir_id);
     let mut page = "1".to_string();
     let per_page = "50".to_string();
@@ -149,11 +118,13 @@ pub async fn list_files_svc(
     if let Some(p) = params.page {
         page = p.to_string();
     }
+
     let query: Vec<(&str, &str)> = vec![
         ("page", &page),
         ("per_page", &per_page),
         ("keyword", &keyword),
     ];
+
     let response = state
         .client
         .get(url)
@@ -169,12 +140,22 @@ pub async fn list_files_svc(
         return Err(handle_response_error(response, "files", Error::AlbumNotFound).await);
     }
 
-    let listing = response
+    response
         .json::<Paginated<FileDto>>()
         .await
         .context(HttpResponseParseSnafu {
             msg: "Unable to parse files.".to_string(),
-        })?;
+        })
+}
+
+pub async fn list_files_svc(
+    state: &AppState,
+    token: &str,
+    dir_type: &DirType,
+    dir_id: &str,
+    params: &ListFilesParams,
+) -> Result<Paginated<Photo>> {
+    let listing = fetch_files_page(state, token, dir_type, dir_id, params).await?;
 
     let items: Vec<Photo> = listing
         .data
@@ -194,49 +175,8 @@ pub async fn list_any_files_svc(
     dir_type: &DirType,
     dir_id: &str,
     params: &ListFilesParams,
-) -> Result<Paginated<ListedFile>> {
-    let url = format!("{}/{}/{}/files", &state.config.api_url, dir_type, dir_id);
-    let mut page = "1".to_string();
-    let per_page = "50".to_string();
-    let keyword = params.keyword.clone().unwrap_or_default();
-
-    if let Some(p) = params.page {
-        page = p.to_string();
-    }
-    let query: Vec<(&str, &str)> = vec![
-        ("page", &page),
-        ("per_page", &per_page),
-        ("keyword", &keyword),
-    ];
-
-    let response = state
-        .client
-        .get(url)
-        .bearer_auth(token)
-        .query(&query)
-        .send()
-        .await
-        .context(HttpClientSnafu {
-            msg: "Unable to list files. Try again later.".to_string(),
-        })?;
-
-    if !response.status().is_success() {
-        return Err(handle_response_error(response, "files", Error::AlbumNotFound).await);
-    }
-
-    let listing = response
-        .json::<Paginated<FileDto>>()
-        .await
-        .context(HttpResponseParseSnafu {
-            msg: "Unable to parse files.".to_string(),
-        })?;
-
-    let items: Vec<ListedFile> = listing.data.into_iter().map(ListedFile::from).collect();
-
-    Ok(Paginated {
-        meta: listing.meta,
-        data: items,
-    })
+) -> Result<Paginated<FileDto>> {
+    fetch_files_page(state, token, dir_type, dir_id, params).await
 }
 
 pub async fn get_photo_svc(
