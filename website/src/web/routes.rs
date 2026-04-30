@@ -25,8 +25,8 @@ use super::dirs::{
     search_dirs_handler,
 };
 use super::files::{
-    confirm_delete_photo_handler, exec_delete_photo_handler, photo_listing_v2_handler,
-    pre_delete_photo_handler, upload_page_handler,
+    confirm_delete_photo_handler, exec_delete_photo_handler, file_table_handler,
+    photo_listing_v2_handler, pre_delete_photo_handler, upload_page_handler,
 };
 use super::middleware::{
     auth_middleware, dir_middleware, file_middleware, pref_middleware, require_auth_middleware,
@@ -113,6 +113,7 @@ fn my_dir_inner_routes(state: AppState) -> Router<AppState> {
             get(get_delete_dir_handler).post(post_delete_dir_handler),
         )
         .route("/photo_grid", get(photo_listing_v2_handler))
+        .route("/file_table", get(file_table_handler))
         .nest("/upload-url", upload_api_routes(state.clone()))
         .nest("/upload", my_upload_route(state.clone()))
         .nest("/photos/{file_id}", my_photo_routes(state.clone()))

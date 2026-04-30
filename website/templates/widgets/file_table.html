@@ -1,0 +1,63 @@
+{% match error_message %}
+    {% when Some with (msg) %}
+        <tr>
+            <td colspan="3">
+                <div class="error-message tag is-danger">{{ msg }}</div>
+            </td>
+        </tr>
+    {% when None %}
+{% endmatch %}
+
+{% for file in files %}
+<tr
+    {% if file.id == last_item %}
+        {% match next_page %}
+            {% when Some with (page) %}
+                hx-get="/{{ dir.dir_type }}/{{ dir.id }}/file_table?page={{ page }}&keyword={{ keyword_query }}"
+                hx-trigger="revealed"
+                hx-swap="afterend"
+            {% when None %}
+        {% endmatch %}
+    {% endif %}
+>
+    <td>
+        <div class="file-name-cell">
+            <span class="icon file-type-icon has-text-grey" aria-hidden="true">
+                <i class="fas {{ file.icon_class }}"></i>
+            </span>
+            {% match file.url %}
+                {% when Some with (url) %}
+                    <a href="{{ url }}" target="_blank" rel="noopener" class="file-link" title="{{ file.name }}">
+                        {{ file.name }}
+                    </a>
+                {% when None %}
+                    <span class="file-link-disabled" title="{{ file.name }}">{{ file.name }}</span>
+            {% endmatch %}
+        </div>
+    </td>
+    <td class="has-text-right has-text-grey">{{ file.size_text }}</td>
+    <td class="has-text-grey">{{ file.uploaded_at_text }}</td>
+</tr>
+{% endfor %}
+
+{% match meta %}
+    {% when Some with (page_meta) %}
+        <span id="files-count-w" hx-swap-oob="true">
+            {% if page_meta.total_records > 0 %}
+                {% if page_meta.page == page_meta.total_pages as i32 %}
+                    {{ page_meta.total_records }} files
+                {% else %}
+                    {{ page_meta.page * page_meta.per_page }} of {{ page_meta.total_records }} files
+                {% endif %}
+            {% else %}
+                No files yet
+            {% endif %}
+        </span>
+    {% when None %}
+{% endmatch %}
+
+{% if !has_files %}
+<tr>
+    <td colspan="3" class="has-text-centered has-text-grey py-6">No matching files found.</td>
+</tr>
+{% endif %}
