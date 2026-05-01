@@ -538,12 +538,20 @@ pub async fn exec_delete_file_handler(
         &payload.token,
     )
     .await;
+
     match result {
-        Ok(_) => Response::builder()
-            .status(204)
-            .header("HX-Trigger", "PhotoDeletedEvent")
-            .body(Body::from("".to_string()))
-            .context(ResponseBuilderSnafu),
+        Ok(_) => {
+            let event = if dir_type == DirType::Photos {
+                "PhotoDeletedEvent"
+            } else {
+                "FileDeletedEvent"
+            };
+            Response::builder()
+                .status(204)
+                .header("HX-Trigger", event)
+                .body(Body::from("".to_string()))
+                .context(ResponseBuilderSnafu)
+        }
         Err(err) => {
             let error_info = ErrorInfo::from(&err);
 
