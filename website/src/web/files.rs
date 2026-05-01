@@ -12,7 +12,7 @@ use crate::models::ListFilesParams;
 use crate::models::tokens::TokenFormData;
 use crate::services::files::{
     CommitUploadPayload, Photo, PrepareUploadPayload, add_file_svc, delete_file_svc,
-    list_any_files_svc, list_files_svc, prepare_upload_svc,
+    list_files_svc, list_photos_svc, prepare_upload_svc,
 };
 use crate::{
     Error, Result,
@@ -24,7 +24,7 @@ use crate::{
     web::{Action, Resource, enforce_policy},
 };
 use memo::dir::DirDto;
-use memo::file::SignedFileUploadDto;
+use memo::file::{FileDto, SignedFileUploadDto};
 use memo::pagination::PaginatedMeta;
 
 use super::document_whitelist::{document_accept_attr, document_allowed_exts_attr};
@@ -167,7 +167,7 @@ pub async fn document_listing_handler(
     };
 
     let auth_token = ctx.token().expect("token is required");
-    let result = list_any_files_svc(&state, auth_token, &dir_type, &dir_id, &query).await;
+    let result = list_files_svc(&state, auth_token, &dir_type, &dir_id, &query).await;
 
     match result {
         Ok(listing) => {
@@ -235,7 +235,7 @@ pub async fn photo_listing_handler(
     };
 
     let auth_token = ctx.token().expect("token is required");
-    let result = list_files_svc(&state, auth_token, &dir_type, &dir_id, &query).await;
+    let result = list_photos_svc(&state, auth_token, &dir_type, &dir_id, &query).await;
 
     match result {
         Ok(listing) => {
@@ -403,26 +403,42 @@ pub async fn add_file_handler(
 }
 
 #[derive(Template)]
+#[template(path = "widgets/pre_delete_file_form.html")]
+struct PreDeleteFileTemplate {
+    dir: DirDto,
+    file: FileDto,
+}
+
+#[derive(Template)]
 #[template(path = "widgets/pre_delete_photo_form.html")]
 struct PreDeletePhotoTemplate {
     dir: DirDto,
-    photo: Photo,
+    file: FileDto,
 }
 
 #[derive(Template)]
 #[template(path = "widgets/confirm_delete_photo_form.html")]
 struct ConfirmDeletePhotoTemplate {
     dir: DirDto,
-    photo: Photo,
+    file: FileDto,
+    payload: TokenFormData,
+    error_message: Option<String>,
+}
+
+#[derive(Template)]
+#[template(path = "widgets/confirm_delete_file_form.html")]
+struct ConfirmDeleteFileTemplate {
+    dir: DirDto,
+    file: FileDto,
     payload: TokenFormData,
     error_message: Option<String>,
 }
 
 /// Shows pre-delete form controls
-pub async fn pre_delete_photo_handler(
+pub async fn pre_delete_file_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(dir): Extension<DirDto>,
-    Extension(photo): Extension<Photo>,
+    Extension(file): Extension<FileDto>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor();
 
@@ -431,19 +447,25 @@ pub async fn pre_delete_photo_handler(
     }
 
     // Just render the form on first load or on error
-    let tpl = PreDeletePhotoTemplate { dir, photo };
+    let content = if dir.dir_type == DirType::Photos {
+        let tpl = PreDeletePhotoTemplate { dir, file };
+        tpl.render().context(TemplateSnafu)?
+    } else {
+        let tpl = PreDeleteFileTemplate { dir: dir, file };
+        tpl.render().context(TemplateSnafu)?
+    };
 
     Response::builder()
         .status(200)
-        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .body(Body::from(content))
         .context(ResponseBuilderSnafu)
 }
 
 /// Shows delete/cancel form controls
-pub async fn confirm_delete_photo_handler(
+pub async fn confirm_delete_file_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(dir): Extension<DirDto>,
-    Extension(photo): Extension<Photo>,
+    Extension(file): Extension<FileDto>,
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
@@ -453,31 +475,41 @@ pub async fn confirm_delete_photo_handler(
         return Ok(handle_error_message(&err));
     }
 
-    let Ok(token) = create_csrf_token(&photo.id, &config.jwt_secret) else {
+    let Ok(token) = create_csrf_token(&file.id, &config.jwt_secret) else {
         let error = Error::Whatever {
-            msg: "Failed to initialize delete photo form.".to_string(),
+            msg: "Failed to initialize delete file form.".to_string(),
         };
         return Ok(handle_error_message(&error));
     };
 
-    // Just render the form on first load or on error
-    let tpl = ConfirmDeletePhotoTemplate {
-        dir,
-        photo,
-        payload: TokenFormData { token },
-        error_message: None,
+    let content = if dir.dir_type == DirType::Photos {
+        let tpl = ConfirmDeletePhotoTemplate {
+            dir,
+            file,
+            payload: TokenFormData { token },
+            error_message: None,
+        };
+        tpl.render().context(TemplateSnafu)?
+    } else {
+        let tpl = ConfirmDeleteFileTemplate {
+            dir,
+            file,
+            payload: TokenFormData { token },
+            error_message: None,
+        };
+        tpl.render().context(TemplateSnafu)?
     };
 
     Response::builder()
         .status(200)
-        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .body(Body::from(content))
         .context(ResponseBuilderSnafu)
 }
 
-pub async fn exec_delete_photo_handler(
+pub async fn exec_delete_file_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(dir): Extension<DirDto>,
-    Extension(photo): Extension<Photo>,
+    Extension(file): Extension<FileDto>,
     State(state): State<AppState>,
     payload: Form<TokenFormData>,
 ) -> Result<Response<Body>> {
@@ -490,7 +522,7 @@ pub async fn exec_delete_photo_handler(
         return Ok(handle_error_message(&err));
     }
 
-    let Ok(token) = create_csrf_token(&photo.id, &config.jwt_secret) else {
+    let Ok(token) = create_csrf_token(&file.id, &config.jwt_secret) else {
         return Ok(handle_error_message(&Error::Whatever {
             msg: "Failed to initialize delete photo form.".to_string(),
         }));
@@ -502,7 +534,7 @@ pub async fn exec_delete_photo_handler(
         auth_token,
         &dir_type,
         &dir_id,
-        &photo.id,
+        &file.id,
         &payload.token,
     )
     .await;
@@ -517,16 +549,27 @@ pub async fn exec_delete_photo_handler(
 
             // Re-render the form with a new token
             // We may need to render an error message somewhere in the page
-            let tpl = ConfirmDeletePhotoTemplate {
-                dir,
-                photo,
-                payload: TokenFormData { token },
-                error_message: Some(error_info.message),
+            let content = if dir.dir_type == DirType::Photos {
+                let tpl = ConfirmDeletePhotoTemplate {
+                    dir,
+                    file,
+                    payload: TokenFormData { token },
+                    error_message: Some(error_info.message),
+                };
+                tpl.render().context(TemplateSnafu)?
+            } else {
+                let tpl = ConfirmDeleteFileTemplate {
+                    dir,
+                    file,
+                    payload: TokenFormData { token },
+                    error_message: Some(error_info.message),
+                };
+                tpl.render().context(TemplateSnafu)?
             };
 
             Ok(Response::builder()
                 .status(error_info.status_code)
-                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .body(Body::from(content))
                 .context(ResponseBuilderSnafu)?)
         }
     }

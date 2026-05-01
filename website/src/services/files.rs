@@ -149,7 +149,7 @@ async fn fetch_files_page(
         })
 }
 
-pub async fn list_files_svc(
+pub async fn list_photos_svc(
     state: &AppState,
     token: &str,
     dir_type: &DirType,
@@ -170,7 +170,7 @@ pub async fn list_files_svc(
     })
 }
 
-pub async fn list_any_files_svc(
+pub async fn list_files_svc(
     state: &AppState,
     token: &str,
     dir_type: &DirType,
@@ -180,13 +180,13 @@ pub async fn list_any_files_svc(
     fetch_files_page(state, token, dir_type, dir_id, params).await
 }
 
-pub async fn get_photo_svc(
+pub async fn get_file_svc(
     state: &AppState,
     token: &str,
     dir_type: &DirType,
     dir_id: &str,
     file_id: &str,
-) -> Result<Photo> {
+) -> Result<FileDto> {
     let url = format!(
         "{}/{}/{}/files/{}",
         &state.config.api_url, dir_type, dir_id, file_id
@@ -208,7 +208,7 @@ pub async fn get_photo_svc(
             msg: "Unable to parse photo.".to_string(),
         })?;
 
-    Ok(Photo::try_from(file)?)
+    Ok(file)
 }
 
 pub async fn prepare_upload_svc(

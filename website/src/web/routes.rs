@@ -25,8 +25,8 @@ use super::dirs::{
     search_dirs_handler,
 };
 use super::files::{
-    confirm_delete_photo_handler, document_listing_handler, exec_delete_photo_handler,
-    photo_listing_handler, pre_delete_photo_handler, upload_page_handler,
+    confirm_delete_file_handler, document_listing_handler, exec_delete_file_handler,
+    photo_listing_handler, pre_delete_file_handler, upload_page_handler,
 };
 use super::middleware::{
     auth_middleware, dir_middleware, file_middleware, pref_middleware, require_auth_middleware,
@@ -144,9 +144,9 @@ fn file_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route(
             "/delete",
-            get(confirm_delete_photo_handler).post(exec_delete_photo_handler),
+            get(confirm_delete_file_handler).post(exec_delete_file_handler),
         )
-        .route("/delete_controls", get(pre_delete_photo_handler))
+        .route("/delete_controls", get(pre_delete_file_handler))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             file_middleware,

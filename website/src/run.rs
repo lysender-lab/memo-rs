@@ -1,9 +1,10 @@
+use std::sync::Arc;
+use std::time::Duration;
+
 use axum::Router;
 use axum::extract::FromRef;
 use moka::sync::Cache;
 use reqwest::{Client, ClientBuilder};
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 use tower_cookies::CookieManagerLayer;
@@ -12,9 +13,9 @@ use tracing::{Level, info};
 
 use crate::Result;
 use crate::config::Config;
-use crate::services::files::Photo;
 use crate::web::all_routes;
 use memo::dir::DirDto;
+use memo::file::FileDto;
 use yaas::actor::Actor;
 
 #[derive(Clone, FromRef)]
@@ -23,7 +24,7 @@ pub struct AppState {
     pub client: Client,
     pub auth_cache: Cache<String, Actor>,
     pub dir_cache: Cache<String, DirDto>,
-    pub file_cache: Cache<String, Photo>,
+    pub file_cache: Cache<String, FileDto>,
 }
 
 pub async fn run(config: Config) -> Result<()> {
