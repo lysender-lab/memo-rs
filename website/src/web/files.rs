@@ -403,15 +403,15 @@ pub async fn add_file_handler(
 }
 
 #[derive(Template)]
-#[template(path = "widgets/pre_delete_file_form.html")]
-struct PreDeleteFileTemplate {
+#[template(path = "widgets/file_actions.html")]
+struct FileActionsFileTemplate {
     dir: DirDto,
     file: FileDto,
 }
 
 #[derive(Template)]
-#[template(path = "widgets/pre_delete_photo_form.html")]
-struct PreDeletePhotoTemplate {
+#[template(path = "widgets/photo_actions.html")]
+struct FileActionsPhotoTemplate {
     dir: DirDto,
     file: FileDto,
 }
@@ -435,7 +435,7 @@ struct ConfirmDeleteFileTemplate {
 }
 
 /// Shows pre-delete form controls
-pub async fn pre_delete_file_handler(
+pub async fn file_actions_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(dir): Extension<DirDto>,
     Extension(file): Extension<FileDto>,
@@ -448,10 +448,10 @@ pub async fn pre_delete_file_handler(
 
     // Just render the form on first load or on error
     let content = if dir.dir_type == DirType::Photos {
-        let tpl = PreDeletePhotoTemplate { dir, file };
+        let tpl = FileActionsPhotoTemplate { dir, file };
         tpl.render().context(TemplateSnafu)?
     } else {
-        let tpl = PreDeleteFileTemplate { dir: dir, file };
+        let tpl = FileActionsFileTemplate { dir: dir, file };
         tpl.render().context(TemplateSnafu)?
     };
 

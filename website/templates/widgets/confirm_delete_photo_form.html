@@ -14,8 +14,9 @@
     <div class="photo-confirm-delete is-flex is-justify-content-end">
         <input type="hidden" name="token" value="{{ payload.token }}" />
         <button
+            type="button"
             class="button is-small mr-2"
-            hx-get="/{{ dir.dir_type }}/{{ dir.id }}/files/{{ file.id }}/delete_controls"
+            hx-get="/{{ dir.dir_type }}/{{ dir.id }}/files/{{ file.id }}/file-actions"
             hx-target="closest .photo-item-controls"
             hx-swap="innnerHTML"
         >
@@ -23,7 +24,7 @@
                 <i class="fas fa-arrow-left"></i>
             </span>
         </button>
-        <button class="button is-small is-danger">
+        <button class="button is-small is-danger" type="submit">
             <span class="icon is-small">
                 <i class="fas fa-times"></i>
             </span>
