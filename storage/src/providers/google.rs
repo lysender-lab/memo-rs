@@ -172,7 +172,10 @@ impl GoogleStorageProvider {
                 }
             }
         } else {
-            let path = format!("{}/{}/{}", &dir.dir_name, ORIGINAL_PATH, &file.filename);
+            let path = format!(
+                "{}/{}/{}/{}/{}",
+                &dir.org_id, &dir.dir_type, &dir.dir_name, ORIGINAL_PATH, &file.filename
+            );
             self.delete_object_by_path(&dir.bucket_name, &path).await?;
         }
 
