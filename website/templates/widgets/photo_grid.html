@@ -9,21 +9,21 @@
 {% for photo in photos %}
 <div
     class="photo-grid-item"
-{% if photo.id == last_item %}
-    {% match next_page %}
-        {% when Some with (page) %}
-        hx-get="/{{ dir.dir_type }}/{{ dir.id }}/photo_grid?page={{ page }}"
-        hx-trigger="revealed"
-        hx-swap="afterend"
-        {% when None %}
-    {% endmatch %}
-{% endif %}
+    {% if photo.id == last_item %}
+        {% match next_page %}
+            {% when Some with (page) %}
+            hx-get="/{{ dir.dir_type }}/{{ dir.id }}/photo_grid?page={{ page }}"
+            hx-trigger="revealed"
+            hx-swap="afterend"
+            {% when None %}
+        {% endmatch %}
+    {% endif %}
 >
     <div class="photo-item-controls mb-1">
         <div class="photo-pre-delete is-flex is-justify-content-end">
             <button
                 class="button is-small"
-                hx-get="/{{ dir.dir_type }}/{{ dir.id }}/photos/{{ photo.id }}/delete"
+                hx-get="/{{ dir.dir_type }}/{{ dir.id }}/files/{{ photo.id }}/delete"
                 hx-target="closest .photo-item-controls"
                 hx-swap="innerHTML"
             >

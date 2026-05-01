@@ -66,14 +66,18 @@
                         </span>
                     </button>
             {% endmatch %}
+
             <button
                 type="button"
                 class="button is-small is-light"
                 aria-label="Delete {{ file.name }}"
                 title="Delete"
+                hx-get="/{{ dir.dir_type }}/{{ dir.id }}/files/{{ file.id }}/delete"
+                hx-target="closest .file-actions"
+                hx-swap="innerHTML"
             >
-                <span class="icon is-small" aria-hidden="true">
-                    <i class="fas fa-trash-alt"></i>
+                <span class="icon is-small">
+                    <i class="fas fa-times"></i>
                 </span>
             </button>
         </div>

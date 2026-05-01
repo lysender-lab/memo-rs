@@ -115,8 +115,8 @@ fn dir_inner_routes(state: AppState) -> Router<AppState> {
         .route("/photo_grid", get(photo_listing_handler))
         .route("/file_table", get(document_listing_handler))
         .nest("/upload-url", upload_api_routes(state.clone()))
-        .nest("/upload", my_upload_route(state.clone()))
-        .nest("/photos/{file_id}", my_photo_routes(state.clone()))
+        .nest("/upload", upload_route(state.clone()))
+        .nest("/files/{file_id}", file_routes(state.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             dir_middleware,
@@ -134,13 +134,13 @@ pub fn upload_api_routes(state: AppState) -> Router<AppState> {
         .with_state(state)
 }
 
-fn my_upload_route(state: AppState) -> Router<AppState> {
+fn upload_route(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(upload_page_handler).post(add_file_handler))
         .with_state(state)
 }
 
-fn my_photo_routes(state: AppState) -> Router<AppState> {
+fn file_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route(
             "/delete",

@@ -1,7 +1,7 @@
 <div class="photo-pre-delete is-flex is-justify-content-end">
     <button
         class="button is-small"
-        hx-get="/{{ dir.dir_type }}/{{ dir.id }}/photos/{{ photo.id }}/delete"
+        hx-get="/{{ dir.dir_type }}/{{ dir.id }}/files/{{ photo.id }}/delete"
         hx-target="closest .photo-item-controls"
         hx-swap="innerHTML"
     >
