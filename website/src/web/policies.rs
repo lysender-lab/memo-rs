@@ -5,9 +5,8 @@ use yaas::actor::Actor;
 use yaas::role::Permission;
 
 pub enum Resource {
-    Bucket,
-    Album,
-    Photo,
+    Dir,
+    File,
 }
 
 pub enum Action {
@@ -19,9 +18,8 @@ pub enum Action {
 
 pub fn enforce_policy(actor: &Actor, resource: Resource, action: Action) -> Result<()> {
     let result = match resource {
-        Resource::Bucket => enforce_buckets_permissions(actor, action),
-        Resource::Album => enforce_dir_permissions(actor, action),
-        Resource::Photo => enforce_photo_permissions(actor, action),
+        Resource::Dir => enforce_dir_permissions(actor, action),
+        Resource::File => enforce_file_permissions(actor, action),
     };
 
     match result {
@@ -58,49 +56,23 @@ fn enforce_dir_permissions(actor: &Actor, action: Action) -> StdResult<(), &str>
     Ok(())
 }
 
-fn enforce_photo_permissions(actor: &Actor, action: Action) -> StdResult<(), &str> {
+fn enforce_file_permissions(actor: &Actor, action: Action) -> StdResult<(), &str> {
     let (permissions, message) = match action {
         Action::Create => (
             vec![Permission::FilesCreate],
-            "You do not have permission to upload photos.",
+            "You do not have permission to upload files.",
         ),
         Action::Read => (
             vec![Permission::FilesList, Permission::FilesView],
-            "You do not have permission to view photos.",
+            "You do not have permission to view files.",
         ),
         Action::Update => (
             vec![Permission::FilesEdit],
-            "You do not have permission to edit photos.",
+            "You do not have permission to edit files.",
         ),
         Action::Delete => (
             vec![Permission::FilesDelete],
-            "You do not have permission to delete photos.",
-        ),
-    };
-
-    if !actor.has_permissions(&permissions) {
-        return Err(message);
-    }
-    Ok(())
-}
-
-fn enforce_buckets_permissions(actor: &Actor, action: Action) -> StdResult<(), &str> {
-    let (permissions, message) = match action {
-        Action::Create => (
-            vec![Permission::BucketsEdit],
-            "You do not have permission to create new buckets.",
-        ),
-        Action::Read => (
-            vec![Permission::BucketsView],
-            "You do not have permission to view buckets.",
-        ),
-        Action::Update => (
-            vec![Permission::BucketsEdit],
-            "You do not have permission to edit buckets.",
-        ),
-        Action::Delete => (
-            vec![Permission::BucketsEdit],
-            "You do not have permission to delete buckets.",
+            "You do not have permission to delete files.",
         ),
     };
 

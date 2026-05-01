@@ -132,7 +132,7 @@ pub async fn dir_middleware(
     next: Next,
 ) -> Result<Response> {
     let actor = ctx.actor();
-    enforce_policy(actor, Resource::Album, Action::Read)?;
+    enforce_policy(actor, Resource::Dir, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
 
@@ -161,7 +161,7 @@ pub async fn file_middleware(
     next: Next,
 ) -> Result<Response> {
     let actor = ctx.actor();
-    enforce_policy(actor, Resource::Photo, Action::Read)?;
+    enforce_policy(actor, Resource::File, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
 

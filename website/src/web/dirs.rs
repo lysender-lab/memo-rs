@@ -39,13 +39,13 @@ pub async fn search_dirs_handler(
     Query(query): Query<SearchDirsParams>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor();
-    enforce_policy(actor, Resource::Album, Action::Read)?;
+    enforce_policy(actor, Resource::Dir, Action::Read)?;
 
     let mut tpl = SearchDirsTemplate {
         dir_type: dir_type.clone(),
         dirs: Vec::new(),
         pagination: None,
-        can_create: enforce_policy(actor, Resource::Album, Action::Create).is_ok(),
+        can_create: enforce_policy(actor, Resource::Dir, Action::Create).is_ok(),
         error_message: None,
     };
 
@@ -102,7 +102,7 @@ pub async fn new_dir_handler(
     let config = state.config.clone();
     let actor = ctx.actor();
 
-    enforce_policy(actor, Resource::Album, Action::Create)?;
+    enforce_policy(actor, Resource::Dir, Action::Create)?;
 
     let mut t = TemplateData::new(&state, actor, &pref);
     t.title = String::from(match dir_type {
@@ -138,7 +138,7 @@ pub async fn post_new_dir_handler(
     let config = state.config.clone();
     let actor = ctx.actor();
 
-    enforce_policy(actor, Resource::Album, Action::Create)?;
+    enforce_policy(actor, Resource::Dir, Action::Create)?;
 
     let token = create_csrf_token("new_dir", &config.jwt_secret)?;
 
@@ -217,10 +217,10 @@ pub async fn dir_page_handler(
         t,
         dir,
         updated: false,
-        can_edit: enforce_policy(actor, Resource::Album, Action::Update).is_ok(),
-        can_delete: enforce_policy(actor, Resource::Album, Action::Delete).is_ok(),
-        can_add_files: enforce_policy(actor, Resource::Photo, Action::Create).is_ok(),
-        can_delete_files: enforce_policy(actor, Resource::Photo, Action::Delete).is_ok(),
+        can_edit: enforce_policy(actor, Resource::Dir, Action::Update).is_ok(),
+        can_delete: enforce_policy(actor, Resource::Dir, Action::Delete).is_ok(),
+        can_add_files: enforce_policy(actor, Resource::File, Action::Create).is_ok(),
+        can_delete_files: enforce_policy(actor, Resource::File, Action::Delete).is_ok(),
     };
 
     Response::builder()
@@ -246,15 +246,15 @@ pub async fn edit_dir_controls_handler(
     Extension(dir): Extension<DirDto>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor();
-    enforce_policy(actor, Resource::Album, Action::Update)?;
+    enforce_policy(actor, Resource::Dir, Action::Update)?;
 
     let tpl = EditDirControlsTemplate {
         dir,
         updated: false,
-        can_edit: enforce_policy(actor, Resource::Album, Action::Update).is_ok(),
-        can_delete: enforce_policy(actor, Resource::Album, Action::Delete).is_ok(),
-        can_add_files: enforce_policy(actor, Resource::Photo, Action::Create).is_ok(),
-        can_delete_files: enforce_policy(actor, Resource::Photo, Action::Delete).is_ok(),
+        can_edit: enforce_policy(actor, Resource::Dir, Action::Update).is_ok(),
+        can_delete: enforce_policy(actor, Resource::Dir, Action::Delete).is_ok(),
+        can_add_files: enforce_policy(actor, Resource::File, Action::Create).is_ok(),
+        can_delete_files: enforce_policy(actor, Resource::File, Action::Delete).is_ok(),
     };
 
     Response::builder()
@@ -280,7 +280,7 @@ pub async fn edit_dir_handler(
     let config = state.config.clone();
     let actor = ctx.actor();
 
-    enforce_policy(actor, Resource::Album, Action::Update)?;
+    enforce_policy(actor, Resource::Dir, Action::Update)?;
 
     let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
 
@@ -308,7 +308,7 @@ pub async fn post_edit_dir_handler(
     let dir_id = dir.id.clone();
     let actor = ctx.actor();
 
-    enforce_policy(actor, Resource::Album, Action::Update)?;
+    enforce_policy(actor, Resource::Dir, Action::Update)?;
 
     let token = create_csrf_token(&dir_id, &config.jwt_secret)?;
 
@@ -331,10 +331,10 @@ pub async fn post_edit_dir_handler(
             let tpl = EditDirControlsTemplate {
                 dir: updated_dir,
                 updated: true,
-                can_edit: enforce_policy(actor, Resource::Album, Action::Update).is_ok(),
-                can_delete: enforce_policy(actor, Resource::Album, Action::Delete).is_ok(),
-                can_add_files: enforce_policy(actor, Resource::Photo, Action::Create).is_ok(),
-                can_delete_files: enforce_policy(actor, Resource::Photo, Action::Delete).is_ok(),
+                can_edit: enforce_policy(actor, Resource::Dir, Action::Update).is_ok(),
+                can_delete: enforce_policy(actor, Resource::Dir, Action::Delete).is_ok(),
+                can_add_files: enforce_policy(actor, Resource::File, Action::Create).is_ok(),
+                can_delete_files: enforce_policy(actor, Resource::File, Action::Delete).is_ok(),
             };
             Ok(Response::builder()
                 .status(200)
@@ -382,7 +382,7 @@ pub async fn get_delete_dir_handler(
     let config = state.config.clone();
     let actor = ctx.actor();
 
-    enforce_policy(actor, Resource::Album, Action::Delete)?;
+    enforce_policy(actor, Resource::Dir, Action::Delete)?;
     let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
 
     let tpl = DeleteDirTemplate {
@@ -407,7 +407,7 @@ pub async fn post_delete_dir_handler(
     let config = state.config.clone();
     let actor = ctx.actor();
 
-    enforce_policy(actor, Resource::Album, Action::Delete)?;
+    enforce_policy(actor, Resource::Dir, Action::Delete)?;
 
     let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
 

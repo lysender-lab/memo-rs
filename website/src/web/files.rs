@@ -150,7 +150,7 @@ pub async fn document_listing_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor();
-    enforce_policy(actor, Resource::Photo, Action::Read)?;
+    enforce_policy(actor, Resource::File, Action::Read)?;
 
     let dir_id = dir.id.clone();
     let dir_type = dir.dir_type.clone();
@@ -219,7 +219,7 @@ pub async fn photo_listing_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor();
-    enforce_policy(actor, Resource::Photo, Action::Read)?;
+    enforce_policy(actor, Resource::File, Action::Read)?;
 
     let dir_id = dir.id.clone();
     let dir_type = dir.dir_type.clone();
@@ -310,7 +310,7 @@ pub async fn upload_page_handler(
     let config = state.config.clone();
 
     let actor = ctx.actor();
-    enforce_policy(actor, Resource::Photo, Action::Create)?;
+    enforce_policy(actor, Resource::File, Action::Create)?;
 
     let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
     let mut t = TemplateData::new(&state, actor, &pref);
@@ -346,7 +346,7 @@ pub async fn generate_upload_url_handler(
     payload: Json<PrepareUploadPayload>,
 ) -> Result<(StatusCode, Json<SignedFileUploadDto>)> {
     let actor = ctx.actor();
-    enforce_policy(actor, Resource::Photo, Action::Create)?;
+    enforce_policy(actor, Resource::File, Action::Create)?;
 
     let auth_token = ctx.token().expect("token is required");
     let dto = prepare_upload_svc(&state, auth_token, &dir.dir_type, &dir.id, payload.0).await?;
@@ -363,7 +363,7 @@ pub async fn add_file_handler(
 ) -> Result<Response<Body>> {
     let config = state.config.clone();
     let actor = ctx.actor();
-    enforce_policy(actor, Resource::Photo, Action::Create)?;
+    enforce_policy(actor, Resource::File, Action::Create)?;
 
     let token = create_csrf_token(&dir.id, &config.jwt_secret)?;
 
@@ -442,7 +442,7 @@ pub async fn pre_delete_file_handler(
 ) -> Result<Response<Body>> {
     let actor = ctx.actor();
 
-    if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Delete) {
+    if let Err(err) = enforce_policy(actor, Resource::File, Action::Delete) {
         return Ok(handle_error_message(&err));
     }
 
@@ -471,7 +471,7 @@ pub async fn confirm_delete_file_handler(
     let config = state.config.clone();
     let actor = ctx.actor();
 
-    if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Delete) {
+    if let Err(err) = enforce_policy(actor, Resource::File, Action::Delete) {
         return Ok(handle_error_message(&err));
     }
 
@@ -518,7 +518,7 @@ pub async fn exec_delete_file_handler(
     let dir_id = dir.id.clone();
     let dir_type = dir.dir_type.clone();
 
-    if let Err(err) = enforce_policy(actor, Resource::Photo, Action::Delete) {
+    if let Err(err) = enforce_policy(actor, Resource::File, Action::Delete) {
         return Ok(handle_error_message(&err));
     }
 
