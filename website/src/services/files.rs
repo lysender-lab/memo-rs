@@ -37,6 +37,7 @@ pub struct PhotoVersionDto {
 pub struct PrepareUploadPayload {
     pub filename: String,
     pub content_type: String,
+    pub size: i64,
     pub token: String,
 }
 

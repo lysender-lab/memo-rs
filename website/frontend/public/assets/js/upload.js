@@ -124,6 +124,7 @@ async function prepareUpload(url, token, file) {
   const data = {
     filename: file.name,
     content_type: file.type || 'application/octet-stream',
+    size: file.size,
     token,
   };
 
@@ -325,7 +326,10 @@ document.addEventListener('change', (e) => {
 });
 
 document.addEventListener('click', (e) => {
-  if (e.target.closest('#btn-upload-photos') || e.target.closest('#btn-upload-files')) {
+  if (
+    e.target.closest('#btn-upload-photos') ||
+    e.target.closest('#btn-upload-files')
+  ) {
     startUpload();
     e.preventDefault();
   }

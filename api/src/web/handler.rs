@@ -15,7 +15,7 @@ use crate::{
         DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, Result, StorageSnafu,
         WhateverSnafu,
     },
-    file::{create_file, generate_upload_url},
+    file::{create_file, create_remote_file, generate_upload_url},
     health::{check_liveness, check_readiness},
     state::AppState,
     token::verify_upload_token,
@@ -271,6 +271,9 @@ pub async fn create_file_handler(
 
     // Validate token
     let upload_claims = verify_upload_token(&data.token, &state.config.jwt_secret)?;
+    let upload_claims_copy = upload_claims.clone();
+
+    let is_image = upload_claims.is_image();
     let orig_filename = upload_claims.orig_filename;
     let new_filename = upload_claims.new_filename;
 
@@ -282,30 +285,35 @@ pub async fn create_file_handler(
         dir_name: dir.name.clone(),
     };
 
-    // Download file locally
-    let downloaded = state
-        .storage_client
-        .download(
-            &dir_meta,
-            ORIGINAL_PATH,
-            &orig_filename,
-            &new_filename,
-            &state.config.upload_dir,
-        )
-        .await
-        .context(StorageSnafu)?;
-
     let storage_client = state.storage_client.clone();
-    let file = create_file(state, &dir, &downloaded).await?;
-    let file_dto: FileDto = file;
-    let file_dto = storage_client
-        .attach_url(&dir_meta, file_dto)
+
+    let file = if is_image {
+        // Download file locally
+        let downloaded = state
+            .storage_client
+            .download(
+                &dir_meta,
+                ORIGINAL_PATH,
+                &orig_filename,
+                &new_filename,
+                &state.config.upload_dir,
+            )
+            .await
+            .context(StorageSnafu)?;
+
+        create_file(state, &dir, &downloaded).await?
+    } else {
+        create_remote_file(state, &dir, &upload_claims_copy).await?
+    };
+
+    let file = storage_client
+        .attach_url(&dir_meta, file)
         .await
         .context(StorageSnafu)?;
 
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,
-        serde_json::to_string(&file_dto).unwrap(),
+        serde_json::to_string(&file).unwrap(),
     ))
 }
 
