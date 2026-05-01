@@ -389,13 +389,8 @@ fn cleanup_temp_uploads(data: &DownloadedFile, file: Option<&FileDto>) -> Result
 fn init_file(dir: &DirDto, data: &DownloadedFile) -> Result<FileDto> {
     let mut is_image = false;
     let content_type = get_content_type(&data.path)?;
-    if content_type.starts_with("image/") {
-        if !ALLOWED_IMAGE_TYPES.contains(&content_type.as_str()) {
-            if let Err(e) = cleanup_temp_uploads(data, None) {
-                error!("Cleanup orig file: {}", e);
-            }
-            return Err("Uploaded image type not allowed".into());
-        }
+
+    if ALLOWED_IMAGE_TYPES.contains(&content_type.as_str()) {
         is_image = true;
     }
 

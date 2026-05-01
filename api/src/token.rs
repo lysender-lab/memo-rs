@@ -1,6 +1,7 @@
 use base64::prelude::*;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use memo::file::ALLOWED_IMAGE_TYPES;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use snafu::ensure;
@@ -46,7 +47,7 @@ pub struct FileUploadClaims {
 
 impl FileUploadClaims {
     pub fn is_image(&self) -> bool {
-        self.content_type.starts_with("image/")
+        ALLOWED_IMAGE_TYPES.contains(&self.content_type.as_str())
     }
 }
 
