@@ -1,6 +1,7 @@
 use base64::prelude::*;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use memo::file::ALLOWED_IMAGE_TYPES;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use snafu::ensure;
@@ -34,19 +35,27 @@ pub fn decode_auth_token(token: &str) -> Result<AuthClaims> {
     Err("Invalid auth token.".into())
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct FileUploadClaims {
     pub sub: String,
     pub orig_filename: String,
     pub new_filename: String,
     pub content_type: String,
+    pub size: i64,
     pub exp: usize,
+}
+
+impl FileUploadClaims {
+    pub fn is_image(&self) -> bool {
+        ALLOWED_IMAGE_TYPES.contains(&self.content_type.as_str())
+    }
 }
 
 pub fn create_upload_token(
     orig_filename: String,
     new_filename: String,
     content_type: String,
+    size: i64,
     secret: &str,
 ) -> Result<String> {
     // Limit up to 1 hour only
@@ -57,6 +66,7 @@ pub fn create_upload_token(
         orig_filename: orig_filename,
         new_filename: new_filename,
         content_type: content_type,
+        size,
         exp: exp.timestamp() as usize,
     };
 

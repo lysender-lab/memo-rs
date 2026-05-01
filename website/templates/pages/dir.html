@@ -23,37 +23,126 @@
             {% include "widgets/edit_dir_controls.html" %}
         </div>
 
-        <div class="has-text-right is-size-7">
-            <span id="photos-count-w">&nbsp;</span>
-        </div>
+        {% if dir.dir_type == DirType::Documents %}
+        <div class="box mt-4">
+            <div class="documents-toolbar mb-4">
+                <div class="field has-addons documents-search">
+                    <div class="control is-expanded has-icons-left">
+                        <input
+                            class="input"
+                            type="search"
+                            name="keyword"
+                            placeholder="Search files by name"
+                            hx-get="/{{ dir.dir_type }}/{{ dir.id }}/file_table?page=1"
+                            hx-trigger="input changed delay:450ms, search"
+                            hx-target="#file-table-body"
+                            hx-swap="innerHTML"
+                            hx-include="this"
+                        />
+                        <span class="icon is-left">
+                            <i class="fas fa-search" aria-hidden="true"></i>
+                        </span>
+                    </div>
+                </div>
+                <div class="is-size-7 has-text-grey" id="files-count-w">&nbsp;</div>
+            </div>
 
-        <div class="photo-gallery-container">
-            <div
-                id="photo-gallery"
-                hx-get="/{{ dir.dir_type }}/{{ dir.id }}/photo_grid?page=1"
-                hx-trigger="load"
-                :class="edit_photos ? 'photo-grid photo-grid-edit' : 'photo-grid'"
-            >
-                <div class="photo-grid-item has-background-{{ t.theme +}} skeleton-block">
-                    <div class="photo-item">&nbsp;</div>
-                </div>
-                <div class="photo-grid-item has-background-{{ t.theme +}} skeleton-block">
-                    <div class="photo-item">&nbsp;</div>
-                </div>
-                <div class="photo-grid-item has-background-{{ t.theme +}} skeleton-block">
-                    <div class="photo-item">&nbsp;</div>
-                </div>
-                <div class="photo-grid-item has-background-{{ t.theme +}} skeleton-block">
-                    <div class="photo-item">&nbsp;</div>
-                </div>
-                <div class="photo-grid-item has-background-{{ t.theme +}} skeleton-block">
-                    <div class="photo-item">&nbsp;</div>
-                </div>
-                <div class="photo-grid-item has-background-{{ t.theme +}} skeleton-block">
-                    <div class="photo-item">&nbsp;</div>
-                </div>
+            <div class="table-container documents-table-wrap">
+                <table class="table is-fullwidth is-hoverable documents-table">
+                    <thead>
+                        <tr>
+                            <th>Filename</th>
+                            <th class="has-text-right">File Size</th>
+                            <th>Date Uploaded</th>
+                            <th class="has-text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody
+                        id="file-table-body"
+                        hx-get="/{{ dir.dir_type }}/{{ dir.id }}/file_table?page=1"
+                        hx-trigger="load"
+                    >
+                        <tr class="skeleton-row">
+                            <td>
+                                <div class="skeleton-line"></div>
+                            </td>
+                            <td>
+                                <div class="skeleton-line skeleton-line-short ml-auto"></div>
+                            </td>
+                            <td>
+                                <div class="skeleton-line skeleton-line-short"></div>
+                            </td>
+                            <td>
+                                <div class="skeleton-line skeleton-line-short ml-auto"></div>
+                            </td>
+                        </tr>
+                        <tr class="skeleton-row">
+                            <td>
+                                <div class="skeleton-line"></div>
+                            </td>
+                            <td>
+                                <div class="skeleton-line skeleton-line-short ml-auto"></div>
+                            </td>
+                            <td>
+                                <div class="skeleton-line skeleton-line-short"></div>
+                            </td>
+                            <td>
+                                <div class="skeleton-line skeleton-line-short ml-auto"></div>
+                            </td>
+                        </tr>
+                        <tr class="skeleton-row">
+                            <td>
+                                <div class="skeleton-line"></div>
+                            </td>
+                            <td>
+                                <div class="skeleton-line skeleton-line-short ml-auto"></div>
+                            </td>
+                            <td>
+                                <div class="skeleton-line skeleton-line-short"></div>
+                            </td>
+                            <td>
+                                <div class="skeleton-line skeleton-line-short ml-auto"></div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
+        {% endif %}
+
+        {% if dir.dir_type == DirType::Photos %}
+            <div class="has-text-right is-size-7">
+                <span id="photos-count-w">&nbsp;</span>
+            </div>
+
+            <div class="photo-gallery-container">
+                <div
+                    id="photo-gallery"
+                    hx-get="/{{ dir.dir_type }}/{{ dir.id }}/photo_grid?page=1"
+                    hx-trigger="load"
+                    :class="edit_photos ? 'photo-grid photo-grid-edit' : 'photo-grid'"
+                >
+                    <div class="photo-grid-item has-background-{{ t.theme +}} skeleton-block">
+                        <div class="photo-item">&nbsp;</div>
+                    </div>
+                    <div class="photo-grid-item has-background-{{ t.theme +}} skeleton-block">
+                        <div class="photo-item">&nbsp;</div>
+                    </div>
+                    <div class="photo-grid-item has-background-{{ t.theme +}} skeleton-block">
+                        <div class="photo-item">&nbsp;</div>
+                    </div>
+                    <div class="photo-grid-item has-background-{{ t.theme +}} skeleton-block">
+                        <div class="photo-item">&nbsp;</div>
+                    </div>
+                    <div class="photo-grid-item has-background-{{ t.theme +}} skeleton-block">
+                        <div class="photo-item">&nbsp;</div>
+                    </div>
+                    <div class="photo-grid-item has-background-{{ t.theme +}} skeleton-block">
+                        <div class="photo-item">&nbsp;</div>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
     </div>
 </section>
 {% endblock %}

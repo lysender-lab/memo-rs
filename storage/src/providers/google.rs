@@ -172,7 +172,10 @@ impl GoogleStorageProvider {
                 }
             }
         } else {
-            let path = format!("{}/{}/{}", &dir.dir_name, ORIGINAL_PATH, &file.filename);
+            let path = format!(
+                "{}/{}/{}/{}/{}",
+                &dir.org_id, &dir.dir_type, &dir.dir_name, ORIGINAL_PATH, &file.filename
+            );
             self.delete_object_by_path(&dir.bucket_name, &path).await?;
         }
 
@@ -321,6 +324,16 @@ async fn format_file_single(signer: &Signer, dir: &DirMeta, mut file: FileDto) -
             }
 
             if !updated_versions.is_empty() {
+                // Attach the original version to the url
+                let orig_url = updated_versions
+                    .iter()
+                    .find(|v| v.version == ImgVersion::Original)
+                    .and_then(|v| v.url.clone());
+
+                if let Some(orig_url) = orig_url {
+                    file.url = Some(orig_url);
+                }
+
                 file.img_versions = Some(updated_versions);
             }
         }
@@ -334,6 +347,7 @@ async fn format_file_single(signer: &Signer, dir: &DirMeta, mut file: FileDto) -
             ),
         )
         .await?;
+
         file.url = Some(url);
     }
 

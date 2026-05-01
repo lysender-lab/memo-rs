@@ -14,7 +14,7 @@ use crate::{
     error::ErrorInfo,
     models::{DirParams, DirTypeParams, FileParams, Pref},
     run::AppState,
-    services::{dirs::get_dir_svc, files::get_photo_svc, oauth::authenticate_token},
+    services::{dirs::get_dir_svc, files::get_file_svc, oauth::authenticate_token},
     web::{Action, Resource, enforce_policy, handle_error},
 };
 use memo::dir::{DirDto, DirType};
@@ -110,8 +110,7 @@ pub async fn dir_type_middleware(
         });
     };
 
-    // For now, only allow photos
-    if dir_type != DirType::Photos {
+    if dir_type != DirType::Photos && dir_type != DirType::Documents {
         return Err(Error::BadRequest {
             msg: format!("Unsupported dir type: {}", params.dir_type),
         });
@@ -133,7 +132,7 @@ pub async fn dir_middleware(
     next: Next,
 ) -> Result<Response> {
     let actor = ctx.actor();
-    enforce_policy(actor, Resource::Album, Action::Read)?;
+    enforce_policy(actor, Resource::Dir, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
 
@@ -162,26 +161,26 @@ pub async fn file_middleware(
     next: Next,
 ) -> Result<Response> {
     let actor = ctx.actor();
-    enforce_policy(actor, Resource::Photo, Action::Read)?;
+    enforce_policy(actor, Resource::File, Action::Read)?;
 
     let token = ctx.token().expect("token is required");
 
-    let mut photo_res = state.file_cache.get(&params.file_id);
+    let mut file_res = state.file_cache.get(&params.file_id);
 
-    if photo_res.is_none() {
+    if file_res.is_none() {
         // Fetch from api
-        let photo = get_photo_svc(&state, token, &dir.dir_type, &dir.id, &params.file_id).await?;
+        let file = get_file_svc(&state, token, &dir.dir_type, &dir.id, &params.file_id).await?;
 
         state
             .file_cache
-            .insert(params.file_id.clone(), photo.clone());
+            .insert(params.file_id.clone(), file.clone());
 
-        photo_res = Some(photo);
+        file_res = Some(file);
     }
 
-    let photo = photo_res.expect("photo should be present at this point");
+    let file = file_res.expect("File should be present at this point");
 
-    req.extensions_mut().insert(photo);
+    req.extensions_mut().insert(file);
     Ok(next.run(req).await)
 }
 

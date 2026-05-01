@@ -1,0 +1,45 @@
+{% macro w_file_actions(dir, file) %}
+<div class="file-actions">
+    {% match file.url %}
+        {% when Some with (url) %}
+            <a
+                href="{{ url }}"
+                target="_blank"
+                rel="noopener"
+                class="button is-small is-light"
+                aria-label="Download {{ file.name }}"
+                title="Download"
+            >
+                <span class="icon is-small" aria-hidden="true">
+                    <i class="fas fa-download"></i>
+                </span>
+            </a>
+        {% when None %}
+            <button
+                type="button"
+                class="button is-small is-light"
+                aria-label="Download unavailable for {{ file.name }}"
+                title="Download unavailable"
+                disabled
+            >
+                <span class="icon is-small" aria-hidden="true">
+                    <i class="fas fa-download"></i>
+                </span>
+            </button>
+    {% endmatch %}
+
+    <button
+        type="button"
+        class="button is-small is-light"
+        aria-label="Delete {{ file.name }}"
+        title="Delete"
+        hx-get="/{{ dir.dir_type }}/{{ dir.id }}/files/{{ file.id }}/delete"
+        hx-target="closest .file-actions-w"
+        hx-swap="innerHTML"
+    >
+        <span class="icon is-small">
+            <i class="fas fa-times"></i>
+        </span>
+    </button>
+</div>
+{% endmacro %}

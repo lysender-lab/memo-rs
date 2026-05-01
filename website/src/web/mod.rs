@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod dirs;
+pub mod document_whitelist;
 pub mod error;
 pub mod files;
 pub mod index;

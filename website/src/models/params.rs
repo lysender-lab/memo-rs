@@ -34,6 +34,7 @@ pub struct ListDirsParams {
 #[derive(Deserialize)]
 pub struct ListFilesParams {
     pub page: Option<u32>,
+    pub keyword: Option<String>,
 }
 
 impl Default for ListDirsParams {

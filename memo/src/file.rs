@@ -10,6 +10,8 @@ pub const MAX_DIMENSION: u32 = 1000;
 pub const MAX_PREVIEW_DIMENSION: u32 = 2000;
 pub const MAX_THUMB_DIMENSION: u32 = 200;
 
+pub const MAX_FILE_SIZE: i64 = 2147483648; // 2GB
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileDto {
     pub id: String,
@@ -138,6 +140,9 @@ pub struct RemoteUploadDto {
 
     #[validate(length(min = 1))]
     pub content_type: String,
+
+    #[validate(range(min = 1, max = MAX_FILE_SIZE))]
+    pub size: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -151,6 +156,7 @@ pub struct SignedFileUploadDto {
     pub orig_filename: String,
     pub new_filename: String,
     pub content_type: String,
+    pub size: i64,
     pub url: String,
     pub token: String,
 }

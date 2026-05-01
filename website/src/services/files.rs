@@ -37,6 +37,7 @@ pub struct PhotoVersionDto {
 pub struct PrepareUploadPayload {
     pub filename: String,
     pub content_type: String,
+    pub size: i64,
     pub token: String,
 }
 
@@ -103,21 +104,28 @@ impl TryFrom<FileDto> for Photo {
     }
 }
 
-pub async fn list_files_svc(
+async fn fetch_files_page(
     state: &AppState,
     token: &str,
     dir_type: &DirType,
     dir_id: &str,
     params: &ListFilesParams,
-) -> Result<Paginated<Photo>> {
+) -> Result<Paginated<FileDto>> {
     let url = format!("{}/{}/{}/files", &state.config.api_url, dir_type, dir_id);
     let mut page = "1".to_string();
     let per_page = "50".to_string();
+    let keyword = params.keyword.clone().unwrap_or_default();
 
     if let Some(p) = params.page {
         page = p.to_string();
     }
-    let query: Vec<(&str, &str)> = vec![("page", &page), ("per_page", &per_page)];
+
+    let query: Vec<(&str, &str)> = vec![
+        ("page", &page),
+        ("per_page", &per_page),
+        ("keyword", &keyword),
+    ];
+
     let response = state
         .client
         .get(url)
@@ -133,12 +141,22 @@ pub async fn list_files_svc(
         return Err(handle_response_error(response, "files", Error::AlbumNotFound).await);
     }
 
-    let listing = response
+    response
         .json::<Paginated<FileDto>>()
         .await
         .context(HttpResponseParseSnafu {
             msg: "Unable to parse files.".to_string(),
-        })?;
+        })
+}
+
+pub async fn list_photos_svc(
+    state: &AppState,
+    token: &str,
+    dir_type: &DirType,
+    dir_id: &str,
+    params: &ListFilesParams,
+) -> Result<Paginated<Photo>> {
+    let listing = fetch_files_page(state, token, dir_type, dir_id, params).await?;
 
     let items: Vec<Photo> = listing
         .data
@@ -152,13 +170,23 @@ pub async fn list_files_svc(
     })
 }
 
-pub async fn get_photo_svc(
+pub async fn list_files_svc(
+    state: &AppState,
+    token: &str,
+    dir_type: &DirType,
+    dir_id: &str,
+    params: &ListFilesParams,
+) -> Result<Paginated<FileDto>> {
+    fetch_files_page(state, token, dir_type, dir_id, params).await
+}
+
+pub async fn get_file_svc(
     state: &AppState,
     token: &str,
     dir_type: &DirType,
     dir_id: &str,
     file_id: &str,
-) -> Result<Photo> {
+) -> Result<FileDto> {
     let url = format!(
         "{}/{}/{}/files/{}",
         &state.config.api_url, dir_type, dir_id, file_id
@@ -180,7 +208,7 @@ pub async fn get_photo_svc(
             msg: "Unable to parse photo.".to_string(),
         })?;
 
-    Ok(Photo::try_from(file)?)
+    Ok(file)
 }
 
 pub async fn prepare_upload_svc(
@@ -229,7 +257,7 @@ pub async fn add_file_svc(
     dir_type: &DirType,
     dir_id: &str,
     form: CommitUploadPayload,
-) -> Result<Photo> {
+) -> Result<FileDto> {
     let csrf_result = verify_csrf_token(&form.token, &state.config.jwt_secret)?;
     ensure!(csrf_result == dir_id, CsrfTokenSnafu);
     let url = format!("{}/{}/{}/files", &state.config.api_url, dir_type, dir_id);
@@ -260,7 +288,7 @@ pub async fn add_file_svc(
             msg: "Unable to parse photo information.".to_string(),
         })?;
 
-    Ok(Photo::try_from(file)?)
+    Ok(file)
 }
 
 pub async fn delete_file_svc(

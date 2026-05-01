@@ -24,7 +24,9 @@
   border: 1px solid #dbdbdb;
   border-radius: 8px;
   text-align: center;
-  transition: box-shadow 0.2s, transform 0.1s;
+  transition:
+    box-shadow 0.2s,
+    transform 0.1s;
   background-color: white;
 }
 .bucket-tile:hover {
@@ -78,6 +80,104 @@
 }
 #photos-count-w {
   line-height: 40px;
+}
+
+/** Documents listing **/
+.documents-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.documents-search {
+  min-width: min(100%, 440px);
+  width: min(100%, 440px);
+}
+.file-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.file-type-icon {
+  min-width: 1.25rem;
+}
+.file-link,
+.file-link-disabled {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-link-disabled {
+  color: color-mix(in srgb, currentColor 65%, transparent);
+}
+.skeleton-row td {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+.skeleton-line {
+  width: 90%;
+  height: 0.85rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.skeleton-line-short {
+  width: 60%;
+}
+.file-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+.file-actions .button {
+  min-width: 2rem;
+}
+
+/** Upload files list **/
+.uploaded-files-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.uploaded-file-item {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.65rem 0.8rem;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 8%, transparent);
+}
+.uploaded-file-item:last-child {
+  border-bottom: 0;
+}
+
+@media screen and (max-width: 768px) {
+  .documents-shell {
+    padding: 0.75rem;
+    border-radius: 10px;
+  }
+
+  .documents-table {
+    font-size: 0.9rem;
+  }
+
+  .documents-table thead th:nth-child(2),
+  .documents-table tbody td:nth-child(2) {
+    white-space: nowrap;
+  }
+
+  .documents-table thead th:nth-child(3),
+  .documents-table tbody td:nth-child(3) {
+    white-space: nowrap;
+  }
+
+  .documents-table thead th:nth-child(4),
+  .documents-table tbody td:nth-child(4) {
+    white-space: nowrap;
+  }
 }
 
 /** Photo upload **/

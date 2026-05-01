@@ -10,8 +10,6 @@ use crate::{
 };
 use crate::{models::Pref, run::AppState};
 
-use super::{Action, Resource, enforce_policy};
-
 #[derive(Template)]
 #[template(path = "pages/index.html")]
 struct IndexTemplate {
@@ -24,7 +22,6 @@ pub async fn index_handler(
     State(state): State<AppState>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor();
-    enforce_policy(actor, Resource::Bucket, Action::Read)?;
 
     let mut t = TemplateData::new(&state, actor, &pref);
     t.title = String::from("Home");

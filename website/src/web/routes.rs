@@ -25,8 +25,8 @@ use super::dirs::{
     search_dirs_handler,
 };
 use super::files::{
-    confirm_delete_photo_handler, exec_delete_photo_handler, photo_listing_v2_handler,
-    pre_delete_photo_handler, upload_page_handler,
+    confirm_delete_file_handler, document_listing_handler, exec_delete_file_handler,
+    file_actions_handler, photo_listing_handler, upload_page_handler,
 };
 use super::middleware::{
     auth_middleware, dir_middleware, file_middleware, pref_middleware, require_auth_middleware,
@@ -73,7 +73,7 @@ pub fn private_routes(state: AppState) -> Router {
         .route("/prefs/theme/light", post(light_theme_handler))
         .route("/prefs/theme/dark", post(dark_theme_handler))
         .route("/profile", get(profile_page_handler))
-        .nest("/{dir_type}", my_bucket_routes(state.clone()))
+        .nest("/{dir_type}", dir_routes(state.clone()))
         .layer(middleware::map_response_with_state(
             state.clone(),
             response_mapper,
@@ -90,12 +90,12 @@ pub fn private_routes(state: AppState) -> Router {
         .with_state(state)
 }
 
-fn my_bucket_routes(state: AppState) -> Router<AppState> {
+fn dir_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(my_bucket_page_handler))
         .route("/search_dirs", get(search_dirs_handler))
         .route("/new_dir", get(new_dir_handler).post(post_new_dir_handler))
-        .nest("/{dir_id}", my_dir_inner_routes(state.clone()))
+        .nest("/{dir_id}", dir_inner_routes(state.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             dir_type_middleware,
@@ -103,7 +103,7 @@ fn my_bucket_routes(state: AppState) -> Router<AppState> {
         .with_state(state)
 }
 
-fn my_dir_inner_routes(state: AppState) -> Router<AppState> {
+fn dir_inner_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(dir_page_handler))
         .route("/edit_controls", get(edit_dir_controls_handler))
@@ -112,10 +112,11 @@ fn my_dir_inner_routes(state: AppState) -> Router<AppState> {
             "/delete",
             get(get_delete_dir_handler).post(post_delete_dir_handler),
         )
-        .route("/photo_grid", get(photo_listing_v2_handler))
+        .route("/photo_grid", get(photo_listing_handler))
+        .route("/file_table", get(document_listing_handler))
         .nest("/upload-url", upload_api_routes(state.clone()))
-        .nest("/upload", my_upload_route(state.clone()))
-        .nest("/photos/{file_id}", my_photo_routes(state.clone()))
+        .nest("/upload", upload_route(state.clone()))
+        .nest("/files/{file_id}", file_routes(state.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             dir_middleware,
@@ -133,19 +134,19 @@ pub fn upload_api_routes(state: AppState) -> Router<AppState> {
         .with_state(state)
 }
 
-fn my_upload_route(state: AppState) -> Router<AppState> {
+fn upload_route(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(upload_page_handler).post(add_file_handler))
         .with_state(state)
 }
 
-fn my_photo_routes(state: AppState) -> Router<AppState> {
+fn file_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route(
             "/delete",
-            get(confirm_delete_photo_handler).post(exec_delete_photo_handler),
+            get(confirm_delete_file_handler).post(exec_delete_file_handler),
         )
-        .route("/delete_controls", get(pre_delete_photo_handler))
+        .route("/file-actions", get(file_actions_handler))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             file_middleware,

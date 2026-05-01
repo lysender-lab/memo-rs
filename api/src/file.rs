@@ -10,23 +10,26 @@ use snafu::ResultExt;
 use storage::DownloadedFile;
 use tracing::error;
 
-use crate::Result;
 use crate::error::DbSnafu;
 use crate::error::TokioJoinSnafu;
 use crate::error::{ExifInfoSnafu, StorageSnafu, UploadFileSnafu, ValidationSnafu};
 use crate::state::AppState;
+use crate::token::FileUploadClaims;
 use crate::token::create_upload_token;
+use crate::{Error, Result};
 use db::file::MAX_FILES;
 use memo::dir::DirDto;
 use memo::dir::DirMeta;
 use memo::dir::DirType;
+use memo::file::MAX_FILE_SIZE;
 use memo::file::RemoteUploadDto;
 use memo::file::SignedFileUploadDto;
 use memo::file::{
     ALLOWED_IMAGE_TYPES, FileDto, ImgDimension, ImgVersion, ImgVersionDto, MAX_DIMENSION,
     MAX_PREVIEW_DIMENSION, MAX_THUMB_DIMENSION, ORIGINAL_PATH,
 };
-use memo::utils::generate_id;
+use memo::utils::IdPrefix;
+use memo::utils::generate_prefixed_id;
 use memo::utils::slugify_prefixed;
 use memo::utils::truncate_string;
 
@@ -50,6 +53,12 @@ pub async fn generate_upload_url(
     dir: &DirDto,
     data: &RemoteUploadDto,
 ) -> Result<SignedFileUploadDto> {
+    if data.size > MAX_FILE_SIZE {
+        return Err(Error::Validation {
+            msg: "File size exceeds maximum allowed".to_string(),
+        });
+    }
+
     let dir_meta = DirMeta {
         bucket_name: state.config.cloud.bucket,
         org_id: dir.org_id.clone(),
@@ -66,10 +75,9 @@ pub async fn generate_upload_url(
         .context(DbSnafu)?;
 
     if count >= MAX_FILES as i64 {
-        return ValidationSnafu {
+        return Err(Error::Validation {
             msg: "Directory already has maximum files".to_string(),
-        }
-        .fail();
+        });
     }
 
     // Name must be unique for the dir (not filename)
@@ -97,6 +105,7 @@ pub async fn generate_upload_url(
         data.filename.clone(),
         uniq_filename.clone(),
         data.content_type.clone(),
+        data.size,
         &state.config.jwt_secret,
     )?;
 
@@ -110,11 +119,14 @@ pub async fn generate_upload_url(
         orig_filename: data.filename.clone(),
         new_filename: uniq_filename,
         content_type: data.content_type.clone(),
+        size: data.size,
         url: upload_url,
         token,
     })
 }
 
+/// Creates a file record by downloading the file first, capture metadata
+/// create image versions, then upload to cloud storage, and finally save to database
 pub async fn create_file(state: AppState, dir: &DirDto, data: &DownloadedFile) -> Result<FileDto> {
     let dir_meta = DirMeta {
         bucket_name: state.config.cloud.bucket,
@@ -256,6 +268,86 @@ pub async fn create_file(state: AppState, dir: &DirDto, data: &DownloadedFile) -
     }
 }
 
+/// Creates a file record relying completely from upload metadata
+/// Assumes that the file has been uploaded already
+/// Applicable to non-image files
+pub async fn create_remote_file(
+    state: AppState,
+    dir: &DirDto,
+    data: &FileUploadClaims,
+) -> Result<FileDto> {
+    let today = chrono::Utc::now().timestamp();
+
+    let file = FileDto {
+        id: generate_prefixed_id(IdPrefix::File),
+        dir_id: dir.id.clone(),
+        name: data.orig_filename.clone(),
+        filename: data.new_filename.clone(),
+        content_type: data.content_type.clone(),
+        size: data.size,
+        url: None,
+        is_image: false,
+        img_versions: None,
+        img_taken_at: None,
+        created_at: today,
+        updated_at: today,
+    };
+
+    // Limit the number of files per dir
+    let count = state
+        .db
+        .files
+        .retry_count_by_dir(&dir.id, 5)
+        .await
+        .context(DbSnafu)?;
+
+    if count >= MAX_FILES as i64 {
+        return Err(Error::Validation {
+            msg: "Directory already has maximum files".to_string(),
+        });
+    }
+
+    // Name must be unique for the dir (not filename)
+    if state
+        .db
+        .files
+        .retry_find_by_name(&dir.id, &data.orig_filename, 5)
+        .await
+        .context(DbSnafu)?
+        .is_some()
+    {
+        // Show error but ensure name is not too long
+        let short_name = truncate_string(&data.orig_filename, 20);
+        return Err(Error::Validation {
+            msg: format!("{} already exists", short_name),
+        });
+    }
+
+    // Save to database
+    let create_res = state.db.files.retry_create(file, 5).await.context(DbSnafu);
+
+    match create_res {
+        Ok(file) => {
+            // Also update dir
+            let today = chrono::Utc::now().timestamp();
+            let dir_result = state
+                .db
+                .dirs
+                .retry_update_timestamp(&dir.id, today, 5)
+                .await
+                .context(DbSnafu);
+
+            if let Err(e) = dir_result {
+                // Can't afford to fail here, we will just log the error...
+                error!("{}", e);
+            }
+
+            Ok(file)
+        }
+        Err(e) => Err(e),
+    }
+}
+
 fn cleanup_temp_uploads(data: &DownloadedFile, file: Option<&FileDto>) -> Result<()> {
     if let Some(file) = file {
         if file.is_image {
@@ -297,13 +389,8 @@ fn cleanup_temp_uploads(data: &DownloadedFile, file: Option<&FileDto>) -> Result
 fn init_file(dir: &DirDto, data: &DownloadedFile) -> Result<FileDto> {
     let mut is_image = false;
     let content_type = get_content_type(&data.path)?;
-    if content_type.starts_with("image/") {
-        if !ALLOWED_IMAGE_TYPES.contains(&content_type.as_str()) {
-            if let Err(e) = cleanup_temp_uploads(data, None) {
-                error!("Cleanup orig file: {}", e);
-            }
-            return Err("Uploaded image type not allowed".into());
-        }
+
+    if ALLOWED_IMAGE_TYPES.contains(&content_type.as_str()) {
         is_image = true;
     }
 
@@ -311,7 +398,7 @@ fn init_file(dir: &DirDto, data: &DownloadedFile) -> Result<FileDto> {
     let today = chrono::Utc::now().timestamp();
 
     let file = FileDto {
-        id: generate_id(),
+        id: generate_prefixed_id(IdPrefix::File),
         dir_id: dir.id.clone(),
         name: data.name.clone(),
         filename: data.filename.clone(),
