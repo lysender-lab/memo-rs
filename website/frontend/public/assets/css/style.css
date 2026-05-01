@@ -127,6 +127,15 @@
 .skeleton-line-short {
   width: 60%;
 }
+.file-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+.file-actions .button {
+  min-width: 2rem;
+}
 
 /** Upload files list **/
 .uploaded-files-list {
@@ -162,6 +171,11 @@
 
   .documents-table thead th:nth-child(3),
   .documents-table tbody td:nth-child(3) {
+    white-space: nowrap;
+  }
+
+  .documents-table thead th:nth-child(4),
+  .documents-table tbody td:nth-child(4) {
     white-space: nowrap;
   }
 }

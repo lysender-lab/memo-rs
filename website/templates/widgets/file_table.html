@@ -1,7 +1,7 @@
 {% match error_message %}
     {% when Some with (msg) %}
         <tr>
-            <td colspan="3">
+            <td colspan="4">
                 <div class="error-message tag is-danger">{{ msg }}</div>
             </td>
         </tr>
@@ -37,12 +37,53 @@
     </td>
     <td class="has-text-right has-text-grey">{{ file.size_text }}</td>
     <td class="has-text-grey">{{ file.uploaded_at_text }}</td>
+    <td class="has-text-right">
+        <div class="file-actions">
+            {% match file.url %}
+                {% when Some with (url) %}
+                    <a
+                        href="{{ url }}"
+                        target="_blank"
+                        rel="noopener"
+                        class="button is-small is-light"
+                        aria-label="Download {{ file.name }}"
+                        title="Download"
+                    >
+                        <span class="icon is-small" aria-hidden="true">
+                            <i class="fas fa-download"></i>
+                        </span>
+                    </a>
+                {% when None %}
+                    <button
+                        type="button"
+                        class="button is-small is-light"
+                        aria-label="Download unavailable for {{ file.name }}"
+                        title="Download unavailable"
+                        disabled
+                    >
+                        <span class="icon is-small" aria-hidden="true">
+                            <i class="fas fa-download"></i>
+                        </span>
+                    </button>
+            {% endmatch %}
+            <button
+                type="button"
+                class="button is-small is-light"
+                aria-label="Delete {{ file.name }}"
+                title="Delete"
+            >
+                <span class="icon is-small" aria-hidden="true">
+                    <i class="fas fa-trash-alt"></i>
+                </span>
+            </button>
+        </div>
+    </td>
 </tr>
 {% endfor %}
 
 {% if !has_files %}
 <tr>
-    <td colspan="3" class="has-text-centered has-text-grey py-6">No matching files found.</td>
+    <td colspan="4" class="has-text-centered has-text-grey py-6">No matching files found.</td>
 </tr>
 {% endif %}
 
