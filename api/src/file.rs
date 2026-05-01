@@ -6,7 +6,6 @@ use exif::{In, Tag};
 use image::DynamicImage;
 use image::ImageReader;
 use image::imageops;
-use memo::file::MAX_FILE_SIZE;
 use snafu::ResultExt;
 use storage::DownloadedFile;
 use tracing::error;
@@ -22,13 +21,15 @@ use db::file::MAX_FILES;
 use memo::dir::DirDto;
 use memo::dir::DirMeta;
 use memo::dir::DirType;
+use memo::file::MAX_FILE_SIZE;
 use memo::file::RemoteUploadDto;
 use memo::file::SignedFileUploadDto;
 use memo::file::{
     ALLOWED_IMAGE_TYPES, FileDto, ImgDimension, ImgVersion, ImgVersionDto, MAX_DIMENSION,
     MAX_PREVIEW_DIMENSION, MAX_THUMB_DIMENSION, ORIGINAL_PATH,
 };
-use memo::utils::generate_id;
+use memo::utils::IdPrefix;
+use memo::utils::generate_prefixed_id;
 use memo::utils::slugify_prefixed;
 use memo::utils::truncate_string;
 
@@ -278,7 +279,7 @@ pub async fn create_remote_file(
     let today = chrono::Utc::now().timestamp();
 
     let file = FileDto {
-        id: generate_id(),
+        id: generate_prefixed_id(IdPrefix::File),
         dir_id: dir.id.clone(),
         name: data.orig_filename.clone(),
         filename: data.new_filename.clone(),
@@ -402,7 +403,7 @@ fn init_file(dir: &DirDto, data: &DownloadedFile) -> Result<FileDto> {
     let today = chrono::Utc::now().timestamp();
 
     let file = FileDto {
-        id: generate_id(),
+        id: generate_prefixed_id(IdPrefix::File),
         dir_id: dir.id.clone(),
         name: data.name.clone(),
         filename: data.filename.clone(),
