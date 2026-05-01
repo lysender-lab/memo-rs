@@ -54,7 +54,7 @@ struct FileRowView {
 
 #[derive(Template)]
 #[template(path = "widgets/file_table.html")]
-struct FileTableTemplate {
+struct FileListingTemplate {
     dir: DirDto,
     files: Vec<FileRowView>,
     has_files: bool,
@@ -143,7 +143,7 @@ fn file_icon_class(name: &str, content_type: &str) -> &'static str {
     "fa-file"
 }
 
-pub async fn file_table_handler(
+pub async fn document_listing_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(dir): Extension<DirDto>,
     Query(query): Query<ListFilesParams>,
@@ -155,7 +155,7 @@ pub async fn file_table_handler(
     let dir_id = dir.id.clone();
     let dir_type = dir.dir_type.clone();
 
-    let mut tpl = FileTableTemplate {
+    let mut tpl = FileListingTemplate {
         dir,
         files: Vec::new(),
         has_files: false,
@@ -211,7 +211,7 @@ pub async fn file_table_handler(
     }
 }
 
-pub async fn photo_listing_v2_handler(
+pub async fn photo_listing_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(pref): Extension<Pref>,
     Extension(dir): Extension<DirDto>,

@@ -24,7 +24,7 @@
         </div>
 
         {% if dir.dir_type == DirType::Documents %}
-        <div class="documents-shell mt-4">
+        <div class="box mt-4">
             <div class="documents-toolbar mb-4">
                 <div class="field has-addons documents-search">
                     <div class="control is-expanded has-icons-left">
@@ -98,7 +98,9 @@
                 </table>
             </div>
         </div>
-        {% else %}
+        {% endif %}
+
+        {% if dir.dir_type == DirType::Photos %}
             <div class="has-text-right is-size-7">
                 <span id="photos-count-w">&nbsp;</span>
             </div>

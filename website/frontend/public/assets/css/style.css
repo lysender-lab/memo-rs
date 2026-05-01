@@ -24,7 +24,9 @@
   border: 1px solid #dbdbdb;
   border-radius: 8px;
   text-align: center;
-  transition: box-shadow 0.2s, transform 0.1s;
+  transition:
+    box-shadow 0.2s,
+    transform 0.1s;
   background-color: white;
 }
 .bucket-tile:hover {
@@ -81,12 +83,6 @@
 }
 
 /** Documents listing **/
-.documents-shell {
-  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
-  border-radius: 14px;
-  padding: 1rem;
-  background: color-mix(in srgb, currentColor 1.5%, transparent);
-}
 .documents-toolbar {
   display: flex;
   justify-content: space-between;
@@ -97,23 +93,6 @@
 .documents-search {
   min-width: min(100%, 440px);
   width: min(100%, 440px);
-}
-.documents-table-wrap {
-  border: 1px solid color-mix(in srgb, currentColor 10%, transparent);
-  border-radius: 12px;
-  overflow: hidden;
-}
-.documents-table {
-  margin-bottom: 0;
-}
-.documents-table thead th {
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  border-bottom-width: 1px;
-}
-.documents-table tbody tr {
-  transition: background-color 0.16s ease;
 }
 .file-name-cell {
   display: flex;

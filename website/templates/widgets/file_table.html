@@ -40,6 +40,12 @@
 </tr>
 {% endfor %}
 
+{% if !has_files %}
+<tr>
+    <td colspan="3" class="has-text-centered has-text-grey py-6">No matching files found.</td>
+</tr>
+{% endif %}
+
 {% match meta %}
     {% when Some with (page_meta) %}
         <span id="files-count-w" hx-swap-oob="true">
@@ -50,14 +56,8 @@
                     {{ page_meta.page * page_meta.per_page }} of {{ page_meta.total_records }} files
                 {% endif %}
             {% else %}
-                No files yet
+                0 files
             {% endif %}
         </span>
     {% when None %}
 {% endmatch %}
-
-{% if !has_files %}
-<tr>
-    <td colspan="3" class="has-text-centered has-text-grey py-6">No matching files found.</td>
-</tr>
-{% endif %}

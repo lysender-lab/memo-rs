@@ -321,6 +321,16 @@ async fn format_file_single(signer: &Signer, dir: &DirMeta, mut file: FileDto) -
             }
 
             if !updated_versions.is_empty() {
+                // Attach the original version to the url
+                let orig_url = updated_versions
+                    .iter()
+                    .find(|v| v.version == ImgVersion::Original)
+                    .and_then(|v| v.url.clone());
+
+                if let Some(orig_url) = orig_url {
+                    file.url = Some(orig_url);
+                }
+
                 file.img_versions = Some(updated_versions);
             }
         }
@@ -334,6 +344,7 @@ async fn format_file_single(signer: &Signer, dir: &DirMeta, mut file: FileDto) -
             ),
         )
         .await?;
+
         file.url = Some(url);
     }
 
