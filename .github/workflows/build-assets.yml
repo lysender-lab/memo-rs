@@ -1,0 +1,57 @@
+name: Build assets and upload to S3
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: build-assets-main-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-upload:
+    runs-on: blacksmith-2vcpu-ubuntu-2404-arm
+    env:
+      S3_UPLOAD_BUCKET: ${{ vars.S3_UPLOAD_BUCKET }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: useblacksmith/setup-node@v5
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: website/frontend/package-lock.json
+
+      - name: Install website frontend dependencies
+        run: npm ci
+        working-directory: website/frontend
+
+      - name: Build website frontend assets
+        run: npm run build:assets
+        working-directory: website/frontend
+
+      - name: Create website public asset archive
+        run: zip -r public.zip public
+        working-directory: website/frontend
+
+      - name: Verify website public asset archive
+        run: ls -lh website/frontend/public.zip
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Upload website public assets zip to S3
+        run: |
+          test -n "$S3_UPLOAD_BUCKET" || { echo "S3_UPLOAD_BUCKET is not set"; exit 1; }
+          aws s3 cp website/frontend/public.zip s3://$S3_UPLOAD_BUCKET/memo-rs/html/public.zip

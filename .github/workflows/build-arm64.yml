@@ -1,4 +1,4 @@
-name: Build and Upload Binary
+name: Build for ARM64 and upload to S3
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
 
 concurrency:
-  group: build-upload-main-${{ github.ref }}
+  group: build-arm64-main-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -34,28 +34,6 @@ jobs:
       - name: Build release binary - website
         run: cargo build -p website --release --locked
 
-      - name: Setup Node.js 24
-        uses: useblacksmith/setup-node@v5
-        with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: website/frontend/package-lock.json
-
-      - name: Install website frontend dependencies
-        run: npm ci
-        working-directory: website/frontend
-
-      - name: Build website frontend assets
-        run: npm run build:assets
-        working-directory: website/frontend
-
-      - name: Create website public asset archive
-        run: zip -r public.zip public
-        working-directory: website/frontend
-
-      - name: Verify website public asset archive
-        run: ls -lh website/frontend/public.zip
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -68,6 +46,3 @@ jobs:
           test -n "$S3_UPLOAD_BUCKET" || { echo "S3_UPLOAD_BUCKET is not set"; exit 1; }
           aws s3 cp target/release/api s3://$S3_UPLOAD_BUCKET/memo-rs/bin/api
           aws s3 cp target/release/website s3://$S3_UPLOAD_BUCKET/memo-rs/bin/website
-
-      - name: Upload website public assets zip to S3
-        run: aws s3 cp website/frontend/public.zip s3://$S3_UPLOAD_BUCKET/memo-rs/html/public.zip
