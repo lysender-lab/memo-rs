@@ -56,16 +56,20 @@
 
 {% match meta %}
     {% when Some with (page_meta) %}
-        <span id="files-count-w" hx-swap-oob="true">
-            {% if page_meta.total_records > 0 %}
-                {% if page_meta.page == page_meta.total_pages as i32 %}
-                    {{ page_meta.total_records }} files
-                {% else %}
-                    {{ page_meta.page * page_meta.per_page }} of {{ page_meta.total_records }} files
-                {% endif %}
+        {% if page_meta.total_records > 0 %}
+            {% if page_meta.page == page_meta.total_pages as i32 %}
+            <span id="files-count-w" hx-swap-oob="true">
+                <span class="current-count">{{ page_meta.total_records }}</span>
+                of
+                <span class="total-records">{{ page_meta.total_records }}</span>
+            </span>
             {% else %}
-                0 files
+            <span id="files-count-w" hx-swap-oob="true">
+                <span class="current-count">{{ page_meta.page * page_meta.per_page }}</span>
+                of
+                <span class="total-records">{{ page_meta.total_records }}</span>
+            </span>
             {% endif %}
-        </span>
+        {% endif %}
     {% when None %}
 {% endmatch %}
