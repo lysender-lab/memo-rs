@@ -14,8 +14,6 @@ axum-extra = { version = "0.12.6", features = ["cookie"] }
 base64 = "0.22.1"
 bytes = "1.11.1"
 chrono = "0.4.44"
-google-cloud-auth = "1.9.0"
-google-cloud-storage = "1.11.0"
 image = "0.25.10"
 infer = "0.19.0"
 jsonwebtoken = { version = "10.3.0", features = ["aws_lc_rs"] }
