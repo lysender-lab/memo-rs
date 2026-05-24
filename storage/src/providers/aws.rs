@@ -2,7 +2,6 @@ use std::path::Path;
 use std::time::Duration;
 
 use aws_config::BehaviorVersion;
-use aws_config::sts::AssumeRoleProvider;
 use aws_sdk_s3::Client as S3Client;
 use aws_sdk_s3::error::ProvideErrorMetadata;
 use aws_sdk_s3::presigning::PresigningConfig;
@@ -21,8 +20,8 @@ pub struct AwsStorageProvider {
 }
 
 impl AwsStorageProvider {
-    pub async fn new(role_arn: &str) -> Result<Self> {
-        let client = create_storage_client(role_arn).await;
+    pub async fn new() -> Result<Self> {
+        let client = create_storage_client().await;
         Ok(Self { client })
     }
 
@@ -212,21 +211,8 @@ impl AwsStorageProvider {
     }
 }
 
-const ROLE_SESSION_NAME: &'static str = "memo-rs-storage";
-
-async fn create_storage_client(role_arn: &str) -> S3Client {
-    let source_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
-    let assume_role_provider = AssumeRoleProvider::builder(role_arn)
-        .configure(&source_config)
-        .session_name(ROLE_SESSION_NAME)
-        .session_length(Duration::from_secs(3600))
-        .build()
-        .await;
-
-    let config = aws_config::defaults(BehaviorVersion::latest())
-        .credentials_provider(assume_role_provider)
-        .load()
-        .await;
+async fn create_storage_client() -> S3Client {
+    let config = aws_config::defaults(BehaviorVersion::latest()).load().await;
 
     S3Client::new(&config)
 }
