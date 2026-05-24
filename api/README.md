@@ -289,6 +289,7 @@ cargo install diesel_cli --no-default-features --features sqlite
 
 ```
 DATABASE_URL=sqlite://db/db.sqlite3
+DATABASE_POOL_SIZE=4
 JWT_SECRET=value
 UPLOAD_DIR=/path/to/upload_dir
 PORT=11001

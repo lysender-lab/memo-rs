@@ -1,12 +1,13 @@
 mod any;
 pub mod db;
+mod db_pool;
 pub mod dir;
-pub mod error;
+mod error;
 pub mod file;
 #[cfg(test)]
 mod test;
-pub mod turso_decode;
-pub mod turso_params;
+mod turso_decode;
+mod turso_params;
 
 pub use db::{DbMapper, create_db_mapper};
 pub use error::{Error, Result};

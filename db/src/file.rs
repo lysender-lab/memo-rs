@@ -2,11 +2,13 @@ use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use std::cmp::min;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
-use turso::{Connection, Row};
+use turso::Row;
 use validator::Validate;
 
+use crate::db_pool::DbPool;
 use crate::error::{DbPrepareSnafu, DbStatementSnafu, ValidationSnafu};
 use crate::turso_decode::{
     FromTursoRow, collect_count, collect_row, collect_rows, opt_row_integer, opt_row_text,
@@ -173,11 +175,11 @@ impl FromTursoRow for FileIdDto {
 }
 
 pub struct FileRepo {
-    db_pool: Connection,
+    db_pool: Arc<DbPool>,
 }
 
 impl FileRepo {
-    pub fn new(db_pool: Connection) -> Self {
+    pub fn new(db_pool: Arc<DbPool>) -> Self {
         Self { db_pool }
     }
 
@@ -185,7 +187,8 @@ impl FileRepo {
         let query =
             "SELECT id FROM files WHERE deleted_at IS NULL ORDER BY created_at ASC".to_string();
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         let mut rows = stmt.query({}).await.context(DbStatementSnafu)?;
         let items: Vec<FileIdDto> = collect_rows(&mut rows).await?;
 
@@ -205,7 +208,8 @@ impl FileRepo {
             q_params.push(text_param(":keyword", format!("%{}%", keyword)));
         }
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         let row_result = stmt.query_row(q_params).await;
         collect_count(row_result)
     }
@@ -277,7 +281,8 @@ impl FileRepo {
         q_params.push(integer_param(":per_page", per_page as i64));
         q_params.push(integer_param(":offset", offset));
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         let mut rows = stmt.query(q_params).await.context(DbStatementSnafu)?;
         let items: Vec<FileDto> = collect_rows(&mut rows).await?;
 
@@ -331,7 +336,8 @@ impl FileRepo {
         q_params.push(integer_param(":created_at", file.created_at));
         q_params.push(integer_param(":updated_at", file.updated_at));
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         stmt.execute(q_params).await.context(DbStatementSnafu)?;
 
         Ok(file.into())
@@ -346,7 +352,7 @@ impl FileRepo {
             match self.create(file_dto.clone()).await {
                 Ok(result) => return Ok(result),
                 Err(Error::DbStatement { source }) => match source {
-                    turso::Error::Misuse(..) => {
+                    turso::Error::Busy(..) => {
                         attempts += 1;
                         if attempts >= max_retries {
                             return Err(Error::DbStatement { source });
@@ -390,7 +396,8 @@ impl FileRepo {
         let mut q_params = new_query_params();
         q_params.push(text_param(":id", id.to_owned()));
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         let row_result = stmt.query_row(q_params).await;
         let dto: Option<FileDto> = collect_row(row_result)?;
         Ok(dto)
@@ -420,43 +427,11 @@ impl FileRepo {
         q_params.push(text_param(":dir_id", dir_id.to_owned()));
         q_params.push(text_param(":name", name.to_owned()));
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         let row_result = stmt.query_row(q_params).await;
         let dto: Option<FileDto> = collect_row(row_result)?;
         Ok(dto)
-    }
-
-    pub async fn retry_find_by_name(
-        &self,
-        dir_id: &str,
-        name: &str,
-        max_retries: usize,
-    ) -> Result<Option<FileDto>> {
-        let mut attempts = 0;
-        let mut delay = Duration::from_millis(100);
-        let max_delay = Duration::from_secs(2);
-
-        loop {
-            match self.find_by_name(dir_id, name).await {
-                Ok(result) => return Ok(result),
-                Err(Error::DbResult { source }) => match source {
-                    turso::Error::Misuse(..) => {
-                        attempts += 1;
-                        if attempts >= max_retries {
-                            return Err(Error::DbResult { source });
-                        }
-
-                        sleep(delay).await;
-                        delay = min(delay.saturating_mul(2), max_delay);
-                        // Retries...
-                    }
-                    _ => {
-                        return Err(Error::DbResult { source });
-                    }
-                },
-                Err(e) => return Err(e),
-            }
-        }
     }
 
     pub async fn count_by_dir(&self, dir_id: &str) -> Result<i64> {
@@ -470,37 +445,10 @@ impl FileRepo {
         let mut q_params = new_query_params();
         q_params.push(text_param(":dir_id", dir_id.to_owned()));
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         let row_result = stmt.query_row(q_params).await;
         collect_count(row_result)
-    }
-
-    pub async fn retry_count_by_dir(&self, dir_id: &str, max_retries: usize) -> Result<i64> {
-        let mut attempts = 0;
-        let mut delay = Duration::from_millis(100);
-        let max_delay = Duration::from_secs(2);
-
-        loop {
-            match self.count_by_dir(dir_id).await {
-                Ok(result) => return Ok(result),
-                Err(Error::DbResult { source }) => match source {
-                    turso::Error::Misuse(..) => {
-                        attempts += 1;
-                        if attempts >= max_retries {
-                            return Err(Error::DbResult { source });
-                        }
-
-                        sleep(delay).await;
-                        delay = min(delay.saturating_mul(2), max_delay);
-                        // Retries...
-                    }
-                    _ => {
-                        return Err(Error::DbResult { source });
-                    }
-                },
-                Err(e) => return Err(e),
-            }
-        }
     }
 
     pub async fn move_to_dir(&self, old_dir_id: &str, new_dir_id: &str) -> Result<()> {
@@ -513,7 +461,8 @@ impl FileRepo {
         q_params.push(text_param(":new_dir_id", new_dir_id.to_owned()));
         q_params.push(text_param(":old_dir_id", old_dir_id.to_owned()));
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         stmt.execute(q_params).await.context(DbStatementSnafu)?;
         Ok(())
     }
@@ -528,7 +477,8 @@ impl FileRepo {
         q_params.push(text_param(":new_id", new_id.to_owned()));
         q_params.push(text_param(":old_id", old_id.to_owned()));
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         stmt.execute(q_params).await.context(DbStatementSnafu)?;
         Ok(())
     }
@@ -538,7 +488,8 @@ impl FileRepo {
         let mut q_params = new_query_params();
         q_params.push(text_param(":id", id.to_owned()));
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         stmt.execute(q_params).await.context(DbStatementSnafu)?;
 
         Ok(())

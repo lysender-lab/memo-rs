@@ -70,7 +70,7 @@ pub async fn generate_upload_url(
     let count = state
         .db
         .files
-        .retry_count_by_dir(&dir.id, 5)
+        .count_by_dir(&dir.id)
         .await
         .context(DbSnafu)?;
 
@@ -84,7 +84,7 @@ pub async fn generate_upload_url(
     if state
         .db
         .files
-        .retry_find_by_name(&dir.id, &data.filename, 5)
+        .find_by_name(&dir.id, &data.filename)
         .await
         .context(DbSnafu)?
         .is_some()
@@ -156,7 +156,7 @@ pub async fn create_file(state: AppState, dir: &DirDto, data: &DownloadedFile) -
     let count = state
         .db
         .files
-        .retry_count_by_dir(&dir.id, 5)
+        .count_by_dir(&dir.id)
         .await
         .context(DbSnafu)?;
 
@@ -173,7 +173,7 @@ pub async fn create_file(state: AppState, dir: &DirDto, data: &DownloadedFile) -
     if state
         .db
         .files
-        .retry_find_by_name(&dir.id, &data.name, 5)
+        .find_by_name(&dir.id, &data.name)
         .await
         .context(DbSnafu)?
         .is_some()
@@ -297,7 +297,7 @@ pub async fn create_remote_file(
     let count = state
         .db
         .files
-        .retry_count_by_dir(&dir.id, 5)
+        .count_by_dir(&dir.id)
         .await
         .context(DbSnafu)?;
 
@@ -311,7 +311,7 @@ pub async fn create_remote_file(
     if state
         .db
         .files
-        .retry_find_by_name(&dir.id, &data.orig_filename, 5)
+        .find_by_name(&dir.id, &data.orig_filename)
         .await
         .context(DbSnafu)?
         .is_some()

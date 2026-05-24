@@ -102,12 +102,7 @@ pub async fn dir_middleware(
 
     if dir_res.is_none() {
         // Fetch from database
-        dir_res = state
-            .db
-            .dirs
-            .retry_get(&params.dir_id, 5)
-            .await
-            .context(DbSnafu)?;
+        dir_res = state.db.dirs.get(&params.dir_id).await.context(DbSnafu)?;
 
         if let Some(d) = dir_res.clone() {
             // Store to cache if present

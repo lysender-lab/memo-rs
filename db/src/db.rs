@@ -1,9 +1,11 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use snafu::ResultExt;
 use turso::{Builder, Connection};
 
 use crate::any::AnyRepo;
+use crate::db_pool::DbPool;
 use crate::dir::DirRepo;
 use crate::error::{DbBuilderSnafu, DbConnectSnafu};
 use crate::file::FileRepo;
@@ -30,11 +32,25 @@ pub struct DbMapper {
     pub any: AnyRepo,
 }
 
-pub async fn create_db_mapper(filename: &Path) -> Result<DbMapper> {
-    let pool = create_db_pool(filename).await?;
+pub struct LogsDbMapper {
+    pub any: AnyRepo,
+}
+
+pub async fn create_db_mapper(filename: &Path, pool_size: usize) -> Result<DbMapper> {
+    let pool = DbPool::new(filename, pool_size).await?;
+    let arc_pool = Arc::new(pool);
+
     Ok(DbMapper {
-        dirs: DirRepo::new(pool.clone()),
-        files: FileRepo::new(pool.clone()),
-        any: AnyRepo::new(pool.clone()),
+        dirs: DirRepo::new(arc_pool.clone()),
+        files: FileRepo::new(arc_pool.clone()),
+        any: AnyRepo::new(arc_pool),
+    })
+}
+
+pub async fn create_logs_db_mapper(filename: &Path) -> Result<LogsDbMapper> {
+    let pool = DbPool::new(filename, 1).await?;
+    let arc_pool = Arc::new(pool);
+    Ok(LogsDbMapper {
+        any: AnyRepo::new(arc_pool),
     })
 }

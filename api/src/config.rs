@@ -2,8 +2,8 @@ use serde::Deserialize;
 use snafu::{ResultExt, ensure};
 use std::{env, path::PathBuf};
 
-use crate::Result;
 use crate::error::{ConfigSnafu, UploadDirSnafu};
+use crate::{Error, Result};
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -30,7 +30,10 @@ pub struct ServerConfig {
 #[derive(Debug, Clone)]
 pub struct DbConfig {
     pub dir: PathBuf,
+    pub pool_size: usize,
 }
+
+const DEFAULT_DB_POOL_SIZE: usize = 4;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct AuthConfig {
@@ -48,6 +51,10 @@ impl Config {
             }
         );
 
+        let pool_size = optional_env("DATABASE_POOL_SIZE")
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(DEFAULT_DB_POOL_SIZE);
+
         let config = Config {
             jwt_secret: required_env("JWT_SECRET")?,
             upload_dir: PathBuf::from(required_env("UPLOAD_DIR")?),
@@ -59,7 +66,10 @@ impl Config {
             server: ServerConfig {
                 address: required_env("SERVER_ADDRESS")?,
             },
-            db: DbConfig { dir: db_dir },
+            db: DbConfig {
+                dir: db_dir,
+                pool_size,
+            },
             auth: AuthConfig {
                 api_url: required_env("AUTH_API_BASE_URL")?,
             },
@@ -104,9 +114,15 @@ impl Config {
 fn required_env(name: &str) -> Result<String> {
     match env::var(name) {
         Ok(val) => Ok(val),
-        Err(_) => ConfigSnafu {
+        Err(_) => Err(Error::Config {
             msg: format!("{} is required.", name),
-        }
-        .fail(),
+        }),
+    }
+}
+
+fn optional_env(name: &str) -> Option<String> {
+    match env::var(name) {
+        Ok(val) if !val.trim().is_empty() => Some(val),
+        _ => None,
     }
 }

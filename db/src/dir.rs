@@ -1,11 +1,13 @@
 use serde::Deserialize;
 use snafu::{ResultExt, ensure};
 use std::cmp::min;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 use turso::Row;
 use validator::Validate;
 
+use crate::db_pool::DbPool;
 use crate::error::{DbPrepareSnafu, DbStatementSnafu, ValidationSnafu};
 use crate::turso_decode::{
     FromTursoRow, collect_count, collect_row, collect_rows, row_dir_type, row_integer, row_text,
@@ -16,7 +18,6 @@ use memo::dir::{DirDto, DirType};
 use memo::pagination::Paginated;
 use memo::utils::{IdPrefix, generate_prefixed_id};
 use memo::validators::flatten_errors;
-use turso::Connection;
 
 impl FromTursoRow for DirDto {
     fn from_row(row: &Row) -> Result<Self> {
@@ -64,11 +65,11 @@ pub const MAX_DIRS: i32 = 1000;
 pub const MAX_PER_PAGE: i32 = 50;
 
 pub struct DirRepo {
-    db_pool: Connection,
+    db_pool: Arc<DbPool>,
 }
 
 impl DirRepo {
-    pub fn new(db_pool: Connection) -> Self {
+    pub fn new(db_pool: Arc<DbPool>) -> Self {
         Self { db_pool }
     }
 
@@ -101,7 +102,8 @@ impl DirRepo {
             q_params.push(text_param(":keyword", format!("%{}%", keyword)));
         }
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         let row_result = stmt.query_row(q_params).await;
         collect_count(row_result)
     }
@@ -178,7 +180,8 @@ impl DirRepo {
         q_params.push(integer_param(":per_page", per_page as i64));
         q_params.push(integer_param(":offset", offset));
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         let mut rows = stmt.query(q_params).await.context(DbStatementSnafu)?;
         let items: Vec<DirDto> = collect_rows(&mut rows).await?;
 
@@ -197,7 +200,8 @@ impl DirRepo {
         q_params.push(text_param(":org_id", org_id.to_owned()));
         q_params.push(text_param(":dir_type", dir_type.to_string()));
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         let row_result = stmt.query_row(q_params).await;
         collect_count(row_result)
     }
@@ -237,7 +241,8 @@ impl DirRepo {
         q_params.push(integer_param(":created_at", data.created_at));
         q_params.push(integer_param(":updated_at", data.updated_at));
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         stmt.execute(q_params).await.context(DbStatementSnafu)?;
 
         Ok(())
@@ -281,7 +286,8 @@ impl DirRepo {
         q_params.push(integer_param(":created_at", today));
         q_params.push(integer_param(":updated_at", today));
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         stmt.execute(q_params).await.context(DbStatementSnafu)?;
 
         Ok(DirDto {
@@ -314,38 +320,11 @@ impl DirRepo {
         let mut q_params = new_query_params();
         q_params.push(text_param(":id", id.to_owned()));
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         let row_result = stmt.query_row(q_params).await;
         let dto: Option<DirDto> = collect_row(row_result)?;
         Ok(dto)
-    }
-
-    pub async fn retry_get(&self, id: &str, max_retries: usize) -> Result<Option<DirDto>> {
-        let mut attempts = 0;
-        let mut delay = Duration::from_millis(100);
-        let max_delay = Duration::from_secs(2);
-
-        loop {
-            match self.get(id).await {
-                Ok(result) => return Ok(result),
-                Err(Error::DbResult { source }) => match source {
-                    turso::Error::Misuse(..) => {
-                        attempts += 1;
-                        if attempts >= max_retries {
-                            return Err(Error::DbResult { source });
-                        }
-
-                        sleep(delay).await;
-                        delay = min(delay.saturating_mul(2), max_delay);
-                        // Retries...
-                    }
-                    _ => {
-                        return Err(Error::DbResult { source });
-                    }
-                },
-                Err(e) => return Err(e),
-            }
-        }
     }
 
     pub async fn find_by_name(
@@ -379,7 +358,8 @@ impl DirRepo {
         q_params.push(text_param(":dir_type", dir_type.to_string()));
         q_params.push(text_param(":name", name.to_owned()));
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         let row_result = stmt.query_row(q_params).await;
         let dto: Option<DirDto> = collect_row(row_result)?;
         Ok(dto)
@@ -400,7 +380,8 @@ impl DirRepo {
         q_params.push(text_param(":label", label));
         q_params.push(text_param(":id", id.to_owned()));
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         let affected = stmt.execute(q_params).await.context(DbStatementSnafu)?;
         Ok(affected > 0)
     }
@@ -416,7 +397,8 @@ impl DirRepo {
         q_params.push(integer_param(":updated_at", timestamp));
         q_params.push(text_param(":id", id.to_owned()));
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         let affected = stmt.execute(q_params).await.context(DbStatementSnafu)?;
         Ok(affected > 0)
     }
@@ -438,7 +420,7 @@ impl DirRepo {
             match self.update_timestamp(id, timestamp).await {
                 Ok(result) => return Ok(result),
                 Err(Error::DbStatement { source }) => match source {
-                    turso::Error::Misuse(..) => {
+                    turso::Error::Busy(..) => {
                         attempts += 1;
                         if attempts >= max_retries {
                             return Err(Error::DbStatement { source });
@@ -470,7 +452,8 @@ impl DirRepo {
         q_params.push(opt_integer_param(":deleted_at", Some(today)));
         q_params.push(text_param(":id", id.to_owned()));
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         stmt.execute(q_params).await.context(DbStatementSnafu)?;
         Ok(())
     }
@@ -489,7 +472,8 @@ impl DirRepo {
         "#
         .to_string();
 
-        let mut stmt = self.db_pool.prepare(query).await.context(DbPrepareSnafu)?;
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         let row_result = stmt.query_row({}).await;
         let _: Option<DirDto> = collect_row(row_result)?;
 

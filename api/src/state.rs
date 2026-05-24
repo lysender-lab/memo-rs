@@ -31,7 +31,9 @@ pub async fn create_app_state(config: &Config) -> Result<AppState> {
     let storage_client = StorageClient::new_google().await.context(StorageSnafu)?;
 
     let db_file = config.db.dir.join("default").join("memo.db");
-    let db = create_db_mapper(db_file.as_path()).await.context(DbSnafu)?;
+    let db = create_db_mapper(db_file.as_path(), config.db.pool_size)
+        .await
+        .context(DbSnafu)?;
 
     let client = ClientBuilder::new()
         .timeout(Duration::from_secs(10))
