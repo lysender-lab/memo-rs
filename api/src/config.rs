@@ -17,8 +17,9 @@ pub struct Config {
 
 #[derive(Debug, Clone)]
 pub struct CloudConfig {
-    pub project_id: String,
-    pub credentials: String,
+    pub aws_access_key_id: String,
+    pub aws_secret_access_key: String,
+    pub aws_region: String,
     pub bucket: String,
 }
 
@@ -59,9 +60,10 @@ impl Config {
             jwt_secret: required_env("JWT_SECRET")?,
             upload_dir: PathBuf::from(required_env("UPLOAD_DIR")?),
             cloud: CloudConfig {
-                project_id: required_env("GOOGLE_PROJECT_ID")?,
-                credentials: required_env("GOOGLE_APPLICATION_CREDENTIALS")?,
-                bucket: required_env("GOOGLE_STORAGE_BUCKET")?,
+                aws_access_key_id: required_env("AWS_ACCESS_KEY_ID")?,
+                aws_secret_access_key: required_env("AWS_SECRET_ACCESS_KEY")?,
+                aws_region: required_env("AWS_REGION")?,
+                bucket: required_env("AWS_S3_BUCKET")?,
             },
             server: ServerConfig {
                 address: required_env("SERVER_ADDRESS")?,
@@ -84,16 +86,23 @@ impl Config {
         );
 
         ensure!(
-            !config.cloud.project_id.is_empty(),
+            !config.cloud.aws_access_key_id.is_empty(),
             ConfigSnafu {
-                msg: "Google Cloud Project ID is required.".to_string()
+                msg: "AWS access key id is required.".to_string()
             }
         );
 
         ensure!(
-            !config.cloud.credentials.is_empty(),
+            !config.cloud.aws_secret_access_key.is_empty(),
             ConfigSnafu {
-                msg: "Google Cloud credentials file is required.".to_string()
+                msg: "AWS secret access key is required.".to_string()
+            }
+        );
+
+        ensure!(
+            !config.cloud.aws_region.is_empty(),
+            ConfigSnafu {
+                msg: "AWS region is required.".to_string()
             }
         );
 
