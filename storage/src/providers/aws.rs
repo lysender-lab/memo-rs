@@ -222,7 +222,7 @@ async fn generate_signed_url(
     bucket_name: &str,
     file_path: &str,
 ) -> Result<String> {
-    let expires = Duration::from_secs(3600);
+    let expires = Duration::from_hours(12);
     let presign_config = PresigningConfig::expires_in(expires).map_err(|err| Error::Whatever {
         msg: format!("Failed to create signed URL config: {err}"),
     })?;
@@ -248,7 +248,7 @@ async fn generate_upload_signed_url(
     file_path: &str,
     content_type: &str,
 ) -> Result<String> {
-    let expires = Duration::from_secs(3600);
+    let expires = Duration::from_hours(2);
     let presign_config = PresigningConfig::expires_in(expires).map_err(|err| Error::Whatever {
         msg: format!("Failed to create signed URL config: {err}"),
     })?;
