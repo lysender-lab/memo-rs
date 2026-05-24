@@ -5000,6 +5000,7 @@ name = "storage"
 version = "0.1.0"
 dependencies = [
  "aws-config",
+ "aws-credential-types",
  "aws-sdk-s3",
  "bytes",
  "google-cloud-auth",
