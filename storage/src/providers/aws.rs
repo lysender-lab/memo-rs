@@ -212,11 +212,14 @@ impl AwsStorageProvider {
     }
 }
 
+const ROLE_SESSION_NAME: &'static str = "memo-rs-storage";
+
 async fn create_storage_client(role_arn: &str) -> S3Client {
     let source_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
     let assume_role_provider = AssumeRoleProvider::builder(role_arn)
         .configure(&source_config)
-        .session_name("memo-rs-storage")
+        .session_name(ROLE_SESSION_NAME)
+        .session_length(Duration::from_secs(3600))
         .build()
         .await;
 
@@ -233,7 +236,7 @@ async fn generate_signed_url(
     bucket_name: &str,
     file_path: &str,
 ) -> Result<String> {
-    let expires = Duration::from_secs(3600 * 12);
+    let expires = Duration::from_secs(3600);
     let presign_config = PresigningConfig::expires_in(expires).map_err(|err| Error::Whatever {
         msg: format!("Failed to create signed URL config: {err}"),
     })?;
