@@ -28,7 +28,9 @@ pub struct AppState {
 }
 
 pub async fn create_app_state(config: &Config) -> Result<AppState> {
-    let storage_client = StorageClient::new_aws().await.context(StorageSnafu)?;
+    let storage_client = StorageClient::new_aws(&config.cloud.aws_role_arn)
+        .await
+        .context(StorageSnafu)?;
 
     let db_file = config.db.dir.join("default").join("memo.db");
     let db = create_db_mapper(db_file.as_path(), config.db.pool_size)

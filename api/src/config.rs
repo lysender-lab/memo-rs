@@ -20,6 +20,7 @@ pub struct CloudConfig {
     pub aws_access_key_id: String,
     pub aws_secret_access_key: String,
     pub aws_region: String,
+    pub aws_role_arn: String,
     pub bucket: String,
 }
 
@@ -63,6 +64,7 @@ impl Config {
                 aws_access_key_id: required_env("AWS_ACCESS_KEY_ID")?,
                 aws_secret_access_key: required_env("AWS_SECRET_ACCESS_KEY")?,
                 aws_region: required_env("AWS_REGION")?,
+                aws_role_arn: required_env("AWS_ROLE_ARN")?,
                 bucket: required_env("AWS_S3_BUCKET")?,
             },
             server: ServerConfig {
@@ -103,6 +105,13 @@ impl Config {
             !config.cloud.aws_region.is_empty(),
             ConfigSnafu {
                 msg: "AWS region is required.".to_string()
+            }
+        );
+
+        ensure!(
+            !config.cloud.aws_role_arn.is_empty(),
+            ConfigSnafu {
+                msg: "AWS role ARN is required.".to_string()
             }
         );
 

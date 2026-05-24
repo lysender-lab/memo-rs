@@ -2,7 +2,8 @@ use std::path::Path;
 use std::time::Duration;
 
 use aws_config::BehaviorVersion;
-use aws_sdk_s3::Client;
+use aws_config::sts::AssumeRoleProvider;
+use aws_sdk_s3::Client as S3Client;
 use aws_sdk_s3::error::ProvideErrorMetadata;
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::primitives::ByteStream;
@@ -16,12 +17,12 @@ use memo::dir::DirMeta;
 use memo::file::{FileDto, ImgVersion, ImgVersionDto, ORIGINAL_PATH};
 
 pub struct AwsStorageProvider {
-    client: Client,
+    client: S3Client,
 }
 
 impl AwsStorageProvider {
-    pub async fn new() -> Result<Self> {
-        let client = create_storage_client().await;
+    pub async fn new(role_arn: &str) -> Result<Self> {
+        let client = create_storage_client(role_arn).await;
         Ok(Self { client })
     }
 
@@ -211,13 +212,24 @@ impl AwsStorageProvider {
     }
 }
 
-async fn create_storage_client() -> Client {
-    let config = aws_config::load_defaults(BehaviorVersion::latest()).await;
-    Client::new(&config)
+async fn create_storage_client(role_arn: &str) -> S3Client {
+    let source_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
+    let assume_role_provider = AssumeRoleProvider::builder(role_arn)
+        .configure(&source_config)
+        .session_name("memo-rs-storage")
+        .build()
+        .await;
+
+    let config = aws_config::defaults(BehaviorVersion::latest())
+        .credentials_provider(assume_role_provider)
+        .load()
+        .await;
+
+    S3Client::new(&config)
 }
 
 async fn generate_signed_url(
-    client: &Client,
+    client: &S3Client,
     bucket_name: &str,
     file_path: &str,
 ) -> Result<String> {
@@ -242,7 +254,7 @@ async fn generate_signed_url(
 }
 
 async fn generate_upload_signed_url(
-    client: &Client,
+    client: &S3Client,
     bucket_name: &str,
     file_path: &str,
     content_type: &str,
@@ -268,7 +280,11 @@ async fn generate_upload_signed_url(
     }
 }
 
-async fn format_file_single(client: &Client, dir: &DirMeta, mut file: FileDto) -> Result<FileDto> {
+async fn format_file_single(
+    client: &S3Client,
+    dir: &DirMeta,
+    mut file: FileDto,
+) -> Result<FileDto> {
     let bucket_name = &dir.bucket_name;
 
     if file.is_image {

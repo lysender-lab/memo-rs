@@ -11,8 +11,8 @@ pub struct StorageClient {
 }
 
 impl StorageClient {
-    pub async fn new_aws() -> Result<Self> {
-        let provider = ProviderClient::Aws(AwsStorageProvider::new().await?);
+    pub async fn new_aws(role_arn: &str) -> Result<Self> {
+        let provider = ProviderClient::Aws(AwsStorageProvider::new(role_arn).await?);
         Ok(Self { provider })
     }
 
