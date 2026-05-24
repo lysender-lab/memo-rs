@@ -5,9 +5,7 @@ edition = "2024"
 
 [dependencies]
 aws-config.workspace = true
-aws-credential-types.workspace = true
 aws-sdk-s3.workspace = true
-aws-sdk-sts.workspace = true
 bytes.workspace = true
 snafu.workspace = true
 tokio.workspace = true

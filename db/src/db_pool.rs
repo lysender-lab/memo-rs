@@ -159,11 +159,12 @@ mod tests {
 
     use std::path::PathBuf;
 
+    use memo::utils::{IdPrefix, generate_prefixed_id};
     use tokio::task::yield_now;
 
     fn temp_db_path(test_name: &str) -> PathBuf {
         let mut path = std::env::temp_dir();
-        let id: u64 = rand::random();
+        let id = generate_prefixed_id(IdPrefix::Any);
         path.push(format!("turso-concurrency-{test_name}-{id}.db"));
         path
     }
