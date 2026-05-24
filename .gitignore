@@ -12,7 +12,6 @@ target/
 # Dev env configs
 .cargo
 .env
-.opencode
 
 config.toml
 config-dev.toml
