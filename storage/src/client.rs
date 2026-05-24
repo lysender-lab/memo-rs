@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::Result;
 use crate::provider::{DownloadRequest, DownloadedFile, ProviderClient, UploadUrlRequest};
-use crate::providers::GoogleStorageProvider;
+use crate::providers::AwsStorageProvider;
 use memo::dir::DirMeta;
 use memo::file::FileDto;
 
@@ -11,8 +11,8 @@ pub struct StorageClient {
 }
 
 impl StorageClient {
-    pub async fn new_google() -> Result<Self> {
-        let provider = ProviderClient::Google(GoogleStorageProvider::new().await?);
+    pub async fn new_aws() -> Result<Self> {
+        let provider = ProviderClient::Aws(AwsStorageProvider::new().await?);
         Ok(Self { provider })
     }
 

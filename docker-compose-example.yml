@@ -16,8 +16,10 @@ services:
       JWT_SECRET: "secret"
       UPLOAD_DIR: "/app/uploads"
       SERVER_ADDRESS: "0.0.0.0:80"
-      GOOGLE_PROJECT_ID: "google-project"
-      GOOGLE_APPLICATION_CREDENTIALS: "/app/certs/google-service-account.json"
+      AWS_ACCESS_KEY_ID: "change-me"
+      AWS_SECRET_ACCESS_KEY: "change-me"
+      AWS_REGION: "ap-southeast-1"
+      AWS_S3_BUCKET: "change-me"
       AUTH_API_BASE_URL: "https://yaas-flashy-domain.com"
     networks:
       - memonet

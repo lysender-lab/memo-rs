@@ -1,3 +1,3 @@
-mod google;
+mod aws;
 
-pub use google::GoogleStorageProvider;
+pub use aws::AwsStorageProvider;

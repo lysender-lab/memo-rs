@@ -4,9 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+aws-config.workspace = true
+aws-credential-types.workspace = true
+aws-sdk-s3.workspace = true
+aws-sdk-sts.workspace = true
 bytes.workspace = true
-google-cloud-auth.workspace = true
-google-cloud-storage.workspace = true
 snafu.workspace = true
 tokio.workspace = true
 memo = { path = "../memo" }
