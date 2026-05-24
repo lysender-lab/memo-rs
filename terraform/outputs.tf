@@ -13,16 +13,6 @@ output "s3_app_policy_arn" {
   value       = aws_iam_policy.app_s3_access.arn
 }
 
-output "iam_role_name" {
-  description = "Name of the IAM role for S3 access"
-  value       = aws_iam_role.app_s3_role.name
-}
-
-output "iam_role_arn" {
-  description = "ARN of the IAM role for S3 access"
-  value       = aws_iam_role.app_s3_role.arn
-}
-
 output "iam_username" {
   description = "Programmatic IAM username"
   value       = var.create_iam_user ? aws_iam_user.app_user[0].name : null

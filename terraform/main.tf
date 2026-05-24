@@ -1,9 +1,3 @@
-locals {
-  resource_name = "memo-rs-s3-access"
-}
-
-data "aws_caller_identity" "current" {}
-
 resource "aws_s3_bucket" "media" {
   bucket = var.s3_bucket_name
   tags   = var.tags
@@ -34,7 +28,7 @@ resource "aws_s3_bucket_cors_configuration" "media" {
     allowed_methods = ["GET", "PUT", "HEAD"]
     allowed_origins = var.allowed_origins
     expose_headers  = ["ETag"]
-    max_age_seconds = 3000
+    max_age_seconds = 3600
   }
 }
 
@@ -63,38 +57,9 @@ data "aws_iam_policy_document" "app_s3_access" {
 }
 
 resource "aws_iam_policy" "app_s3_access" {
-  name   = local.resource_name
+  name   = var.aws_s3_policy_name
   policy = data.aws_iam_policy_document.app_s3_access.json
   tags   = var.tags
-}
-
-data "aws_iam_policy_document" "app_role_assume" {
-  statement {
-    sid    = "AllowAssumeRole"
-    effect = "Allow"
-
-    actions = ["sts:AssumeRole"]
-
-    principals {
-      type = "AWS"
-      identifiers = var.create_iam_user ? [
-        aws_iam_user.app_user[0].arn
-        ] : [
-        "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
-      ]
-    }
-  }
-}
-
-resource "aws_iam_role" "app_s3_role" {
-  name               = var.iam_role_name
-  assume_role_policy = data.aws_iam_policy_document.app_role_assume.json
-  tags               = var.tags
-}
-
-resource "aws_iam_role_policy_attachment" "app_s3_access" {
-  role       = aws_iam_role.app_s3_role.name
-  policy_arn = aws_iam_policy.app_s3_access.arn
 }
 
 resource "aws_iam_user" "app_user" {
@@ -104,25 +69,11 @@ resource "aws_iam_user" "app_user" {
   tags = var.tags
 }
 
-data "aws_iam_policy_document" "user_assume_role" {
+resource "aws_iam_user_policy_attachment" "user_s3_access" {
   count = var.create_iam_user ? 1 : 0
 
-  statement {
-    sid    = "AllowAssumeAppRole"
-    effect = "Allow"
-
-    actions = ["sts:AssumeRole"]
-
-    resources = [aws_iam_role.app_s3_role.arn]
-  }
-}
-
-resource "aws_iam_user_policy" "user_assume_role" {
-  count = var.create_iam_user ? 1 : 0
-
-  name   = "memo-rs-assume-app-role"
-  user   = aws_iam_user.app_user[0].name
-  policy = data.aws_iam_policy_document.user_assume_role[0].json
+  user       = aws_iam_user.app_user[0].name
+  policy_arn = aws_iam_policy.app_s3_access.arn
 }
 
 resource "aws_iam_access_key" "app_user" {
@@ -154,30 +105,6 @@ data "aws_iam_policy_document" "bucket_enforcement" {
       values   = ["false"]
     }
   }
-
-  statement {
-    sid    = "DenyGetPutWithoutPresignedUrl"
-    effect = "Deny"
-
-    principals {
-      type        = "*"
-      identifiers = ["*"]
-    }
-
-    actions = [
-      "s3:GetObject",
-      "s3:PutObject"
-    ]
-
-    resources = ["${aws_s3_bucket.media.arn}/*"]
-
-    condition {
-      test     = "StringNotEquals"
-      variable = "s3:authType"
-      values   = ["REST-QUERY-STRING"]
-    }
-  }
-
 }
 
 resource "aws_s3_bucket_policy" "media" {

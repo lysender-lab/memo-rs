@@ -1,13 +1,6 @@
-# Example Terraform project for memo-rs AWS resouces
+# memo-rs-aws
 
-## Usage
-
-```
-terraform init
-terraform plan
-terraform apply
-terraform destroy
-```
+NOTE: Replace values in `versions.tf` and `variables.tf` with your own.
 
 ## IAM Access Key Rotation Runbook
 
@@ -16,7 +9,7 @@ This runbook covers zero-downtime rotation for the programmatic IAM user created
 Current resources:
 - IAM user: `aws_iam_user.app_user`
 - IAM access key: `aws_iam_access_key.app_user`
-- IAM role: `aws_iam_role.app_s3_role`
+- IAM user policy attachment: `aws_iam_user_policy_attachment.user_s3_access`
 
 > Important: IAM only allows 2 active access keys per user.
 
@@ -62,7 +55,7 @@ Save in your secret manager immediately.
 
 - Update all services/CI jobs that use this IAM user key.
 - Verify app flows: upload, list, download, and delete.
-- Confirm assume-role flow still works (`sts:AssumeRole` into `iam_role_arn`).
+- Confirm direct user-key access works without assume-role calls.
 
 ### 5) Post-rotation checks
 
@@ -92,7 +85,7 @@ If you must rotate in console:
 If app fails after rotation:
 1. Re-enable previous key (if still present and not deleted).
 2. Repoint app secrets to previous key.
-3. Investigate assumed role usage, region, and presigned URL generation.
+3. Investigate IAM user policy scope, region, and presigned URL generation.
 4. Perform controlled re-rotation.
 
 ---
@@ -102,4 +95,4 @@ If app fails after rotation:
 - `iam_secret_access_key` is marked sensitive in Terraform output but remains in Terraform state.
 - Restrict access to backend state and IAM permissions.
 - Do not paste keys into chat, tickets, or logs.
-- Consider long-term migration from static keys to workload identity (role-based credentials) where possible.
+- Rotate static keys regularly and keep IAM permissions tightly scoped.

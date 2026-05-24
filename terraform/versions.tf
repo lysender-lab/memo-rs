@@ -2,7 +2,7 @@ terraform {
   required_version = "~> 1.0"
 
   backend "s3" {
-    bucket       = "some-terraform-remote-backends"
+    bucket       = "some-aws-s3-bucket--remote-backends"
     key          = "memo-rs-aws/terraform.tfstate"
     region       = "ap-southeast-1"
     use_lockfile = true

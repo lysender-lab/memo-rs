@@ -7,13 +7,19 @@ variable "aws_region" {
 variable "s3_bucket_name" {
   description = "S3 bucket name for storing memo-rs files"
   type        = string
-  default     = "bucket-name"
+  default     = "memo-rs"
+}
+
+variable "aws_s3_policy_name" {
+  description = "Policy name for S3 access permissions"
+  type        = string
+  default     = "memo-rs-s3-access"
 }
 
 variable "allowed_origins" {
   description = "Allowed browser origins for S3 CORS requests"
   type        = list(string)
-  default     = ["http://localhost:3000", "https://example.com"]
+  default     = ["http://localhost:11000", "https://memories-awesome-domain.com"]
 
   validation {
     condition     = length(var.allowed_origins) > 0
@@ -29,16 +35,10 @@ variable "tags" {
   }
 }
 
-variable "iam_role_name" {
-  description = "IAM role name used by the memo-rs app"
-  type        = string
-  default     = "memo-rs-role-dev"
-}
-
 variable "iam_username" {
   description = "IAM username for programmatic access"
   type        = string
-  default     = "memo-rs-user-dev"
+  default     = "memo-rs-user"
 }
 
 variable "create_iam_user" {
