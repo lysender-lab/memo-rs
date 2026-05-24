@@ -1044,6 +1044,7 @@ dependencies = [
  "chrono",
  "memo",
  "password",
+ "rand 0.10.1",
  "serde",
  "snafu",
  "tokio",

@@ -11,11 +11,11 @@ use crate::error::{DbBuilderSnafu, DbConnectSnafu, DbPrepareSnafu, DbStatementSn
 use crate::{DbMapper, Result};
 
 const MIGRATIONS: &[&str] = &[
-    include_str!("../db/migrations/02-create-clients.sql"),
-    include_str!("../db/migrations/03-create-buckets.sql"),
-    include_str!("../db/migrations/04-create-dirs.sql"),
-    include_str!("../db/migrations/05-create-users.sql"),
-    include_str!("../db/migrations/06-create-files.sql"),
+    include_str!("../db/migrations/memo/01-create-clients.sql"),
+    include_str!("../db/migrations/memo/02-create-buckets.sql"),
+    include_str!("../db/migrations/memo/03-create-dirs.sql"),
+    include_str!("../db/migrations/memo/04-create-users.sql"),
+    include_str!("../db/migrations/memo/05-create-files.sql"),
 ];
 
 pub struct TestCtx {
@@ -41,7 +41,7 @@ impl TestCtx {
         let conn = create_connection(&db_file).await?;
         run_migrations(&conn).await?;
 
-        let mapper = create_db_mapper(db_file.as_path()).await?;
+        let mapper = create_db_mapper(db_file.as_path(), 4).await?;
 
         Ok(Self {
             db_dir,
