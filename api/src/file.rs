@@ -388,7 +388,9 @@ fn cleanup_temp_uploads(data: &DownloadedFile, file: Option<&FileDto>) -> Result
 
 fn init_file(dir: &DirDto, data: &DownloadedFile) -> Result<FileDto> {
     let mut is_image = false;
-    let content_type = get_content_type(&data.path)?;
+
+    // Try to get content type from file, fallback to the one from upload metadata
+    let content_type = get_content_type(&data.path).unwrap_or(data.content_type.clone());
 
     if ALLOWED_IMAGE_TYPES.contains(&content_type.as_str()) {
         is_image = true;
@@ -568,11 +570,11 @@ fn create_thumbnail(data: &DownloadedFile, img: &DynamicImage) -> Result<ImgVers
     Ok(version)
 }
 
-fn get_content_type(path: &PathBuf) -> Result<String> {
+fn get_content_type(path: &PathBuf) -> Option<String> {
     match infer::get_from_path(path) {
-        Ok(Some(kind)) => Ok(kind.mime_type().to_string()),
-        Ok(None) => Err("Uploaded file type unknown".into()),
-        Err(_) => Err("Unable to read uploaded file".into()),
+        Ok(Some(kind)) => Some(kind.mime_type().to_string()),
+        Ok(None) => None,
+        Err(_) => None,
     }
 }
 

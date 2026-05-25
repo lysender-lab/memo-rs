@@ -141,6 +141,7 @@ impl AwsStorageProvider {
                     upload_dir: req.upload_dir.to_path_buf(),
                     name: req.orig_filename.to_owned(),
                     filename: req.new_filename.to_owned(),
+                    content_type: req.content_type.to_owned(),
                     path: version_dir.clone().join(req.new_filename),
                     size: size as i64,
                 })

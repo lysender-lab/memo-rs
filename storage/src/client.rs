@@ -26,6 +26,7 @@ impl StorageClient {
         version: &str,
         orig_filename: &str,
         new_filename: &str,
+        content_type: &str,
         upload_dir: &Path,
     ) -> Result<DownloadedFile> {
         self.provider
@@ -37,6 +38,7 @@ impl StorageClient {
                 version,
                 orig_filename,
                 new_filename,
+                content_type,
                 upload_dir,
             })
             .await

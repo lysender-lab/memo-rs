@@ -11,6 +11,7 @@ pub struct DownloadedFile {
     pub upload_dir: std::path::PathBuf,
     pub name: String,
     pub filename: String,
+    pub content_type: String,
     pub path: std::path::PathBuf,
     pub size: i64,
 }
@@ -23,6 +24,7 @@ pub struct DownloadRequest<'a> {
     pub version: &'a str,
     pub orig_filename: &'a str,
     pub new_filename: &'a str,
+    pub content_type: &'a str,
     pub upload_dir: &'a Path,
 }
 

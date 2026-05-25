@@ -276,6 +276,7 @@ pub async fn create_file_handler(
     let is_image = upload_claims.is_image();
     let orig_filename = upload_claims.orig_filename;
     let new_filename = upload_claims.new_filename;
+    let content_type = upload_claims.content_type;
 
     let actor = actor.actor.expect("Actor must be present");
     let dir_meta = DirMeta {
@@ -296,6 +297,7 @@ pub async fn create_file_handler(
                 ORIGINAL_PATH,
                 &orig_filename,
                 &new_filename,
+                &content_type,
                 &state.config.upload_dir,
             )
             .await
