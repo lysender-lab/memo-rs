@@ -251,7 +251,13 @@ pub async fn edit_dir_controls_handler(
     Extension(dir): Extension<DirDto>,
 ) -> Result<Response<Body>> {
     let actor = ctx.actor();
-    enforce_policy(actor, Resource::Dir, Action::Update)?;
+    if dir.dir_type == DirType::Notes
+        && enforce_policy(actor, Resource::Dir, Action::Update).is_err()
+    {
+        enforce_policy(actor, Resource::Dir, Action::Delete)?;
+    } else {
+        enforce_policy(actor, Resource::Dir, Action::Update)?;
+    }
 
     let tpl = EditDirControlsTemplate {
         dir,
@@ -484,20 +490,22 @@ mod tests {
         let html = controls.render().unwrap();
         assert!(html.contains("href=\"/notes/dir-id/new_note\""));
         assert!(html.contains("hx-get=\"/notes/dir-id/edit\""));
+        assert!(html.contains("hx-get=\"/notes/dir-id/delete\""));
         assert!(html.contains("hx-target=\"#edit-dir-container\""));
         assert!(html.contains("Delete Directory"));
         assert!(html.contains("id=\"breadcrumb-album-label\" hx-swap-oob=\"true\""));
         assert!(html.contains("id=\"album-title\" hx-swap-oob=\"true\""));
         assert!(!html.contains("/upload"));
         assert!(!html.contains("Edit Photos"));
-        assert!(!html.contains("/delete"));
 
         controls.can_edit = false;
-        controls.can_delete = false;
         controls.can_add_files = false;
         let html = controls.render().unwrap();
         assert!(html.contains("href=\"/notes\""));
         assert!(!html.contains("Edit Label"));
+        assert!(html.contains("hx-get=\"/notes/dir-id/delete\""));
+        controls.can_delete = false;
+        let html = controls.render().unwrap();
         assert!(!html.contains("Delete Directory"));
         assert!(!html.contains("Add Note"));
     }
@@ -533,10 +541,28 @@ mod tests {
             };
             let html = controls.render().unwrap();
             assert!(html.contains(add_label));
+            assert!(html.contains(&format!("hx-get=\"/{dir_type}/dir-id/delete\"")));
             if dir_type != DirType::Notes {
                 assert!(html.contains(&format!("href=\"/{dir_type}/dir-id/upload\"")));
-                assert!(html.contains(&format!("hx-get=\"/{dir_type}/dir-id/delete\"")));
             }
         }
+    }
+
+    #[test]
+    fn notes_delete_confirmation_uses_shared_flow() {
+        let form = DeleteDirTemplate {
+            dir: dir(DirType::Notes),
+            payload: TokenFormData {
+                token: "token".into(),
+            },
+            error_message: Some("Cannot delete directory with files inside".into()),
+        };
+        let html = form.render().unwrap();
+        assert!(html.contains("hx-post=\"/notes/dir-id/delete\""));
+        assert!(html.contains("hx-get=\"/notes/dir-id/edit_controls\""));
+        assert!(html.contains("hx-target=\"#edit-dir-container\""));
+        assert!(html.contains("type=\"button\""));
+        assert!(html.contains("value=\"token\""));
+        assert!(html.contains("Cannot delete directory with files inside"));
     }
 }
