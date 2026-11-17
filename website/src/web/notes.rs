@@ -9,10 +9,10 @@ use memo::pagination::PaginatedMeta;
 use snafu::ResultExt;
 use urlencoding::encode;
 
-use crate::models::{ListFilesParams, Pref, TemplateData};
+use crate::models::{ListFilesParams, Pref, TemplateData, tokens::TokenFormData};
 use crate::services::notes::{
-    CreateNoteFormData, UpdateNoteFormData, create_note_svc, get_note_content_svc, list_notes_svc,
-    update_note_svc,
+    CreateNoteFormData, UpdateNoteFormData, create_note_svc, delete_note_svc, get_note_content_svc,
+    list_notes_svc, update_note_svc,
 };
 use crate::services::token::create_csrf_token;
 use crate::{
@@ -77,6 +77,25 @@ struct NotePageTemplate {
     note: FileDto,
     content: String,
     can_edit: bool,
+    can_delete: bool,
+}
+
+#[derive(Template)]
+#[template(path = "widgets/note_header.html")]
+struct NoteHeaderTemplate {
+    dir: DirDto,
+    note: FileDto,
+    can_edit: bool,
+    can_delete: bool,
+}
+
+#[derive(Template)]
+#[template(path = "widgets/delete_note_form.html")]
+struct DeleteNoteTemplate {
+    dir: DirDto,
+    note: FileDto,
+    token: String,
+    error_message: Option<String>,
 }
 
 fn require_notes_dir(dir: &DirDto) -> Result<()> {
@@ -248,12 +267,85 @@ pub async fn note_page_handler(
         note,
         content: content.content,
         can_edit: enforce_policy(actor, Resource::File, Action::Update).is_ok(),
+        can_delete: enforce_policy(actor, Resource::File, Action::Delete).is_ok(),
     };
 
     Response::builder()
         .status(StatusCode::OK)
         .body(Body::from(tpl.render().context(TemplateSnafu)?))
         .context(ResponseBuilderSnafu)
+}
+
+pub async fn note_header_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(dir): Extension<DirDto>,
+    Extension(note): Extension<FileDto>,
+) -> Result<Response<Body>> {
+    require_notes_dir(&dir)?;
+    let actor = ctx.actor();
+    enforce_policy(actor, Resource::File, Action::Read)?;
+    let tpl = NoteHeaderTemplate {
+        dir,
+        note,
+        can_edit: enforce_policy(actor, Resource::File, Action::Update).is_ok(),
+        can_delete: enforce_policy(actor, Resource::File, Action::Delete).is_ok(),
+    };
+    Response::builder()
+        .status(StatusCode::OK)
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)
+}
+
+pub async fn get_delete_note_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(dir): Extension<DirDto>,
+    Extension(note): Extension<FileDto>,
+    State(state): State<AppState>,
+) -> Result<Response<Body>> {
+    require_notes_dir(&dir)?;
+    enforce_policy(ctx.actor(), Resource::File, Action::Delete)?;
+    let tpl = DeleteNoteTemplate {
+        token: create_csrf_token(&note.id, &state.config.jwt_secret)?,
+        dir,
+        note,
+        error_message: None,
+    };
+    Response::builder()
+        .status(StatusCode::OK)
+        .body(Body::from(tpl.render().context(TemplateSnafu)?))
+        .context(ResponseBuilderSnafu)
+}
+
+pub async fn post_delete_note_handler(
+    Extension(ctx): Extension<Ctx>,
+    Extension(dir): Extension<DirDto>,
+    Extension(note): Extension<FileDto>,
+    State(state): State<AppState>,
+    Form(payload): Form<TokenFormData>,
+) -> Result<Response<Body>> {
+    require_notes_dir(&dir)?;
+    enforce_policy(ctx.actor(), Resource::File, Action::Delete)?;
+    let token = ctx.token().expect("token is required");
+    match delete_note_svc(&state, token, &dir.id, &note.id, &payload.token).await {
+        Ok(()) => Response::builder()
+            .status(StatusCode::OK)
+            .header("HX-Redirect", format!("/notes/{}", dir.id))
+            .body(Body::empty())
+            .context(ResponseBuilderSnafu),
+        Err(err) => {
+            let error = ErrorInfo::from(&err);
+            let tpl = DeleteNoteTemplate {
+                token: create_csrf_token(&note.id, &state.config.jwt_secret)?,
+                dir,
+                note,
+                error_message: Some(error.message),
+            };
+            Response::builder()
+                .status(error.status_code)
+                .body(Body::from(tpl.render().context(TemplateSnafu)?))
+                .context(ResponseBuilderSnafu)
+        }
+    }
 }
 
 pub async fn edit_note_handler(
@@ -320,5 +412,78 @@ pub async fn post_edit_note_handler(
                 .body(Body::from(tpl.render().context(TemplateSnafu)?))
                 .context(ResponseBuilderSnafu)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use memo::file::FileType;
+
+    fn dir() -> DirDto {
+        DirDto {
+            id: "dir-id".into(),
+            org_id: "org-id".into(),
+            dir_type: DirType::Notes,
+            name: "notes".into(),
+            label: "Notes".into(),
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+
+    fn note() -> FileDto {
+        FileDto {
+            id: "note-id".into(),
+            org_id: "org-id".into(),
+            dir_id: "dir-id".into(),
+            file_type: FileType::Note,
+            name: "My note".into(),
+            filename: "note".into(),
+            content_type: "text/plain".into(),
+            size: 0,
+            url: None,
+            img_versions: None,
+            img_taken_at: None,
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+
+    #[test]
+    fn note_header_respects_delete_and_edit_permissions() {
+        let mut header = NoteHeaderTemplate {
+            dir: dir(),
+            note: note(),
+            can_edit: false,
+            can_delete: true,
+        };
+        let html = header.render().unwrap();
+        assert!(html.contains("hx-get=\"/notes/dir-id/entries/note-id/delete\""));
+        assert!(html.contains("hx-target=\"#note-header\""));
+        assert!(!html.contains("/edit\""));
+
+        header.can_edit = true;
+        header.can_delete = false;
+        let html = header.render().unwrap();
+        assert!(html.contains("/notes/dir-id/entries/note-id/edit"));
+        assert!(!html.contains(">Delete</button>"));
+    }
+
+    #[test]
+    fn delete_note_confirmation_contains_token_cancel_and_error() {
+        let form = DeleteNoteTemplate {
+            dir: dir(),
+            note: note(),
+            token: "csrf-token".into(),
+            error_message: Some("Unable to delete".into()),
+        };
+        let html = form.render().unwrap();
+        assert!(html.contains("hx-post=\"/notes/dir-id/entries/note-id/delete\""));
+        assert!(html.contains("hx-get=\"/notes/dir-id/entries/note-id/header\""));
+        assert!(html.contains("hx-target=\"#note-header\""));
+        assert!(html.contains("value=\"csrf-token\""));
+        assert!(html.contains("My note"));
+        assert!(html.contains("Unable to delete"));
     }
 }

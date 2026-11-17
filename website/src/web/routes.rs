@@ -34,8 +34,9 @@ use super::middleware::{
 };
 use super::my_bucket::my_bucket_page_handler;
 use super::notes::{
-    edit_note_handler, new_note_handler, note_listing_handler, note_page_handler,
-    post_edit_note_handler, post_new_note_handler,
+    edit_note_handler, get_delete_note_handler, new_note_handler, note_header_handler,
+    note_listing_handler, note_page_handler, post_delete_note_handler, post_edit_note_handler,
+    post_new_note_handler,
 };
 use super::profile::profile_page_handler;
 use super::{dark_theme_handler, handle_error, light_theme_handler};
@@ -139,6 +140,11 @@ fn note_routes(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/", get(note_page_handler))
         .route("/edit", get(edit_note_handler).post(post_edit_note_handler))
+        .route("/header", get(note_header_handler))
+        .route(
+            "/delete",
+            get(get_delete_note_handler).post(post_delete_note_handler),
+        )
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             note_middleware,

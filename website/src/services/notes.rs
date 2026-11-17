@@ -208,3 +208,34 @@ pub async fn update_note_svc(
             msg: "Unable to parse note content.".to_string(),
         })
 }
+
+pub async fn delete_note_svc(
+    state: &AppState,
+    token: &str,
+    dir_id: &str,
+    note_id: &str,
+    csrf_token: &str,
+) -> Result<()> {
+    let subject = verify_csrf_token(csrf_token, &state.config.jwt_secret)?;
+    ensure!(subject == note_id, CsrfTokenSnafu);
+
+    let url = format!(
+        "{}/notes/{}/entries/{}",
+        state.config.api_url, dir_id, note_id
+    );
+    let response = state
+        .client
+        .delete(url)
+        .bearer_auth(token)
+        .send()
+        .await
+        .context(HttpClientSnafu {
+            msg: "Unable to delete note. Try again later.".to_string(),
+        })?;
+    if !response.status().is_success() {
+        return Err(handle_response_error(response, "note", Error::FileNotFound).await);
+    }
+
+    state.file_cache.remove(note_id);
+    Ok(())
+}
