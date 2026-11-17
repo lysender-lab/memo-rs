@@ -136,21 +136,21 @@ pub async fn update_note_svc(
     let cipher_content =
         encrypt(&state.config.notes_master_key, &data.content).context(CipherSnafu)?;
 
-    // Otherwise, create a new revision
+    // Create the revision and update the file metadata atomically.
     let new_revision = state
         .db
-        .notes
-        .retry_create_revision(file_id.clone(), cipher_content, checksum, 5)
+        .files
+        .update_note(
+            file_id.clone(),
+            cipher_content,
+            checksum,
+            content_length as i64,
+            now,
+        )
         .await
         .context(DbSnafu)?;
 
-    // Update file meta data
-    state
-        .db
-        .files
-        .update_notes_meta(&file_id, content_length as i64, now)
-        .await
-        .context(DbSnafu)?;
+    state.file_cache.remove(&file_id);
 
     Ok(new_revision)
 }

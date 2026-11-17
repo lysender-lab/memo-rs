@@ -542,6 +542,110 @@ impl FileRepo {
         Ok(file)
     }
 
+    pub async fn update_note(
+        &self,
+        file_id: String,
+        cipher_content: String,
+        checksum: String,
+        size: i64,
+        updated_at: i64,
+    ) -> Result<NoteDto> {
+        let note = NoteDto {
+            id: generate_prefixed_id(IdPrefix::Note),
+            file_id: file_id.clone(),
+            content: cipher_content,
+            next_revision: LATEST_REVISION.to_string(),
+            checksum,
+            created_at: chrono::Utc::now().timestamp(),
+        };
+
+        let update_revision_query = r#"
+            UPDATE notes
+            SET next_revision = :new_revision_id
+            WHERE file_id = :file_id AND next_revision = :latest_revision
+        "#;
+        let insert_revision_query = r#"
+            INSERT INTO notes (id, file_id, content, next_revision, checksum, created_at)
+            VALUES (:id, :file_id, :content, :next_revision, :checksum, :created_at)
+        "#;
+        let update_file_query = r#"
+            UPDATE files
+            SET size = :size, updated_at = :updated_at
+            WHERE id = :id
+        "#;
+
+        let mut update_revision_params = new_query_params();
+        update_revision_params.push(text_param(":new_revision_id", note.id.clone()));
+        update_revision_params.push(text_param(":file_id", file_id.clone()));
+        update_revision_params.push(text_param(":latest_revision", LATEST_REVISION.to_string()));
+
+        let mut insert_revision_params = new_query_params();
+        insert_revision_params.push(text_param(":id", note.id.clone()));
+        insert_revision_params.push(text_param(":file_id", note.file_id.clone()));
+        insert_revision_params.push(text_param(":content", note.content.clone()));
+        insert_revision_params.push(text_param(":next_revision", note.next_revision.clone()));
+        insert_revision_params.push(text_param(":checksum", note.checksum.clone()));
+        insert_revision_params.push(integer_param(":created_at", note.created_at));
+
+        let mut update_file_params = new_query_params();
+        update_file_params.push(integer_param(":size", size));
+        update_file_params.push(integer_param(":updated_at", updated_at));
+        update_file_params.push(text_param(":id", file_id));
+
+        let conn = self.db_pool.acquire().await?;
+        conn.execute("BEGIN CONCURRENT", ())
+            .await
+            .context(DbTransactionSnafu)?;
+
+        let operation: Result<()> = async {
+            let mut update_revision_stmt = conn
+                .prepare(update_revision_query)
+                .await
+                .context(DbPrepareSnafu)?;
+            update_revision_stmt
+                .execute(update_revision_params)
+                .await
+                .context(DbStatementSnafu)?;
+
+            let mut insert_revision_stmt = conn
+                .prepare(insert_revision_query)
+                .await
+                .context(DbPrepareSnafu)?;
+            insert_revision_stmt
+                .execute(insert_revision_params)
+                .await
+                .context(DbStatementSnafu)?;
+
+            let mut update_file_stmt = conn
+                .prepare(update_file_query)
+                .await
+                .context(DbPrepareSnafu)?;
+            update_file_stmt
+                .execute(update_file_params)
+                .await
+                .context(DbStatementSnafu)?;
+
+            Ok(())
+        }
+        .await;
+
+        if let Err(error) = operation {
+            conn.execute("ROLLBACK", ())
+                .await
+                .context(DbTransactionSnafu)?;
+            return Err(error);
+        }
+
+        if let Err(error) = conn.execute("COMMIT", ()).await.context(DbTransactionSnafu) {
+            conn.execute("ROLLBACK", ())
+                .await
+                .context(DbTransactionSnafu)?;
+            return Err(error);
+        }
+
+        Ok(note)
+    }
+
     pub async fn get(&self, id: &str) -> Result<Option<FileDto>> {
         let query = r#"
             SELECT
@@ -656,23 +760,6 @@ impl FileRepo {
         Ok(())
     }
 
-    pub async fn update_notes_meta(&self, id: &str, size: i64, updated_at: i64) -> Result<()> {
-        let query = r#"
-            UPDATE files
-            SET size = :size, updated_at = :updated_at
-            WHERE id = :id
-        "#;
-        let mut q_params = new_query_params();
-        q_params.push(integer_param(":size", size));
-        q_params.push(integer_param(":updated_at", updated_at));
-        q_params.push(text_param(":id", id.to_owned()));
-
-        let conn = self.db_pool.acquire().await?;
-        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
-        stmt.execute(q_params).await.context(DbStatementSnafu)?;
-        Ok(())
-    }
-
     pub async fn delete(&self, id: &str) -> Result<()> {
         let query = "DELETE FROM files WHERE id = :id".to_string();
         let mut q_params = new_query_params();
@@ -733,5 +820,60 @@ mod tests {
         assert_eq!(note.content, "ciphertext");
         assert_eq!(note.checksum, "checksum");
         assert_eq!(note.next_revision, LATEST_REVISION);
+    }
+
+    #[tokio::test]
+    async fn update_note_creates_revision_and_updates_file_metadata() {
+        let ctx = TestCtx::new("update-note").await.unwrap();
+        let file = FileDto {
+            id: "fil-note".to_string(),
+            org_id: "org-note".to_string(),
+            dir_id: "dir-note".to_string(),
+            file_type: FileType::Note,
+            name: "Shopping list".to_string(),
+            filename: "Shopping list".to_string(),
+            content_type: "text/plain".to_string(),
+            size: 4,
+            url: None,
+            img_versions: None,
+            img_taken_at: None,
+            created_at: 1,
+            updated_at: 1,
+        };
+
+        ctx.db
+            .files
+            .retry_create_note(
+                file.clone(),
+                "ciphertext".to_string(),
+                "checksum".to_string(),
+                5,
+            )
+            .await
+            .unwrap();
+        let original = ctx.db.notes.get_note(&file.id).await.unwrap().unwrap();
+
+        let updated = ctx
+            .db
+            .files
+            .update_note(
+                file.id.clone(),
+                "updated-ciphertext".to_string(),
+                "updated-checksum".to_string(),
+                18,
+                2,
+            )
+            .await
+            .unwrap();
+
+        assert_ne!(updated.id, original.id);
+        let latest = ctx.db.notes.get_note(&file.id).await.unwrap().unwrap();
+        assert_eq!(latest.id, updated.id);
+        assert_eq!(latest.content, "updated-ciphertext");
+        assert_eq!(latest.checksum, "updated-checksum");
+
+        let updated_file = ctx.db.files.get(&file.id).await.unwrap().unwrap();
+        assert_eq!(updated_file.size, 18);
+        assert_eq!(updated_file.updated_at, 2);
     }
 }
