@@ -1,5 +1,6 @@
 pub mod dirs;
 pub mod files;
+pub mod notes;
 pub mod oauth;
 pub mod token;
 

@@ -1,0 +1,46 @@
+{% match error_message %}
+    {% when Some with (msg) %}
+        <tr><td colspan="4"><div class="error-message tag is-danger">{{ msg }}</div></td></tr>
+    {% when None %}
+{% endmatch %}
+
+{% for note in notes %}
+<tr
+    {% if note.id == last_item %}
+        {% match next_page %}
+            {% when Some with (page) %}
+                hx-get="/notes/{{ dir.id }}/note_table?page={{ page }}&keyword={{ keyword_query }}"
+                hx-trigger="revealed"
+                hx-swap="afterend"
+            {% when None %}
+        {% endmatch %}
+    {% endif %}
+>
+    <td>
+        <a href="/notes/{{ dir.id }}/entries/{{ note.id }}" class="has-text-weight-medium">
+            <span class="icon has-text-grey" aria-hidden="true"><i class="fas fa-note-sticky"></i></span>
+            {{ note.name }}
+        </a>
+    </td>
+    <td class="has-text-right has-text-grey">{{ note.size_text }}</td>
+    <td class="has-text-grey">{{ note.updated_at_text }}</td>
+    <td class="has-text-right">
+        <a class="button is-small is-light" href="/notes/{{ dir.id }}/entries/{{ note.id }}">View</a>
+    </td>
+</tr>
+{% endfor %}
+
+{% if !has_notes %}
+<tr><td colspan="4" class="has-text-centered has-text-grey py-6">No matching notes found.</td></tr>
+{% endif %}
+
+{% match meta %}
+    {% when Some with (page_meta) %}
+        {% if page_meta.total_records > 0 %}
+        <span id="notes-count-w" hx-swap-oob="true">
+            <span class="current-count">{% if page_meta.page == page_meta.total_pages as i32 %}{{ page_meta.total_records }}{% else %}{{ page_meta.page * page_meta.per_page }}{% endif %}</span>
+            of <span class="total-records">{{ page_meta.total_records }}</span>
+        </span>
+        {% endif %}
+    {% when None %}
+{% endmatch %}

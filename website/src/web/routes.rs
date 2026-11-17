@@ -29,9 +29,14 @@ use super::files::{
     file_actions_handler, photo_listing_handler, upload_page_handler,
 };
 use super::middleware::{
-    auth_middleware, dir_middleware, file_middleware, pref_middleware, require_auth_middleware,
+    auth_middleware, dir_middleware, file_middleware, note_middleware, pref_middleware,
+    require_auth_middleware,
 };
 use super::my_bucket::my_bucket_page_handler;
+use super::notes::{
+    edit_note_handler, new_note_handler, note_listing_handler, note_page_handler,
+    post_edit_note_handler, post_new_note_handler,
+};
 use super::profile::profile_page_handler;
 use super::{dark_theme_handler, handle_error, light_theme_handler};
 
@@ -114,12 +119,29 @@ fn dir_inner_routes(state: AppState) -> Router<AppState> {
         )
         .route("/photo_grid", get(photo_listing_handler))
         .route("/file_table", get(document_listing_handler))
+        .route("/note_table", get(note_listing_handler))
+        .route(
+            "/new_note",
+            get(new_note_handler).post(post_new_note_handler),
+        )
+        .nest("/entries/{file_id}", note_routes(state.clone()))
         .nest("/upload-url", upload_api_routes(state.clone()))
         .nest("/upload", upload_route(state.clone()))
         .nest("/files/{file_id}", file_routes(state.clone()))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             dir_middleware,
+        ))
+        .with_state(state)
+}
+
+fn note_routes(state: AppState) -> Router<AppState> {
+    Router::new()
+        .route("/", get(note_page_handler))
+        .route("/edit", get(edit_note_handler).post(post_edit_note_handler))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            note_middleware,
         ))
         .with_state(state)
 }

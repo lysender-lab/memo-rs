@@ -211,7 +211,12 @@ pub async fn dir_page_handler(
     let actor = ctx.actor();
     let mut t = TemplateData::new(&state, actor, &pref);
 
-    t.title = format!("Photos - {}", &dir.label);
+    t.title = match dir.dir_type {
+        DirType::Photos => format!("Photos - {}", &dir.label),
+        DirType::Documents => format!("Documents - {}", &dir.label),
+        DirType::Notes => format!("Notes - {}", &dir.label),
+        DirType::Videos => format!("Videos - {}", &dir.label),
+    };
 
     let tpl = DirTemplate {
         t,

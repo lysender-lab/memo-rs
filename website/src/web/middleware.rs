@@ -14,10 +14,13 @@ use crate::{
     error::ErrorInfo,
     models::{DirParams, DirTypeParams, FileParams, Pref},
     run::AppState,
-    services::{dirs::get_dir_svc, files::get_file_svc, oauth::authenticate_token},
+    services::{
+        dirs::get_dir_svc, files::get_file_svc, notes::get_note_file_svc, oauth::authenticate_token,
+    },
     web::{Action, Resource, enforce_policy, handle_error},
 };
 use memo::dir::{DirDto, DirType};
+use memo::file::FileType;
 use yaas::actor::Actor;
 
 use super::{AUTH_TOKEN_COOKIE, THEME_COOKIE};
@@ -179,6 +182,40 @@ pub async fn file_middleware(
     }
 
     let file = file_res.expect("File should be present at this point");
+
+    req.extensions_mut().insert(file);
+    Ok(next.run(req).await)
+}
+
+pub async fn note_middleware(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<Ctx>,
+    Extension(dir): Extension<DirDto>,
+    Path(params): Path<FileParams>,
+    mut req: Request,
+    next: Next,
+) -> Result<Response> {
+    let actor = ctx.actor();
+    enforce_policy(actor, Resource::File, Action::Read)?;
+
+    if dir.dir_type != DirType::Notes {
+        return Err(Error::FileNotFound);
+    }
+
+    let token = ctx.token().expect("token is required");
+    let mut file_res = state.file_cache.get(&params.file_id);
+    if file_res.is_none() {
+        let file = get_note_file_svc(&state, token, &dir.id, &params.file_id).await?;
+        state
+            .file_cache
+            .insert(params.file_id.clone(), file.clone());
+        file_res = Some(file);
+    }
+
+    let file = file_res.expect("Note should be present at this point");
+    if file.file_type != FileType::Note || file.dir_id != dir.id {
+        return Err(Error::FileNotFound);
+    }
 
     req.extensions_mut().insert(file);
     Ok(next.run(req).await)

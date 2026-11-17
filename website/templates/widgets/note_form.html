@@ -1,0 +1,55 @@
+<form
+    method="post"
+    hx-target="#note-form-container"
+    {% if is_edit %}
+    action="/notes/{{ dir.id }}/entries/{{ note_id }}/edit"
+    hx-post="/notes/{{ dir.id }}/entries/{{ note_id }}/edit"
+    {% else %}
+    action="/notes/{{ dir.id }}/new_note"
+    hx-post="/notes/{{ dir.id }}/new_note"
+    {% endif %}
+>
+    <div class="card">
+        <div class="card-content">
+            {% match error_message %}
+                {% when Some with (msg) %}
+                <div class="notification is-danger is-light">{{ msg }}</div>
+                {% when None %}
+            {% endmatch %}
+
+            <div class="field">
+                <label class="label" for="note-name">Name</label>
+                <div class="control">
+                    {% if is_edit %}
+                    <input id="note-name" class="input" type="text" value="{{ name }}" readonly aria-readonly="true" />
+                    <p class="help">Renaming notes is not available yet.</p>
+                    {% else %}
+                    <input id="note-name" class="input" type="text" name="name" value="{{ name }}" required minlength="1" />
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="field">
+                <label class="label" for="note-content">Content</label>
+                <div class="control">
+                    <textarea id="note-content" class="textarea is-family-monospace" name="content" rows="18" required minlength="2" maxlength="10000" spellcheck="false">{{ content }}</textarea>
+                </div>
+                <p class="help">Plain text and Markdown are supported.</p>
+            </div>
+
+            <div class="field is-grouped mt-5">
+                <div class="control">
+                    <input type="hidden" name="token" value="{{ token }}" />
+                    <button class="button is-primary" type="submit">Save note</button>
+                </div>
+                <div class="control">
+                    {% if is_edit %}
+                    <a class="button is-light" href="/notes/{{ dir.id }}/entries/{{ note_id }}">Cancel</a>
+                    {% else %}
+                    <a class="button is-light" href="/notes/{{ dir.id }}">Cancel</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</form>

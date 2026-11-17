@@ -19,9 +19,58 @@
             {{ dir.label }}
         </h1>
 
-        <div id="edit-dir-container">
-            {% include "widgets/edit_dir_controls.html" %}
+        {% if dir.dir_type != DirType::Notes %}
+            <div id="edit-dir-container">
+                {% include "widgets/edit_dir_controls.html" %}
+            </div>
+        {% endif %}
+
+        {% if dir.dir_type == DirType::Notes %}
+        <div class="is-flex is-justify-content-space-between is-align-items-center mb-4">
+            <a class="button" href="/notes">
+                <span class="icon is-small"><i class="fas fa-arrow-left"></i></span>
+                <span>Back</span>
+            </a>
+            {% if can_add_files %}
+            <a class="button is-primary" href="/notes/{{ dir.id }}/new_note">
+                <span class="icon is-small"><i class="fas fa-plus"></i></span>
+                <span>New note</span>
+            </a>
+            {% endif %}
         </div>
+
+        <div class="box">
+            <div class="documents-toolbar mb-4">
+                <div class="field has-addons documents-search">
+                    <div class="control is-expanded has-icons-left">
+                        <input
+                            class="input"
+                            type="search"
+                            name="keyword"
+                            placeholder="Search notes by name"
+                            hx-get="/notes/{{ dir.id }}/note_table?page=1"
+                            hx-trigger="input changed delay:450ms, search"
+                            hx-target="#note-table-body"
+                            hx-swap="innerHTML"
+                            hx-include="this"
+                        />
+                        <span class="icon is-left"><i class="fas fa-search" aria-hidden="true"></i></span>
+                    </div>
+                </div>
+                <div class="is-size-7 has-text-grey" id="notes-count-w">&nbsp;</div>
+            </div>
+
+            <div class="table-container documents-table-wrap">
+                <table class="table is-fullwidth is-hoverable documents-table">
+                    <thead><tr><th>Name</th><th class="has-text-right">Size</th><th>Last updated</th><th></th></tr></thead>
+                    <tbody id="note-table-body" hx-get="/notes/{{ dir.id }}/note_table?page=1" hx-trigger="load">
+                        <tr class="skeleton-row"><td><div class="skeleton-line"></div></td><td><div class="skeleton-line skeleton-line-short ml-auto"></div></td><td><div class="skeleton-line skeleton-line-short"></div></td><td></td></tr>
+                        <tr class="skeleton-row"><td><div class="skeleton-line"></div></td><td><div class="skeleton-line skeleton-line-short ml-auto"></div></td><td><div class="skeleton-line skeleton-line-short"></div></td><td></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
 
         {% if dir.dir_type == DirType::Documents %}
         <div class="box mt-4">
