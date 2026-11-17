@@ -8,6 +8,7 @@ use crate::{Error, Result};
 #[derive(Debug, Clone)]
 pub struct Config {
     pub jwt_secret: String,
+    pub notes_master_key: String,
     pub upload_dir: PathBuf,
     pub cloud: CloudConfig,
     pub server: ServerConfig,
@@ -58,6 +59,7 @@ impl Config {
 
         let config = Config {
             jwt_secret: required_env("JWT_SECRET")?,
+            notes_master_key: required_env("NOTES_MASTER_KEY")?,
             upload_dir: PathBuf::from(required_env("UPLOAD_DIR")?),
             cloud: CloudConfig {
                 aws_access_key_id: required_env("AWS_ACCESS_KEY_ID")?,
@@ -82,6 +84,20 @@ impl Config {
             !config.jwt_secret.is_empty(),
             ConfigSnafu {
                 msg: "Jwt secret is required.".to_string()
+            }
+        );
+
+        ensure!(
+            !config.notes_master_key.is_empty(),
+            ConfigSnafu {
+                msg: "Notes master key is required.".to_string()
+            }
+        );
+
+        ensure!(
+            config.notes_master_key.len() > 20,
+            ConfigSnafu {
+                msg: "Notes master key is too short.".to_string()
             }
         );
 

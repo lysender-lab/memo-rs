@@ -1,0 +1,29 @@
+<form method="post" action="/notes/{{ dir.id }}/entries/{{ note.id }}/delete" hx-post="/notes/{{ dir.id }}/entries/{{ note.id }}/delete" hx-target="#note-header">
+    <div class="columns">
+        <div class="column is-half">
+            {% match error_message %}
+                {% when Some with (msg) %}
+                <article class="message is-danger mb-5">
+                    <div class="message-header"><p>Unable to delete note</p></div>
+                    <div class="message-body">{{ msg }}</div>
+                </article>
+                {% when None %}
+            {% endmatch %}
+            <article class="message is-warning">
+                <div class="message-header"><p>Warning</p></div>
+                <div class="message-body">
+                    <p>Are you sure you want to delete the note <strong>{{ note.name }}</strong>?</p>
+                    <div class="mt-5 field is-grouped">
+                        <div class="control">
+                            <input type="hidden" name="token" value="{{ token }}" />
+                            <button class="button is-danger" type="submit">Delete</button>
+                        </div>
+                        <div class="control">
+                            <a class="button is-link is-light" href="/notes/{{ dir.id }}/entries/{{ note.id }}" hx-get="/notes/{{ dir.id }}/entries/{{ note.id }}/header" hx-target="#note-header">Cancel</a>
+                        </div>
+                    </div>
+                </div>
+            </article>
+        </div>
+    </div>
+</form>

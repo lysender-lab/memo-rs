@@ -1,0 +1,24 @@
+{% extends "layout/base.html" %}
+
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/notes">Notes</a></li>
+                <li><a href="/notes/{{ dir.id }}">{{ dir.label }}</a></li>
+                <li class="is-active"><a aria-current="page">{{ note.name }}</a></li>
+            </ul>
+        </nav>
+
+        <div id="note-header" class="mb-5">
+            {% include "widgets/note_header.html" %}
+        </div>
+
+        <div class="box is-shadowless has-background-light">
+            <pre class="is-family-monospace is-size-6 is-whitespace-pre-wrap"><code>{{ content }}</code></pre>
+        </div>
+    </div>
+</section>
+{% endblock %}

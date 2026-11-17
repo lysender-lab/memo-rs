@@ -13,13 +13,13 @@ use crate::{
     error::{
         DbSnafu, ForbiddenSnafu, InsufficientAuthScopeSnafu, InvalidAuthTokenSnafu, NotFoundSnafu,
     },
-    oauth::authenticate_token,
+    oauth::authenticate_token_svc,
     state::AppState,
     web::params::{DirParams, DirTypeParams, FileParams},
 };
 use memo::{
     dir::{DirDto, DirType},
-    file::FileDto,
+    file::{FileDto, FileType},
 };
 use yaas::{actor::Actor, role::Permission};
 
@@ -43,7 +43,7 @@ pub async fn auth_middleware(
         ensure!(auth_header.starts_with("Bearer "), InvalidAuthTokenSnafu);
         let token = auth_header.replace("Bearer ", "");
 
-        actor = authenticate_token(&state, &token).await?;
+        actor = authenticate_token_svc(&state, &token).await?;
     }
 
     // Forward to the next middleware/handler passing the actor information
@@ -91,6 +91,7 @@ pub async fn dir_middleware(
     next: Next,
 ) -> Result<Response<Body>> {
     let permissions = vec![Permission::DirsList, Permission::DirsView];
+
     ensure!(
         actor.has_permissions(&permissions),
         ForbiddenSnafu {
@@ -150,10 +151,19 @@ pub async fn file_middleware(
     next: Next,
 ) -> Result<Response<Body>> {
     let permissions = vec![Permission::FilesList, Permission::FilesView];
+
     ensure!(
         actor.has_permissions(&permissions),
         ForbiddenSnafu {
             msg: "Insufficient permissions"
+        }
+    );
+
+    // Do not allow notes access here
+    ensure!(
+        params.dir_type != "notes",
+        NotFoundSnafu {
+            msg: "File not found"
         }
     );
 
@@ -172,6 +182,66 @@ pub async fn file_middleware(
     let file = file_res.context(NotFoundSnafu {
         msg: "File not found",
     })?;
+
+    ensure!(
+        file.dir_id == params.dir_id,
+        NotFoundSnafu {
+            msg: "File not found"
+        }
+    );
+
+    // Forward to the next middleware/handler passing the file information
+    request.extensions_mut().insert(file);
+    let response = next.run(request).await;
+    Ok(response)
+}
+
+pub async fn note_middleware(
+    state: State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(params): Path<FileParams>,
+    mut request: Request,
+    next: Next,
+) -> Result<Response<Body>> {
+    let permissions = vec![Permission::FilesList, Permission::FilesView];
+
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    // Do not allow non-notes access here
+    ensure!(
+        params.dir_type == "notes",
+        NotFoundSnafu {
+            msg: "File not found"
+        }
+    );
+
+    let mut file_res: Option<FileDto> = state.file_cache.get(&params.file_id);
+
+    if file_res.is_none() {
+        // Fetch from database
+        file_res = state.db.files.get(&params.file_id).await.context(DbSnafu)?;
+
+        if let Some(f) = file_res.clone() {
+            // Store to cache if present
+            state.file_cache.insert(params.file_id.clone(), f);
+        }
+    }
+
+    let file = file_res.context(NotFoundSnafu {
+        msg: "File not found",
+    })?;
+
+    ensure!(
+        file.file_type == FileType::Note,
+        NotFoundSnafu {
+            msg: "File not found"
+        }
+    );
 
     ensure!(
         file.dir_id == params.dir_id,

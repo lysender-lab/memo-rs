@@ -8,6 +8,7 @@ pub mod login;
 pub mod logout;
 pub mod middleware;
 pub mod my_bucket;
+pub mod notes;
 pub mod policies;
 pub mod pref;
 pub mod profile;

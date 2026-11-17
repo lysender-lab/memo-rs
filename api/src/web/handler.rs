@@ -10,22 +10,26 @@ use serde::Serialize;
 use snafu::{OptionExt, ResultExt, ensure};
 
 use crate::{
-    dir::{create_dir, delete_dir, update_dir},
+    dir::{create_dir_svc, delete_dir_svc, update_dir_svc},
     error::{
-        DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, Result, StorageSnafu,
-        WhateverSnafu,
+        DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, NotFoundSnafu, Result,
+        StorageSnafu, WhateverSnafu,
     },
-    file::{create_file, create_remote_file, generate_upload_url},
+    file::{create_file_svc, create_remote_file_svc, delete_file_svc, generate_upload_url_svc},
     health::{check_liveness, check_readiness},
+    note::{
+        create_note_svc, delete_note_svc, get_note_svc, list_note_revisions_svc, update_note_svc,
+    },
     state::AppState,
     token::verify_upload_token,
-    web::response::JsonResponse,
+    web::{params::NoteContentParams, response::JsonResponse},
 };
 use db::dir::{ListDirsParams, NewDir, UpdateDir};
 use db::file::ListFilesParams;
 use memo::{
     dir::{DirDto, DirMeta, DirType},
     file::{FileDto, ORIGINAL_PATH, RemoteUploadDto, SignedRemoteUploadDto},
+    note::{CreateNoteDto, NoteContentDto, NoteRevisionDto, UpdateNoteDto},
     pagination::Paginated,
 };
 use yaas::{actor::Actor, role::Permission};
@@ -118,7 +122,7 @@ pub async fn create_dir_handler(
 
     let actor = actor.actor.expect("Actor must be present");
 
-    let dir = create_dir(&state, &actor.org_id, &dir_type, &data).await?;
+    let dir = create_dir_svc(&state, &actor.org_id, &dir_type, &data).await?;
 
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,
@@ -148,7 +152,7 @@ pub async fn update_dir_handler(
         msg: "Invalid request payload",
     })?;
 
-    let updated = update_dir(&state, &dir.id, &data).await?;
+    let updated = update_dir_svc(&state, &dir.id, &data).await?;
 
     // Either return the updated dir or the original one
     match updated {
@@ -179,7 +183,7 @@ pub async fn delete_dir_handler(
         }
     );
 
-    delete_dir(&state, &dir.id).await?;
+    delete_dir_svc(&state, &dir.id).await?;
     Ok(JsonResponse::with_status(
         StatusCode::NO_CONTENT,
         "".to_string(),
@@ -193,6 +197,7 @@ pub async fn list_files_handler(
     query: Query<ListFilesParams>,
 ) -> Result<JsonResponse> {
     let permissions = vec![Permission::FilesList, Permission::FilesView];
+
     ensure!(
         actor.has_permissions(&permissions),
         ForbiddenSnafu {
@@ -200,7 +205,16 @@ pub async fn list_files_handler(
         }
     );
 
+    // Ensure we are at non-notes dir
+    ensure!(
+        dir.dir_type != DirType::Notes,
+        ForbiddenSnafu {
+            msg: "Files are not allowed on notes"
+        }
+    );
+
     let files = state.db.files.list(&dir, &query).await.context(DbSnafu)?;
+
     let storage_client = state.storage_client.clone();
 
     let actor = actor.actor.expect("Actor must be present");
@@ -224,6 +238,7 @@ pub async fn list_files_handler(
         files.meta.per_page,
         files.meta.total_records,
     );
+
     Ok(JsonResponse::new(serde_json::to_string(&listing).unwrap()))
 }
 
@@ -235,6 +250,7 @@ pub async fn create_upload_url_handler(
     payload: CoreResult<Json<RemoteUploadDto>, JsonRejection>,
 ) -> Result<JsonResponse> {
     let permissions = vec![Permission::FilesCreate];
+
     ensure!(
         actor.has_permissions(&permissions),
         ForbiddenSnafu {
@@ -242,11 +258,19 @@ pub async fn create_upload_url_handler(
         }
     );
 
+    // Do not allow uploads on notes
+    ensure!(
+        dir.dir_type != DirType::Notes,
+        ForbiddenSnafu {
+            msg: "Uploads are not allowed on notes"
+        }
+    );
+
     let data = payload.context(JsonRejectionSnafu {
         msg: "Invalid request payload",
     })?;
 
-    let dto = generate_upload_url(state, &dir, &data.0).await?;
+    let dto = generate_upload_url_svc(state, &dir, &data.0).await?;
 
     Ok(JsonResponse::new(serde_json::to_string(&dto).unwrap()))
 }
@@ -258,10 +282,19 @@ pub async fn create_file_handler(
     payload: CoreResult<Json<SignedRemoteUploadDto>, JsonRejection>,
 ) -> Result<JsonResponse> {
     let permissions = vec![Permission::FilesCreate];
+
     ensure!(
         actor.has_permissions(&permissions),
         ForbiddenSnafu {
             msg: "Insufficient permissions"
+        }
+    );
+
+    // Ensure we are at non-notes dir
+    ensure!(
+        dir.dir_type != DirType::Notes,
+        ForbiddenSnafu {
+            msg: "Files are not allowed on notes"
         }
     );
 
@@ -303,9 +336,9 @@ pub async fn create_file_handler(
             .await
             .context(StorageSnafu)?;
 
-        create_file(state, &dir, &downloaded).await?
+        create_file_svc(state, &dir, &downloaded).await?
     } else {
-        create_remote_file(state, &dir, &upload_claims_copy).await?
+        create_remote_file_svc(state, &dir, &upload_claims_copy).await?
     };
 
     let file = storage_client
@@ -333,13 +366,19 @@ pub async fn get_file_handler(
         dir_name: dir.name.clone(),
     };
 
-    let storage_client = state.storage_client.clone();
-    // Extract dir from the middleware extension
-    let file_dto = storage_client
-        .attach_url(&dir_meta, file)
-        .await
-        .context(StorageSnafu)?;
-    Ok(JsonResponse::new(serde_json::to_string(&file_dto).unwrap()))
+    match dir.dir_type {
+        DirType::Notes => Ok(JsonResponse::new(serde_json::to_string(&file).unwrap())),
+        _ => {
+            let storage_client = state.storage_client.clone();
+            // Extract dir from the middleware extension
+            let file_dto = storage_client
+                .attach_url(&dir_meta, file)
+                .await
+                .context(StorageSnafu)?;
+
+            Ok(JsonResponse::new(serde_json::to_string(&file_dto).unwrap()))
+        }
+    }
 }
 
 pub async fn delete_file_handler(
@@ -364,19 +403,157 @@ pub async fn delete_file_handler(
         dir_name: dir.name.clone(),
     };
 
-    // Delete record
-    state.db.files.delete(&file.id).await.context(DbSnafu)?;
-    state.file_cache.remove(&file.id);
-
-    // Delete file(s) from storage
-    let storage_client = state.storage_client.clone();
-    storage_client
-        .delete(&dir_meta, &file)
-        .await
-        .context(StorageSnafu)?;
+    delete_file_svc(state, &dir_meta, &file).await?;
 
     Ok(JsonResponse::with_status(
         StatusCode::NO_CONTENT,
         "".to_string(),
+    ))
+}
+
+pub async fn list_notes_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(dir): Extension<DirDto>,
+    query: Query<ListFilesParams>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::FilesList, Permission::FilesView];
+
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    // Ensure we are at notes dir
+    ensure!(
+        dir.dir_type == DirType::Notes,
+        ForbiddenSnafu {
+            msg: "Notes are not allowed on non-notes directories"
+        }
+    );
+
+    let files = state.db.files.list(&dir, &query).await.context(DbSnafu)?;
+
+    Ok(JsonResponse::new(serde_json::to_string(&files).unwrap()))
+}
+
+pub async fn create_note_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(dir): Extension<DirDto>,
+    payload: CoreResult<Json<CreateNoteDto>, JsonRejection>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::FilesCreate];
+
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    // Ensure we are at notes dir
+    ensure!(
+        dir.dir_type == DirType::Notes,
+        ForbiddenSnafu {
+            msg: "Notes are not allowed on non-notes directories"
+        }
+    );
+
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
+
+    let file = create_note_svc(&state, &dir, &data).await?;
+
+    Ok(JsonResponse::with_status(
+        StatusCode::CREATED,
+        serde_json::to_string(&file).unwrap(),
+    ))
+}
+
+pub async fn get_note_handler(
+    State(state): State<AppState>,
+    Extension(file): Extension<FileDto>,
+    Query(params): Query<NoteContentParams>,
+) -> Result<JsonResponse> {
+    let opt_note = get_note_svc(&state, &file.id, params.revision.as_deref()).await?;
+    let note = opt_note.context(NotFoundSnafu {
+        msg: "Note not found",
+    })?;
+
+    let note_content: NoteContentDto = note.into();
+
+    Ok(JsonResponse::new(
+        serde_json::to_string(&note_content).unwrap(),
+    ))
+}
+
+pub async fn list_note_revisions_handler(
+    State(state): State<AppState>,
+    Extension(file): Extension<FileDto>,
+) -> Result<JsonResponse> {
+    let revisions: Vec<NoteRevisionDto> = list_note_revisions_svc(&state, &file.id).await?;
+    Ok(JsonResponse::new(
+        serde_json::to_string(&revisions).unwrap(),
+    ))
+}
+
+pub async fn delete_note_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(file): Extension<FileDto>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::FilesDelete];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    delete_note_svc(&state, &file.id).await?;
+
+    Ok(JsonResponse::with_status(
+        StatusCode::NO_CONTENT,
+        "".to_string(),
+    ))
+}
+
+pub async fn update_note_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(file): Extension<FileDto>,
+    payload: CoreResult<Json<UpdateNoteDto>, JsonRejection>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::FilesEdit];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    let data = payload.context(JsonRejectionSnafu {
+        msg: "Invalid request payload",
+    })?;
+
+    let opt_note = get_note_svc(&state, &file.id, None).await?;
+    let _ = opt_note.context(NotFoundSnafu {
+        msg: "Note not found",
+    })?;
+
+    let updated_content = data.content.clone();
+
+    let updated = update_note_svc(&state, file.id.clone(), data.0).await?;
+    let mut note_content: NoteContentDto = updated.into();
+
+    // Replace with plain text
+    note_content.content = updated_content;
+
+    Ok(JsonResponse::new(
+        serde_json::to_string(&note_content).unwrap(),
     ))
 }

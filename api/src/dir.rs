@@ -8,7 +8,7 @@ use db::dir::{MAX_DIRS, NewDir, UpdateDir};
 use memo::dir::{DirDto, DirType};
 use memo::validators::flatten_errors;
 
-pub async fn create_dir(
+pub async fn create_dir_svc(
     state: &AppState,
     org_id: &str,
     dir_type: &DirType,
@@ -29,6 +29,7 @@ pub async fn create_dir(
         .count(org_id, dir_type)
         .await
         .context(DbSnafu)?;
+
     ensure!(count < MAX_DIRS as i64, MaxDirsReachedSnafu,);
 
     // Directory name must be unique for the bucket
@@ -54,7 +55,7 @@ pub async fn create_dir(
         .context(DbSnafu)
 }
 
-pub async fn update_dir(state: &AppState, id: &str, data: &UpdateDir) -> Result<bool> {
+pub async fn update_dir_svc(state: &AppState, id: &str, data: &UpdateDir) -> Result<bool> {
     let errors = data.validate();
     ensure!(
         errors.is_ok(),
@@ -67,7 +68,7 @@ pub async fn update_dir(state: &AppState, id: &str, data: &UpdateDir) -> Result<
     state.db.dirs.update(id, data).await.context(DbSnafu)
 }
 
-pub async fn delete_dir(state: &AppState, id: &str) -> Result<()> {
+pub async fn delete_dir_svc(state: &AppState, id: &str) -> Result<()> {
     // Do not delete if there are still files inside
     let file_count = state.db.files.count_by_dir(id).await.context(DbSnafu)?;
     ensure!(

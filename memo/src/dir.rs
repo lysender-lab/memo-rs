@@ -5,6 +5,7 @@ pub enum DirType {
     Photos,
     Videos,
     Documents,
+    Notes,
 }
 
 impl TryFrom<&str> for DirType {
@@ -15,6 +16,7 @@ impl TryFrom<&str> for DirType {
             "photos" => Ok(Self::Photos),
             "videos" => Ok(Self::Videos),
             "documents" => Ok(Self::Documents),
+            "notes" => Ok(Self::Notes),
             _ => Err(format!("Invalid dir type: {value}")),
         }
     }
@@ -26,6 +28,7 @@ impl core::fmt::Display for DirType {
             Self::Photos => write!(f, "{}", "photos"),
             Self::Videos => write!(f, "{}", "videos"),
             Self::Documents => write!(f, "{}", "documents"),
+            Self::Notes => write!(f, "{}", "notes"),
         }
     }
 }

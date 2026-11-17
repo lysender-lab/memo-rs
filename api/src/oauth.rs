@@ -8,7 +8,7 @@ use crate::{Error, Result, error::HttpResponseParseSnafu};
 use yaas::actor::Actor;
 use yaas::actor::ActorDto;
 
-pub async fn authenticate_token(state: &AppState, token: &str) -> Result<Actor> {
+pub async fn authenticate_token_svc(state: &AppState, token: &str) -> Result<Actor> {
     // Decode token to get user ID (sub claim)
     let claims = decode_auth_token(token)?;
 

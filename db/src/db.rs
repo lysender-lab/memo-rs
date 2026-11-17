@@ -11,6 +11,7 @@ use crate::error::{DbBuilderSnafu, DbConnectSnafu};
 use crate::file::FileRepo;
 
 use crate::Result;
+use crate::note::NoteRepo;
 
 pub async fn create_db_pool(filename: &Path) -> Result<Connection> {
     let db = Builder::new_local(filename.to_str().expect("DB path is required"))
@@ -29,6 +30,7 @@ pub async fn create_db_pool(filename: &Path) -> Result<Connection> {
 pub struct DbMapper {
     pub dirs: DirRepo,
     pub files: FileRepo,
+    pub notes: NoteRepo,
     pub any: AnyRepo,
 }
 
@@ -43,6 +45,7 @@ pub async fn create_db_mapper(filename: &Path, pool_size: usize) -> Result<DbMap
     Ok(DbMapper {
         dirs: DirRepo::new(arc_pool.clone()),
         files: FileRepo::new(arc_pool.clone()),
+        notes: NoteRepo::new(arc_pool.clone()),
         any: AnyRepo::new(arc_pool),
     })
 }
@@ -50,6 +53,7 @@ pub async fn create_db_mapper(filename: &Path, pool_size: usize) -> Result<DbMap
 pub async fn create_logs_db_mapper(filename: &Path) -> Result<LogsDbMapper> {
     let pool = DbPool::new(filename, 1).await?;
     let arc_pool = Arc::new(pool);
+
     Ok(LogsDbMapper {
         any: AnyRepo::new(arc_pool),
     })

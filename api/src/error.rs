@@ -107,6 +107,9 @@ pub enum Error {
     #[snafu(display("Storage error: {}", source))]
     Storage { source: storage::Error },
 
+    #[snafu(display("Cipher error: {}", source))]
+    Cipher { source: cipher::Error },
+
     #[snafu(display("{}", source))]
     Base64Decode { source: base64::DecodeError },
 

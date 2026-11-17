@@ -59,15 +59,30 @@ pub struct FileDto {
     // Only available on non-image files
     pub url: Option<String>,
 
-    // For backward compatiblity only, use file_type instead
-    pub is_image: bool,
-
     // Only available for image files, main url is in orig version
     pub img_versions: Option<Vec<ImgVersionDto>>,
     pub img_taken_at: Option<i64>,
 
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+impl FileDto {
+    pub fn is_regular_file(&self) -> bool {
+        self.file_type == FileType::Image
+    }
+
+    pub fn is_image(&self) -> bool {
+        self.file_type == FileType::Image
+    }
+
+    pub fn is_video(&self) -> bool {
+        self.file_type == FileType::Video
+    }
+
+    pub fn is_note(&self) -> bool {
+        self.file_type == FileType::Note
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

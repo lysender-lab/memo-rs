@@ -1,0 +1,26 @@
+{% extends "layout/base.html" %}
+
+{% block content %}
+<section class="section">
+    <div class="container">
+        <nav class="breadcrumb" aria-label="breadcrumbs">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/notes">Notes</a></li>
+                <li><a href="/notes/{{ dir.id }}">{{ dir.label }}</a></li>
+                {% if is_edit %}
+                <li><a href="/notes/{{ dir.id }}/entries/{{ note_id }}">{{ name }}</a></li>
+                <li class="is-active"><a aria-current="page">Edit</a></li>
+                {% else %}
+                <li class="is-active"><a aria-current="page">New Note</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+
+        <h1 class="title">{% if is_edit %}Edit note{% else %}New note{% endif %}</h1>
+        <div class="columns"><div class="column is-two-thirds-desktop">
+            <div id="note-form-container">{% include "widgets/note_form.html" %}</div>
+        </div></div>
+    </div>
+</section>
+{% endblock %}

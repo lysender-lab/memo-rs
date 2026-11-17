@@ -19,3 +19,8 @@ pub struct FileParams {
     pub dir_id: String,
     pub file_id: String,
 }
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct NoteContentParams {
+    pub revision: Option<String>,
+}

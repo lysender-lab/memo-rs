@@ -19,6 +19,7 @@ pub fn valid_id(id: &str) -> bool {
 pub enum IdPrefix {
     File,
     Dir,
+    Note,
     Any,
 }
 
@@ -29,6 +30,7 @@ impl TryFrom<&str> for IdPrefix {
         match value {
             "fil" => Ok(Self::File),
             "dir" => Ok(Self::Dir),
+            "not" => Ok(Self::Note),
             "any" => Ok(Self::Any),
             _ => Err(format!("Invalid ID Prefix: {value}")),
         }
@@ -40,6 +42,7 @@ impl core::fmt::Display for IdPrefix {
         match self {
             Self::File => write!(f, "fil"),
             Self::Dir => write!(f, "dir"),
+            Self::Note => write!(f, "not"),
             Self::Any => write!(f, "any"),
         }
     }

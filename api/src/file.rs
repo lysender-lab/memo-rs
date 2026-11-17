@@ -6,9 +6,7 @@ use exif::{In, Tag};
 use image::DynamicImage;
 use image::ImageReader;
 use image::imageops;
-use memo::file::FileType;
 use snafu::ResultExt;
-use storage::DownloadedFile;
 use tracing::error;
 
 use crate::error::DbSnafu;
@@ -22,6 +20,7 @@ use db::file::MAX_FILES;
 use memo::dir::DirDto;
 use memo::dir::DirMeta;
 use memo::dir::DirType;
+use memo::file::FileType;
 use memo::file::MAX_FILE_SIZE;
 use memo::file::RemoteUploadDto;
 use memo::file::SignedFileUploadDto;
@@ -33,6 +32,7 @@ use memo::utils::IdPrefix;
 use memo::utils::generate_prefixed_id;
 use memo::utils::slugify_prefixed;
 use memo::utils::truncate_string;
+use storage::DownloadedFile;
 
 #[derive(Debug, Clone)]
 pub struct PhotoExif {
@@ -49,7 +49,7 @@ impl Default for PhotoExif {
     }
 }
 
-pub async fn generate_upload_url(
+pub async fn generate_upload_url_svc(
     state: AppState,
     dir: &DirDto,
     data: &RemoteUploadDto,
@@ -128,7 +128,11 @@ pub async fn generate_upload_url(
 
 /// Creates a file record by downloading the file first, capture metadata
 /// create image versions, then upload to cloud storage, and finally save to database
-pub async fn create_file(state: AppState, dir: &DirDto, data: &DownloadedFile) -> Result<FileDto> {
+pub async fn create_file_svc(
+    state: AppState,
+    dir: &DirDto,
+    data: &DownloadedFile,
+) -> Result<FileDto> {
     let dir_meta = DirMeta {
         bucket_name: state.config.cloud.bucket,
         org_id: dir.org_id.clone(),
@@ -269,10 +273,35 @@ pub async fn create_file(state: AppState, dir: &DirDto, data: &DownloadedFile) -
     }
 }
 
+pub async fn delete_file_svc(state: AppState, dir_meta: &DirMeta, file: &FileDto) -> Result<()> {
+    // Delete record
+    state.db.files.delete(&file.id).await.context(DbSnafu)?;
+    state.file_cache.remove(&file.id);
+
+    if file.file_type == FileType::Note {
+        // Also delete all note revisions
+        state
+            .db
+            .notes
+            .delete_revisions(&file.id)
+            .await
+            .context(DbSnafu)?;
+    } else {
+        // Delete file(s) from storage
+        let storage_client = state.storage_client.clone();
+        storage_client
+            .delete(&dir_meta, &file)
+            .await
+            .context(StorageSnafu)?;
+    }
+
+    Ok(())
+}
+
 /// Creates a file record relying completely from upload metadata
 /// Assumes that the file has been uploaded already
 /// Applicable to non-image files
-pub async fn create_remote_file(
+pub async fn create_remote_file_svc(
     state: AppState,
     dir: &DirDto,
     data: &FileUploadClaims,
@@ -290,7 +319,6 @@ pub async fn create_remote_file(
         content_type: data.content_type.clone(),
         size: data.size,
         url: None,
-        is_image: false,
         img_versions: None,
         img_taken_at: None,
         created_at: today,
@@ -391,8 +419,6 @@ fn cleanup_temp_uploads(data: &DownloadedFile, file: Option<&FileDto>) -> Result
 }
 
 fn init_file(dir: &DirDto, data: &DownloadedFile) -> Result<FileDto> {
-    let mut is_image = false;
-
     // Current design limits file_type to either File or Image
     // In the future, there will be a Video and Note
     let mut file_type = FileType::File;
@@ -401,7 +427,6 @@ fn init_file(dir: &DirDto, data: &DownloadedFile) -> Result<FileDto> {
     let content_type = get_content_type(&data.path).unwrap_or(data.content_type.clone());
 
     if ALLOWED_IMAGE_TYPES.contains(&content_type.as_str()) {
-        is_image = true;
         file_type = FileType::Image;
     }
 
@@ -418,7 +443,6 @@ fn init_file(dir: &DirDto, data: &DownloadedFile) -> Result<FileDto> {
         content_type,
         size: data.size,
         url: None,
-        is_image,
         img_versions: None,
         img_taken_at: None,
         created_at: today,

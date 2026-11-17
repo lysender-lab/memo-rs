@@ -4,6 +4,7 @@ mod db_pool;
 pub mod dir;
 mod error;
 pub mod file;
+pub mod note;
 #[cfg(test)]
 mod test;
 mod turso_decode;

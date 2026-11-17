@@ -1,0 +1,40 @@
+<div class="is-flex is-justify-content-space-between is-align-items-center mb-4">
+    <div class="buttons mb-0">
+        <a class="button" href="/notes">
+            <span class="icon is-small"><i class="fas fa-arrow-left"></i></span>
+            <span>Back</span>
+        </a>
+        {% if can_add_files %}
+        <a class="button is-primary" href="/notes/{{ dir.id }}/new_note">
+            <span class="icon is-small"><i class="fas fa-plus"></i></span>
+            <span>Add Note</span>
+        </a>
+        {% endif %}
+    </div>
+    {% if can_edit || can_delete %}
+    <div class="dropdown is-right" :class="{ 'is-active': open }" x-data="{ open: false }">
+        <div class="dropdown-trigger">
+            <button class="button" aria-label="Directory options" aria-haspopup="true" :aria-expanded="open" aria-controls="notes-dir-menu" @click="open = !open">
+                <span class="icon is-small"><i class="fas fa-cog" aria-hidden="true"></i></span>
+            </button>
+        </div>
+        <div class="dropdown-menu" id="notes-dir-menu" role="menu">
+            <div class="dropdown-content">
+                {% if can_edit %}
+                <button class="dropdown-item" type="button" hx-get="/notes/{{ dir.id }}/edit" hx-target="#edit-dir-container">
+                    <span class="icon is-small"><i class="fas fa-pen" aria-hidden="true"></i></span>
+                    Edit Label
+                </button>
+                {% endif %}
+                {% if can_delete %}
+                {% if can_edit %}<hr class="dropdown-divider" />{% endif %}
+                <button class="dropdown-item has-text-danger" type="button" hx-get="/notes/{{ dir.id }}/delete" hx-target="#edit-dir-container">
+                    <span class="icon is-small"><i class="fas fa-times" aria-hidden="true"></i></span>
+                    Delete Directory
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
