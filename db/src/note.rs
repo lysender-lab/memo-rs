@@ -8,7 +8,7 @@ use turso::Row;
 
 use crate::db_pool::DbPool;
 use crate::error::{DbPrepareSnafu, DbStatementSnafu, DbTransactionSnafu};
-use crate::turso_decode::{FromTursoRow, collect_row, row_integer, row_text};
+use crate::turso_decode::{FromTursoRow, collect_row, collect_rows, row_integer, row_text};
 use crate::turso_params::{integer_param, new_query_params, text_param};
 use crate::{Error, Result};
 use memo::note::NoteDto;
@@ -198,6 +198,57 @@ impl NoteRepo {
         let row_result = stmt.query_row(q_params).await;
         let dto: Option<NoteDto> = collect_row(row_result)?;
         Ok(dto)
+    }
+
+    pub async fn get_revision(&self, file_id: &str, revision_id: &str) -> Result<Option<NoteDto>> {
+        let query = r#"
+            SELECT
+                id,
+                file_id,
+                content,
+                next_revision,
+                checksum,
+                created_at
+            FROM notes
+            WHERE file_id = :file_id AND id = :revision_id
+            LIMIT 1
+        "#
+        .to_string();
+
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":file_id", file_id.to_owned()));
+        q_params.push(text_param(":revision_id", revision_id.to_owned()));
+
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
+        let row_result = stmt.query_row(q_params).await;
+        let dto: Option<NoteDto> = collect_row(row_result)?;
+        Ok(dto)
+    }
+
+    pub async fn list_revisions(&self, file_id: &str) -> Result<Vec<NoteDto>> {
+        let query = r#"
+            SELECT
+                id,
+                file_id,
+                content,
+                next_revision,
+                checksum,
+                created_at
+            FROM notes
+            WHERE file_id = :file_id
+            ORDER BY created_at DESC, id DESC
+            LIMIT 50
+        "#
+        .to_string();
+
+        let mut q_params = new_query_params();
+        q_params.push(text_param(":file_id", file_id.to_owned()));
+
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
+        let mut rows = stmt.query(q_params).await.context(DbStatementSnafu)?;
+        collect_rows(&mut rows).await
     }
 
     pub async fn delete_revisions(&self, file_id: &str) -> Result<()> {

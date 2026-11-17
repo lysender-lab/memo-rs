@@ -17,17 +17,19 @@ use crate::{
     },
     file::{create_file_svc, create_remote_file_svc, delete_file_svc, generate_upload_url_svc},
     health::{check_liveness, check_readiness},
-    note::{create_note_svc, delete_note_svc, get_note_svc, update_note_svc},
+    note::{
+        create_note_svc, delete_note_svc, get_note_svc, list_note_revisions_svc, update_note_svc,
+    },
     state::AppState,
     token::verify_upload_token,
-    web::response::JsonResponse,
+    web::{params::NoteContentParams, response::JsonResponse},
 };
 use db::dir::{ListDirsParams, NewDir, UpdateDir};
 use db::file::ListFilesParams;
 use memo::{
     dir::{DirDto, DirMeta, DirType},
     file::{FileDto, ORIGINAL_PATH, RemoteUploadDto, SignedRemoteUploadDto},
-    note::{CreateNoteDto, NoteContentDto, UpdateNoteDto},
+    note::{CreateNoteDto, NoteContentDto, NoteRevisionDto, UpdateNoteDto},
     pagination::Paginated,
 };
 use yaas::{actor::Actor, role::Permission};
@@ -475,8 +477,9 @@ pub async fn create_note_handler(
 pub async fn get_note_handler(
     State(state): State<AppState>,
     Extension(file): Extension<FileDto>,
+    Query(params): Query<NoteContentParams>,
 ) -> Result<JsonResponse> {
-    let opt_note = get_note_svc(&state, &file.id).await?;
+    let opt_note = get_note_svc(&state, &file.id, params.revision.as_deref()).await?;
     let note = opt_note.context(NotFoundSnafu {
         msg: "Note not found",
     })?;
@@ -485,6 +488,16 @@ pub async fn get_note_handler(
 
     Ok(JsonResponse::new(
         serde_json::to_string(&note_content).unwrap(),
+    ))
+}
+
+pub async fn list_note_revisions_handler(
+    State(state): State<AppState>,
+    Extension(file): Extension<FileDto>,
+) -> Result<JsonResponse> {
+    let revisions: Vec<NoteRevisionDto> = list_note_revisions_svc(&state, &file.id).await?;
+    Ok(JsonResponse::new(
+        serde_json::to_string(&revisions).unwrap(),
     ))
 }
 
@@ -527,7 +540,7 @@ pub async fn update_note_handler(
         msg: "Invalid request payload",
     })?;
 
-    let opt_note = get_note_svc(&state, &file.id).await?;
+    let opt_note = get_note_svc(&state, &file.id, None).await?;
     let _ = opt_note.context(NotFoundSnafu {
         msg: "Note not found",
     })?;

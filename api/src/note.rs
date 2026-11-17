@@ -11,8 +11,8 @@ use db::file::MAX_FILES;
 use memo::{
     dir::DirDto,
     file::{FileDto, FileType},
-    note::{CreateNoteDto, NoteDto, UpdateNoteDto},
-    utils::{IdPrefix, generate_prefixed_id, str_checksum, truncate_string},
+    note::{CreateNoteDto, NoteDto, NoteRevisionDto, UpdateNoteDto},
+    utils::{IdPrefix, generate_prefixed_id, str_checksum, truncate_string, valid_prefixed_id},
     validators::flatten_errors,
 };
 
@@ -89,8 +89,29 @@ pub async fn create_note_svc(
         .context(DbSnafu)
 }
 
-pub async fn get_note_svc(state: &AppState, file_id: &str) -> Result<Option<NoteDto>> {
-    let mut note = state.db.notes.get_note(file_id).await.context(DbSnafu)?;
+pub async fn get_note_svc(
+    state: &AppState,
+    file_id: &str,
+    revision: Option<&str>,
+) -> Result<Option<NoteDto>> {
+    if let Some(revision_id) = revision {
+        ensure!(
+            revision_id.starts_with("not_") && valid_prefixed_id(revision_id),
+            ValidationSnafu {
+                msg: "Revision ID must be a valid note ID".to_string(),
+            }
+        );
+    }
+
+    let mut note = match revision {
+        Some(revision_id) => state
+            .db
+            .notes
+            .get_revision(file_id, revision_id)
+            .await
+            .context(DbSnafu)?,
+        None => state.db.notes.get_note(file_id).await.context(DbSnafu)?,
+    };
     if let Some(note_val) = note.as_mut() {
         // Decrypt and replace content
         let crypt_content = note_val.content.clone();
@@ -102,6 +123,20 @@ pub async fn get_note_svc(state: &AppState, file_id: &str) -> Result<Option<Note
     }
 
     Ok(note)
+}
+
+pub async fn list_note_revisions_svc(
+    state: &AppState,
+    file_id: &str,
+) -> Result<Vec<NoteRevisionDto>> {
+    let revisions = state
+        .db
+        .notes
+        .list_revisions(file_id)
+        .await
+        .context(DbSnafu)?;
+
+    Ok(revisions.into_iter().map(NoteRevisionDto::from).collect())
 }
 
 pub async fn delete_note_svc(state: &AppState, file_id: &str) -> Result<()> {

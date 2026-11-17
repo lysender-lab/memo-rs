@@ -833,10 +833,8 @@ mod tests {
     use super::*;
     use crate::test::TestCtx;
 
-    #[tokio::test]
-    async fn retry_create_note_creates_file_and_initial_revision() {
-        let ctx = TestCtx::new("create-note").await.unwrap();
-        let file = FileDto {
+    fn note_file() -> FileDto {
+        FileDto {
             id: "fil-note".to_string(),
             org_id: "org-note".to_string(),
             dir_id: "dir-note".to_string(),
@@ -850,7 +848,13 @@ mod tests {
             img_taken_at: None,
             created_at: 1,
             updated_at: 1,
-        };
+        }
+    }
+
+    #[tokio::test]
+    async fn retry_create_note_creates_file_and_initial_revision() {
+        let ctx = TestCtx::new("create-note").await.unwrap();
+        let file = note_file();
 
         let created = ctx
             .db
@@ -880,21 +884,7 @@ mod tests {
     #[tokio::test]
     async fn update_note_creates_revision_and_updates_file_metadata() {
         let ctx = TestCtx::new("update-note").await.unwrap();
-        let file = FileDto {
-            id: "fil-note".to_string(),
-            org_id: "org-note".to_string(),
-            dir_id: "dir-note".to_string(),
-            file_type: FileType::Note,
-            name: "Shopping list".to_string(),
-            filename: "Shopping list".to_string(),
-            content_type: "text/plain".to_string(),
-            size: 4,
-            url: None,
-            img_versions: None,
-            img_taken_at: None,
-            created_at: 1,
-            updated_at: 1,
-        };
+        let file = note_file();
 
         ctx.db
             .files
@@ -935,21 +925,7 @@ mod tests {
     #[tokio::test]
     async fn delete_note_removes_file_and_revisions() {
         let ctx = TestCtx::new("delete-note").await.unwrap();
-        let file = FileDto {
-            id: "fil-note".to_string(),
-            org_id: "org-note".to_string(),
-            dir_id: "dir-note".to_string(),
-            file_type: FileType::Note,
-            name: "Shopping list".to_string(),
-            filename: "Shopping list".to_string(),
-            content_type: "text/plain".to_string(),
-            size: 4,
-            url: None,
-            img_versions: None,
-            img_taken_at: None,
-            created_at: 1,
-            updated_at: 1,
-        };
+        let file = note_file();
 
         ctx.db
             .files
@@ -977,5 +953,65 @@ mod tests {
 
         assert!(ctx.db.files.get(&file.id).await.unwrap().is_none());
         assert!(ctx.db.notes.get_note(&file.id).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn list_revisions_returns_newest_first_and_caps_at_fifty() {
+        let ctx = TestCtx::new("list-revisions").await.unwrap();
+        let file = note_file();
+
+        ctx.db
+            .files
+            .retry_create_note(
+                file.clone(),
+                "ciphertext".to_string(),
+                "checksum".to_string(),
+                5,
+            )
+            .await
+            .unwrap();
+        let initial = ctx.db.notes.get_note(&file.id).await.unwrap().unwrap();
+
+        let mut latest_id = String::new();
+        for revision in 1..=50 {
+            let updated = ctx
+                .db
+                .files
+                .update_note(
+                    file.id.clone(),
+                    format!("ciphertext-{revision}"),
+                    format!("checksum-{revision}"),
+                    revision,
+                    revision,
+                )
+                .await
+                .unwrap();
+            latest_id = updated.id;
+        }
+
+        let revisions = ctx.db.notes.list_revisions(&file.id).await.unwrap();
+        assert_eq!(revisions.len(), 50);
+        assert_eq!(revisions.first().unwrap().id, latest_id);
+        assert!(!revisions.iter().any(|revision| revision.id == initial.id));
+        assert!(revisions.windows(2).all(|pair| {
+            (pair[0].created_at, &pair[0].id) >= (pair[1].created_at, &pair[1].id)
+        }));
+
+        assert!(
+            ctx.db
+                .notes
+                .get_revision(&file.id, &latest_id)
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            ctx.db
+                .notes
+                .get_revision(&file.id, &generate_prefixed_id(IdPrefix::Note))
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 }
