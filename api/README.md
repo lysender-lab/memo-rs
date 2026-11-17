@@ -38,7 +38,9 @@ Uses cases:
 - POST /{dir_type}/{dir_id}/entries - create a note entry
 - GET /{dir_type}/{dir_id}/entries/{file_id} - get a note file metadata
 - DELETE /{dir_type}/{dir_id}/entries/{file_id} - delete a note entry
+- GET /{dir_type}/{dir_id}/entries/{file_id}/revisions - list note revisions metadata
 - GET /{dir_type}/{dir_id}/entries/{file_id}/content - get a note content
+- GET /{dir_type}/{dir_id}/entries/{file_id}/content?revision=xxx - get a note content from a revision
 - PUT /{dir_type}/{dir_id}/entries/{file_id}/content - updates a note content
 
 ## Workflow
