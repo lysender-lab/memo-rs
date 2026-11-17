@@ -17,7 +17,7 @@ use crate::{
     },
     file::{create_file_svc, create_remote_file_svc, delete_file_svc, generate_upload_url_svc},
     health::{check_liveness, check_readiness},
-    note::{create_note_svc, get_note_svc, update_note_svc},
+    note::{create_note_svc, delete_note_svc, get_note_svc, update_note_svc},
     state::AppState,
     token::verify_upload_token,
     web::response::JsonResponse,
@@ -485,6 +485,27 @@ pub async fn get_note_handler(
 
     Ok(JsonResponse::new(
         serde_json::to_string(&note_content).unwrap(),
+    ))
+}
+
+pub async fn delete_note_handler(
+    State(state): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Extension(file): Extension<FileDto>,
+) -> Result<JsonResponse> {
+    let permissions = vec![Permission::FilesDelete];
+    ensure!(
+        actor.has_permissions(&permissions),
+        ForbiddenSnafu {
+            msg: "Insufficient permissions"
+        }
+    );
+
+    delete_note_svc(&state, &file.id).await?;
+
+    Ok(JsonResponse::with_status(
+        StatusCode::NO_CONTENT,
+        "".to_string(),
     ))
 }
 

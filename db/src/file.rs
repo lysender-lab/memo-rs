@@ -760,6 +760,61 @@ impl FileRepo {
         Ok(())
     }
 
+    pub async fn delete_note(&self, file_id: &str) -> Result<()> {
+        let delete_revisions_query = "DELETE FROM notes WHERE file_id = :file_id";
+        let delete_file_query = "DELETE FROM files WHERE id = :id";
+
+        let mut revision_params = new_query_params();
+        revision_params.push(text_param(":file_id", file_id.to_owned()));
+
+        let mut file_params = new_query_params();
+        file_params.push(text_param(":id", file_id.to_owned()));
+
+        let conn = self.db_pool.acquire().await?;
+        conn.execute("BEGIN CONCURRENT", ())
+            .await
+            .context(DbTransactionSnafu)?;
+
+        let operation: Result<()> = async {
+            let mut revisions_stmt = conn
+                .prepare(delete_revisions_query)
+                .await
+                .context(DbPrepareSnafu)?;
+            revisions_stmt
+                .execute(revision_params)
+                .await
+                .context(DbStatementSnafu)?;
+
+            let mut file_stmt = conn
+                .prepare(delete_file_query)
+                .await
+                .context(DbPrepareSnafu)?;
+            file_stmt
+                .execute(file_params)
+                .await
+                .context(DbStatementSnafu)?;
+
+            Ok(())
+        }
+        .await;
+
+        if let Err(error) = operation {
+            conn.execute("ROLLBACK", ())
+                .await
+                .context(DbTransactionSnafu)?;
+            return Err(error);
+        }
+
+        if let Err(error) = conn.execute("COMMIT", ()).await.context(DbTransactionSnafu) {
+            conn.execute("ROLLBACK", ())
+                .await
+                .context(DbTransactionSnafu)?;
+            return Err(error);
+        }
+
+        Ok(())
+    }
+
     pub async fn delete(&self, id: &str) -> Result<()> {
         let query = "DELETE FROM files WHERE id = :id".to_string();
         let mut q_params = new_query_params();
@@ -875,5 +930,52 @@ mod tests {
         let updated_file = ctx.db.files.get(&file.id).await.unwrap().unwrap();
         assert_eq!(updated_file.size, 18);
         assert_eq!(updated_file.updated_at, 2);
+    }
+
+    #[tokio::test]
+    async fn delete_note_removes_file_and_revisions() {
+        let ctx = TestCtx::new("delete-note").await.unwrap();
+        let file = FileDto {
+            id: "fil-note".to_string(),
+            org_id: "org-note".to_string(),
+            dir_id: "dir-note".to_string(),
+            file_type: FileType::Note,
+            name: "Shopping list".to_string(),
+            filename: "Shopping list".to_string(),
+            content_type: "text/plain".to_string(),
+            size: 4,
+            url: None,
+            img_versions: None,
+            img_taken_at: None,
+            created_at: 1,
+            updated_at: 1,
+        };
+
+        ctx.db
+            .files
+            .retry_create_note(
+                file.clone(),
+                "ciphertext".to_string(),
+                "checksum".to_string(),
+                5,
+            )
+            .await
+            .unwrap();
+        ctx.db
+            .files
+            .update_note(
+                file.id.clone(),
+                "updated-ciphertext".to_string(),
+                "updated-checksum".to_string(),
+                18,
+                2,
+            )
+            .await
+            .unwrap();
+
+        ctx.db.files.delete_note(&file.id).await.unwrap();
+
+        assert!(ctx.db.files.get(&file.id).await.unwrap().is_none());
+        assert!(ctx.db.notes.get_note(&file.id).await.unwrap().is_none());
     }
 }

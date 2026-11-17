@@ -104,6 +104,14 @@ pub async fn get_note_svc(state: &AppState, file_id: &str) -> Result<Option<Note
     Ok(note)
 }
 
+pub async fn delete_note_svc(state: &AppState, file_id: &str) -> Result<()> {
+    state.db.files.delete_note(file_id).await.context(DbSnafu)?;
+
+    state.file_cache.remove(file_id);
+
+    Ok(())
+}
+
 pub async fn update_note_svc(
     state: &AppState,
     file_id: String,
