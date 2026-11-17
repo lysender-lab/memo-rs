@@ -47,10 +47,10 @@
 
             <div class="table-container documents-table-wrap">
                 <table class="table is-fullwidth is-hoverable documents-table">
-                    <thead><tr><th>Name</th><th class="has-text-right">Size</th><th>Last updated</th><th></th></tr></thead>
+                    <thead><tr><th>Name</th><th class="has-text-right">Size</th><th>Last updated</th></tr></thead>
                     <tbody id="note-table-body" hx-get="/notes/{{ dir.id }}/note_table?page=1" hx-trigger="load">
-                        <tr class="skeleton-row"><td><div class="skeleton-line"></div></td><td><div class="skeleton-line skeleton-line-short ml-auto"></div></td><td><div class="skeleton-line skeleton-line-short"></div></td><td></td></tr>
-                        <tr class="skeleton-row"><td><div class="skeleton-line"></div></td><td><div class="skeleton-line skeleton-line-short ml-auto"></div></td><td><div class="skeleton-line skeleton-line-short"></div></td><td></td></tr>
+                        <tr class="skeleton-row"><td><div class="skeleton-line"></div></td><td><div class="skeleton-line skeleton-line-short ml-auto"></div></td><td><div class="skeleton-line skeleton-line-short"></div></td></tr>
+                        <tr class="skeleton-row"><td><div class="skeleton-line"></div></td><td><div class="skeleton-line skeleton-line-short ml-auto"></div></td><td><div class="skeleton-line skeleton-line-short"></div></td></tr>
                     </tbody>
                 </table>
             </div>

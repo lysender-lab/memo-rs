@@ -1,6 +1,6 @@
 {% match error_message %}
     {% when Some with (msg) %}
-        <tr><td colspan="4"><div class="error-message tag is-danger">{{ msg }}</div></td></tr>
+        <tr><td colspan="3"><div class="error-message tag is-danger">{{ msg }}</div></td></tr>
     {% when None %}
 {% endmatch %}
 
@@ -24,14 +24,11 @@
     </td>
     <td class="has-text-right has-text-grey">{{ note.size_text }}</td>
     <td class="has-text-grey">{{ note.updated_at_text }}</td>
-    <td class="has-text-right">
-        <a class="button is-small is-light" href="/notes/{{ dir.id }}/entries/{{ note.id }}">View</a>
-    </td>
 </tr>
 {% endfor %}
 
 {% if !has_notes %}
-<tr><td colspan="4" class="has-text-centered has-text-grey py-6">No matching notes found.</td></tr>
+<tr><td colspan="3" class="has-text-centered has-text-grey py-6">No matching notes found.</td></tr>
 {% endif %}
 
 {% match meta %}
