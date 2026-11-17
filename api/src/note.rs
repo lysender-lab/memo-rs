@@ -183,12 +183,13 @@ pub async fn update_note_svc(
     let new_revision = state
         .db
         .files
-        .update_note(
+        .retry_update_note(
             file_id.clone(),
             cipher_content,
             checksum,
             content_length as i64,
             now,
+            5,
         )
         .await
         .context(DbSnafu)?;

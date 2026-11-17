@@ -19,7 +19,7 @@ use crate::{
 };
 use memo::{
     dir::{DirDto, DirType},
-    file::FileDto,
+    file::{FileDto, FileType},
 };
 use yaas::{actor::Actor, role::Permission};
 
@@ -235,6 +235,13 @@ pub async fn note_middleware(
     let file = file_res.context(NotFoundSnafu {
         msg: "File not found",
     })?;
+
+    ensure!(
+        file.file_type == FileType::Note,
+        NotFoundSnafu {
+            msg: "File not found"
+        }
+    );
 
     ensure!(
         file.dir_id == params.dir_id,

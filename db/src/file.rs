@@ -646,6 +646,60 @@ impl FileRepo {
         Ok(note)
     }
 
+    pub async fn retry_update_note(
+        &self,
+        file_id: String,
+        cipher_content: String,
+        checksum: String,
+        size: i64,
+        updated_at: i64,
+        max_retries: usize,
+    ) -> Result<NoteDto> {
+        let mut attempts = 0;
+        let mut delay = Duration::from_millis(100);
+        let max_delay = Duration::from_secs(2);
+
+        loop {
+            match self
+                .update_note(
+                    file_id.clone(),
+                    cipher_content.clone(),
+                    checksum.clone(),
+                    size,
+                    updated_at,
+                )
+                .await
+            {
+                Ok(result) => return Ok(result),
+                Err(Error::DbStatement { source }) => match source {
+                    turso::Error::Busy(..) => {
+                        attempts += 1;
+                        if attempts >= max_retries {
+                            return Err(Error::DbStatement { source });
+                        }
+
+                        sleep(delay).await;
+                        delay = min(delay.saturating_mul(2), max_delay);
+                    }
+                    _ => return Err(Error::DbStatement { source }),
+                },
+                Err(Error::DbTransaction { source }) => match source {
+                    turso::Error::Busy(..) => {
+                        attempts += 1;
+                        if attempts >= max_retries {
+                            return Err(Error::DbTransaction { source });
+                        }
+
+                        sleep(delay).await;
+                        delay = min(delay.saturating_mul(2), max_delay);
+                    }
+                    _ => return Err(Error::DbTransaction { source }),
+                },
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
     pub async fn get(&self, id: &str) -> Result<Option<FileDto>> {
         let query = r#"
             SELECT
