@@ -481,7 +481,11 @@ pub async fn get_note_handler(
         msg: "Note not found",
     })?;
 
-    Ok(JsonResponse::new(serde_json::to_string(&note).unwrap()))
+    let note_content: NoteContentDto = note.into();
+
+    Ok(JsonResponse::new(
+        serde_json::to_string(&note_content).unwrap(),
+    ))
 }
 
 pub async fn update_note_handler(
