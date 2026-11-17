@@ -454,3 +454,89 @@ pub async fn post_delete_dir_handler(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dir(dir_type: DirType) -> DirDto {
+        DirDto {
+            id: "dir-id".into(),
+            org_id: "org-id".into(),
+            dir_type,
+            name: "name".into(),
+            label: "My label".into(),
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+
+    #[test]
+    fn notes_controls_restore_after_edit_and_respect_permissions() {
+        let mut controls = EditDirControlsTemplate {
+            dir: dir(DirType::Notes),
+            updated: true,
+            can_edit: true,
+            can_delete: true,
+            can_add_files: true,
+            can_delete_files: true,
+        };
+        let html = controls.render().unwrap();
+        assert!(html.contains("href=\"/notes/dir-id/new_note\""));
+        assert!(html.contains("hx-get=\"/notes/dir-id/edit\""));
+        assert!(html.contains("hx-target=\"#edit-dir-container\""));
+        assert!(html.contains("Delete Directory"));
+        assert!(html.contains("id=\"breadcrumb-album-label\" hx-swap-oob=\"true\""));
+        assert!(html.contains("id=\"album-title\" hx-swap-oob=\"true\""));
+        assert!(!html.contains("/upload"));
+        assert!(!html.contains("Edit Photos"));
+        assert!(!html.contains("/delete"));
+
+        controls.can_edit = false;
+        controls.can_delete = false;
+        controls.can_add_files = false;
+        let html = controls.render().unwrap();
+        assert!(html.contains("href=\"/notes\""));
+        assert!(!html.contains("Edit Label"));
+        assert!(!html.contains("Delete Directory"));
+        assert!(!html.contains("Add Note"));
+    }
+
+    #[test]
+    fn directory_forms_and_controls_keep_type_specific_behavior() {
+        for (dir_type, heading, add_label) in [
+            (DirType::Photos, "Album", "Add Photos"),
+            (DirType::Documents, "Directory", "Add Files"),
+            (DirType::Notes, "Directory", "Add Note"),
+        ] {
+            let form = EditDirFormTemplate {
+                dir: dir(dir_type.clone()),
+                payload: UpdateDirFormData {
+                    label: "My label".into(),
+                    token: "token".into(),
+                },
+                error_message: None,
+            };
+            let html = form.render().unwrap();
+            assert!(html.contains(heading));
+            assert!(html.contains(&format!("hx-post=\"/{dir_type}/dir-id/edit\"")));
+            assert!(html.contains(&format!("hx-get=\"/{dir_type}/dir-id/edit_controls\"")));
+            assert!(html.contains("value=\"My label\""));
+
+            let controls = EditDirControlsTemplate {
+                dir: dir(dir_type.clone()),
+                updated: false,
+                can_edit: true,
+                can_delete: true,
+                can_add_files: true,
+                can_delete_files: true,
+            };
+            let html = controls.render().unwrap();
+            assert!(html.contains(add_label));
+            if dir_type != DirType::Notes {
+                assert!(html.contains(&format!("href=\"/{dir_type}/dir-id/upload\"")));
+                assert!(html.contains(&format!("hx-get=\"/{dir_type}/dir-id/delete\"")));
+            }
+        }
+    }
+}
