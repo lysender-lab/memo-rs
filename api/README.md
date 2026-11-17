@@ -24,20 +24,22 @@ Uses cases:
 - GET /health/liveness - liveness health check
 - GET /health/readiness - readiness health check
 - All routes under `/{dir_type}` require authentication. Valid directory types are photos, videos, documents, and notes.
-- GET /{dir_type}/ - list directories
-- POST /{dir_type}/ - create a directory
-- GET /{dir_type}/{dir_id}/ - get a directory
-- PATCH /{dir_type}/{dir_id}/ - update a directory
-- DELETE /{dir_type}/{dir_id}/ - delete a directory
+- GET /{dir_type} - list directories
+- POST /{dir_type} - create a directory
+- GET /{dir_type}/{dir_id} - get a directory
+- PATCH /{dir_type}/{dir_id} - update a directory
+- DELETE /{dir_type}/{dir_id} - delete a directory
 - POST /{dir_type}/{dir_id}/upload-url - create a pre-signed file upload URL
-- GET /{dir_type}/{dir_id}/files/ - list files
-- POST /{dir_type}/{dir_id}/files/ - create a file record
-- GET /{dir_type}/{dir_id}/files/{file_id}/ - get a file
-- DELETE /{dir_type}/{dir_id}/files/{file_id}/ - delete a file
-- GET /{dir_type}/{dir_id}/entries/ - list note entries
-- POST /{dir_type}/{dir_id}/entries/ - create a note entry
-- GET /{dir_type}/{dir_id}/entries/{file_id}/ - get a note entry
-- DELETE /{dir_type}/{dir_id}/entries/{file_id}/ - delete a note entry
+- GET /{dir_type}/{dir_id}/files - list files
+- POST /{dir_type}/{dir_id}/files - create a file record
+- GET /{dir_type}/{dir_id}/files/{file_id} - get a file
+- DELETE /{dir_type}/{dir_id}/files/{file_id} - delete a file
+- GET /{dir_type}/{dir_id}/entries - list note entries
+- POST /{dir_type}/{dir_id}/entries - create a note entry
+- GET /{dir_type}/{dir_id}/entries/{file_id} - get a note file metadata
+- DELETE /{dir_type}/{dir_id}/entries/{file_id} - delete a note entry
+- GET /{dir_type}/{dir_id}/entries/{file_id}/content - get a note content
+- PUT /{dir_type}/{dir_id}/entries/{file_id}/content - updates a note content
 
 ## Workflow
 
