@@ -18,11 +18,14 @@
             {% endmatch %}
 
             <div class="field">
+                {% if is_edit %}
+                <div class="label">Name</div>
+                {% else %}
                 <label class="label" for="note-name">Name</label>
+                {% endif %}
                 <div class="control">
                     {% if is_edit %}
-                    <input id="note-name" class="input" type="text" value="{{ name }}" readonly aria-readonly="true" />
-                    <p class="help">Renaming notes is not available yet.</p>
+                    <p>{{ name }}</p>
                     {% else %}
                     <input id="note-name" class="input" type="text" name="name" value="{{ name }}" required minlength="1" />
                     {% endif %}
