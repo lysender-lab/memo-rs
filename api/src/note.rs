@@ -11,7 +11,7 @@ use db::file::MAX_FILES;
 use memo::{
     dir::DirDto,
     file::{FileDto, FileType},
-    note::{CreateNoteDto, NoteDto},
+    note::{CreateNoteDto, NoteDto, UpdateNoteDto},
     utils::{IdPrefix, generate_prefixed_id, str_checksum, truncate_string},
     validators::flatten_errors,
 };
@@ -110,9 +110,17 @@ pub async fn get_note_svc(state: &AppState, file_id: &str) -> Result<Option<Note
 pub async fn update_note_svc(
     state: &AppState,
     file_id: String,
-    content: String,
+    data: UpdateNoteDto,
 ) -> Result<NoteDto> {
-    let content_length = content.len();
+    let errors = data.validate();
+    ensure!(
+        errors.is_ok(),
+        ValidationSnafu {
+            msg: flatten_errors(&errors.unwrap_err()),
+        }
+    );
+
+    let content_length = data.content.len();
     let now = chrono::Utc::now().timestamp();
 
     // Ensure the same content is not being saved again.
@@ -121,14 +129,15 @@ pub async fn update_note_svc(
         msg: "Note not found".to_string(),
     })?;
 
-    let checksum = str_checksum(&content);
+    let checksum = str_checksum(&data.content);
     if note.checksum == checksum {
         // Return the existing note without creating a new revision
         return Ok(note);
     }
 
     // Encrypt content before storing
-    let cipher_content = encrypt(&state.config.notes_master_key, &content).context(CipherSnafu)?;
+    let cipher_content =
+        encrypt(&state.config.notes_master_key, &data.content).context(CipherSnafu)?;
 
     // Otherwise, create a new revision
     let new_revision = state

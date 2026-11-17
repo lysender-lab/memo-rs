@@ -517,13 +517,13 @@ pub async fn update_note_handler(
         msg: "Note not found",
     })?;
 
-    let updated = update_note_svc(&state, file.id.clone(), data.content.clone()).await?;
+    let updated_content = data.content.clone();
+
+    let updated = update_note_svc(&state, file.id.clone(), data.0).await?;
     let mut note_content: NoteContentDto = updated.into();
 
-    let plain_content =
-        decrypt(&state.config.notes_master_key, &note_content.content).context(CipherSnafu)?;
-
-    note_content.content = plain_content;
+    // Replace with plain text
+    note_content.content = updated_content;
 
     Ok(JsonResponse::new(
         serde_json::to_string(&note_content).unwrap(),
