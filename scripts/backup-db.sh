@@ -6,6 +6,9 @@
 # BACKUP_S3_BUCKET=your-s3-bucket-name
 
 CURRENT_DATE=$(date +"%Y-%m-%d-%H-%M-%S")
+BACKUP_YEAR=${CURRENT_DATE%%-*}
+BACKUP_MONTH=${CURRENT_DATE#????-}
+BACKUP_MONTH=${BACKUP_MONTH%%-*}
 TARGET_DIR="$DB_BACKUP_PATH/memo-rs/$CURRENT_DATE"
 BACKUP_FILE="memo-db-$CURRENT_DATE.tar.gz"
 TUROSODB_BIN="$HOME/.turso/tursodb"
@@ -23,7 +26,7 @@ cd "$DB_BACKUP_PATH/memo-rs"
 tar czf "$BACKUP_FILE" "$CURRENT_DATE"
 
 # Upload to S3
-aws s3 cp "$BACKUP_FILE" "s3://$BACKUP_S3_BUCKET/db-backups/memo-rs/$BACKUP_FILE"
+aws s3 cp "$BACKUP_FILE" "s3://$BACKUP_S3_BUCKET/db-backups/memo-rs/$BACKUP_YEAR/$BACKUP_MONTH/$BACKUP_FILE"
 
 # Cleanup
 rm -rf $TARGET_DIR
