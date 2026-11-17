@@ -12,8 +12,8 @@ use snafu::{OptionExt, ResultExt, ensure};
 use crate::{
     dir::{create_dir_svc, delete_dir_svc, update_dir_svc},
     error::{
-        CipherSnafu, DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, NotFoundSnafu,
-        Result, StorageSnafu, WhateverSnafu,
+        DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, NotFoundSnafu, Result,
+        StorageSnafu, WhateverSnafu,
     },
     file::{create_file_svc, create_remote_file_svc, delete_file_svc, generate_upload_url_svc},
     health::{check_liveness, check_readiness},
@@ -22,7 +22,6 @@ use crate::{
     token::verify_upload_token,
     web::response::JsonResponse,
 };
-use cipher::decrypt;
 use db::dir::{ListDirsParams, NewDir, UpdateDir};
 use db::file::ListFilesParams;
 use memo::{
@@ -482,15 +481,8 @@ pub async fn get_note_handler(
         msg: "Note not found",
     })?;
 
-    let mut note_content: NoteContentDto = note.into();
-
-    let plain_content =
-        decrypt(&state.config.notes_master_key, &note_content.content).context(CipherSnafu)?;
-
-    note_content.content = plain_content;
-
     Ok(JsonResponse::new(
-        serde_json::to_string(&note_content).unwrap(),
+        serde_json::to_string(&note.content).unwrap(),
     ))
 }
 

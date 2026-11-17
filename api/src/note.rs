@@ -6,7 +6,7 @@ use crate::{
     error::{CipherSnafu, DbSnafu, NotFoundSnafu, ValidationSnafu},
     state::AppState,
 };
-use cipher::encrypt;
+use cipher::{decrypt, encrypt};
 use db::file::MAX_FILES;
 use memo::{
     dir::DirDto,
@@ -104,7 +104,18 @@ pub async fn create_note_svc(
 }
 
 pub async fn get_note_svc(state: &AppState, file_id: &str) -> Result<Option<NoteDto>> {
-    state.db.notes.get_note(file_id).await.context(DbSnafu)
+    let mut note = state.db.notes.get_note(file_id).await.context(DbSnafu)?;
+    if let Some(note_val) = note.as_mut() {
+        // Decrypt and replace content
+        let crypt_content = note_val.content.clone();
+        let plain_content =
+            decrypt(&state.config.notes_master_key, &&crypt_content).context(CipherSnafu)?;
+        note_val.content = plain_content;
+
+        return Ok(Some(note_val.to_owned()));
+    }
+
+    Ok(note)
 }
 
 pub async fn update_note_svc(
