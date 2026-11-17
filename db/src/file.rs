@@ -9,7 +9,7 @@ use turso::Row;
 use validator::Validate;
 
 use crate::db_pool::DbPool;
-use crate::error::{DbPrepareSnafu, DbStatementSnafu, ValidationSnafu};
+use crate::error::{DbPrepareSnafu, DbStatementSnafu, DbTransactionSnafu, ValidationSnafu};
 use crate::turso_decode::{
     FromTursoRow, collect_count, collect_row, collect_rows, opt_row_integer, opt_row_text,
     row_integer, row_text,
@@ -20,7 +20,9 @@ use crate::turso_params::{
 use crate::{Error, Result};
 use memo::dir::DirDto;
 use memo::file::{FileDto, FileType, ImgVersionDto};
+use memo::note::NoteDto;
 use memo::pagination::Paginated;
+use memo::utils::{IdPrefix, generate_prefixed_id};
 use memo::validators::flatten_errors;
 
 #[derive(Debug, Clone, Serialize)]
@@ -177,6 +179,8 @@ impl FromTursoRow for FileDto {
 
 pub const MAX_PER_PAGE: i32 = 50;
 pub const MAX_FILES: i32 = 1000;
+
+const LATEST_REVISION: &str = "latest";
 
 struct FileIdDto {
     id: String,
@@ -397,6 +401,147 @@ impl FileRepo {
         }
     }
 
+    pub async fn retry_create_note(
+        &self,
+        file: FileDto,
+        cipher_content: String,
+        checksum: String,
+        max_retries: usize,
+    ) -> Result<FileDto> {
+        let mut attempts = 0;
+        let mut delay = Duration::from_millis(100);
+        let max_delay = Duration::from_secs(2);
+
+        loop {
+            match self
+                .create_note(file.clone(), cipher_content.clone(), checksum.clone())
+                .await
+            {
+                Ok(result) => return Ok(result),
+                Err(Error::DbStatement { source }) => match source {
+                    turso::Error::Busy(..) => {
+                        attempts += 1;
+                        if attempts >= max_retries {
+                            return Err(Error::DbStatement { source });
+                        }
+
+                        sleep(delay).await;
+                        delay = min(delay.saturating_mul(2), max_delay);
+                    }
+                    _ => return Err(Error::DbStatement { source }),
+                },
+                Err(Error::DbTransaction { source }) => match source {
+                    turso::Error::Busy(..) => {
+                        attempts += 1;
+                        if attempts >= max_retries {
+                            return Err(Error::DbTransaction { source });
+                        }
+
+                        sleep(delay).await;
+                        delay = min(delay.saturating_mul(2), max_delay);
+                    }
+                    _ => return Err(Error::DbTransaction { source }),
+                },
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
+    async fn create_note(
+        &self,
+        file: FileDto,
+        cipher_content: String,
+        checksum: String,
+    ) -> Result<FileDto> {
+        let note = NoteDto {
+            id: generate_prefixed_id(IdPrefix::Note),
+            file_id: file.id.clone(),
+            content: cipher_content,
+            next_revision: LATEST_REVISION.to_string(),
+            checksum,
+            created_at: chrono::Utc::now().timestamp(),
+        };
+
+        let file_row: FileRow = file.clone().into();
+        let file_query = r#"
+            INSERT INTO files
+            (
+                id, org_id, dir_id, file_type, name, filename, content_type, size,
+                is_image, img_versions, img_taken_at, created_at, updated_at
+            )
+            VALUES
+            (
+                :id, :org_id, :dir_id, :file_type, :name, :filename, :content_type, :size,
+                :is_image, :img_versions, :img_taken_at, :created_at, :updated_at
+            )
+        "#;
+        let note_query = r#"
+            INSERT INTO notes (id, file_id, content, next_revision, checksum, created_at)
+            VALUES (:id, :file_id, :content, :next_revision, :checksum, :created_at)
+        "#;
+
+        let mut file_params = new_query_params();
+        file_params.push(text_param(":id", file_row.id));
+        file_params.push(text_param(":org_id", file_row.org_id));
+        file_params.push(text_param(":dir_id", file_row.dir_id));
+        file_params.push(text_param(":file_type", file_row.file_type));
+        file_params.push(text_param(":name", file_row.name));
+        file_params.push(text_param(":filename", file_row.filename));
+        file_params.push(text_param(":content_type", file_row.content_type));
+        file_params.push(integer_param(":size", file_row.size));
+        file_params.push(integer_param(":is_image", file_row.is_image as i64));
+        file_params.push(opt_text_param(":img_versions", file_row.img_versions));
+        file_params.push(opt_integer_param(":img_taken_at", file_row.img_taken_at));
+        file_params.push(integer_param(":created_at", file_row.created_at));
+        file_params.push(integer_param(":updated_at", file_row.updated_at));
+
+        let mut note_params = new_query_params();
+        note_params.push(text_param(":id", note.id));
+        note_params.push(text_param(":file_id", note.file_id));
+        note_params.push(text_param(":content", note.content));
+        note_params.push(text_param(":next_revision", note.next_revision));
+        note_params.push(text_param(":checksum", note.checksum));
+        note_params.push(integer_param(":created_at", note.created_at));
+
+        let conn = self.db_pool.acquire().await?;
+        conn.execute("BEGIN CONCURRENT", ())
+            .await
+            .context(DbTransactionSnafu)?;
+
+        let operation: Result<()> = async {
+            let mut file_stmt = conn.prepare(file_query).await.context(DbPrepareSnafu)?;
+            file_stmt
+                .execute(file_params)
+                .await
+                .context(DbStatementSnafu)?;
+
+            let mut note_stmt = conn.prepare(note_query).await.context(DbPrepareSnafu)?;
+            note_stmt
+                .execute(note_params)
+                .await
+                .context(DbStatementSnafu)?;
+
+            Ok(())
+        }
+        .await;
+
+        if let Err(error) = operation {
+            conn.execute("ROLLBACK", ())
+                .await
+                .context(DbTransactionSnafu)?;
+            return Err(error);
+        }
+
+        if let Err(error) = conn.execute("COMMIT", ()).await.context(DbTransactionSnafu) {
+            conn.execute("ROLLBACK", ())
+                .await
+                .context(DbTransactionSnafu)?;
+            return Err(error);
+        }
+
+        Ok(file)
+    }
+
     pub async fn get(&self, id: &str) -> Result<Option<FileDto>> {
         let query = r#"
             SELECT
@@ -538,5 +683,55 @@ impl FileRepo {
         stmt.execute(q_params).await.context(DbStatementSnafu)?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test::TestCtx;
+
+    #[tokio::test]
+    async fn retry_create_note_creates_file_and_initial_revision() {
+        let ctx = TestCtx::new("create-note").await.unwrap();
+        let file = FileDto {
+            id: "fil-note".to_string(),
+            org_id: "org-note".to_string(),
+            dir_id: "dir-note".to_string(),
+            file_type: FileType::Note,
+            name: "Shopping list".to_string(),
+            filename: "Shopping list".to_string(),
+            content_type: "text/plain".to_string(),
+            size: 4,
+            url: None,
+            img_versions: None,
+            img_taken_at: None,
+            created_at: 1,
+            updated_at: 1,
+        };
+
+        let created = ctx
+            .db
+            .files
+            .retry_create_note(
+                file.clone(),
+                "ciphertext".to_string(),
+                "checksum".to_string(),
+                5,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(created.id, file.id);
+        assert_eq!(
+            ctx.db.files.get(&file.id).await.unwrap().unwrap().name,
+            file.name
+        );
+
+        let note = ctx.db.notes.get_note(&file.id).await.unwrap().unwrap();
+        assert_eq!(note.file_id, file.id);
+        assert_eq!(note.content, "ciphertext");
+        assert_eq!(note.checksum, "checksum");
+        assert_eq!(note.next_revision, LATEST_REVISION);
     }
 }

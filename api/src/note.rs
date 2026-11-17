@@ -75,32 +75,18 @@ pub async fn create_note_svc(
         updated_at: now,
     };
 
-    let file = state
-        .db
-        .files
-        .retry_create(file, 5)
-        .await
-        .context(DbSnafu)?;
-
     let checksum = str_checksum(&data.content);
 
     // Encrypt content before storing
     let cipher_content =
         encrypt(&state.config.notes_master_key, &data.content).context(CipherSnafu)?;
 
-    if let Err(error) = state
+    state
         .db
-        .notes
-        .retry_create_revision(file.id.clone(), cipher_content, checksum, 5)
+        .files
+        .retry_create_note(file, cipher_content, checksum, 5)
         .await
         .context(DbSnafu)
-    {
-        // Delete the file entry since we cannot insert a note revision.
-        state.db.files.delete(&file.id).await.context(DbSnafu)?;
-        return Err(error);
-    }
-
-    Ok(file)
 }
 
 pub async fn get_note_svc(state: &AppState, file_id: &str) -> Result<Option<NoteDto>> {
