@@ -112,6 +112,9 @@ pub async fn update_note_svc(
     file_id: String,
     content: String,
 ) -> Result<NoteDto> {
+    let content_length = content.len();
+    let now = chrono::Utc::now().timestamp();
+
     // Ensure the same content is not being saved again.
     let note = state.db.notes.get_note(&file_id).await.context(DbSnafu)?;
     let note = note.context(NotFoundSnafu {
@@ -124,16 +127,24 @@ pub async fn update_note_svc(
         return Ok(note);
     }
 
-    let checksum = str_checksum(&content);
-
     // Encrypt content before storing
     let cipher_content = encrypt(&state.config.notes_master_key, &content).context(CipherSnafu)?;
 
     // Otherwise, create a new revision
-    state
+    let new_revision = state
         .db
         .notes
-        .retry_create_revision(file_id, cipher_content, checksum, 5)
+        .retry_create_revision(file_id.clone(), cipher_content, checksum, 5)
         .await
-        .context(DbSnafu)
+        .context(DbSnafu)?;
+
+    // Update file meta data
+    state
+        .db
+        .files
+        .update_notes_meta(&file_id, content_length as i64, now)
+        .await
+        .context(DbSnafu)?;
+
+    Ok(new_revision)
 }

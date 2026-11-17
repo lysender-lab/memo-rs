@@ -59,7 +59,7 @@ Uses cases:
 
 ## Notes
 
-Notes are treated as files although there are actually stored in the database.
+Notes are treated as files although they are actually stored in the database.
 Every time you modify a note, a new revision is created.
 
 - Create note: creates a file and a note record

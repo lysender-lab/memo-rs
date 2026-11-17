@@ -511,6 +511,23 @@ impl FileRepo {
         Ok(())
     }
 
+    pub async fn update_notes_meta(&self, id: &str, size: i64, updated_at: i64) -> Result<()> {
+        let query = r#"
+            UPDATE files
+            SET size = :size, updated_at = :updated_at
+            WHERE id = :id
+        "#;
+        let mut q_params = new_query_params();
+        q_params.push(integer_param(":size", size));
+        q_params.push(integer_param(":updated_at", updated_at));
+        q_params.push(text_param(":id", id.to_owned()));
+
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
+        stmt.execute(q_params).await.context(DbStatementSnafu)?;
+        Ok(())
+    }
+
     pub async fn delete(&self, id: &str) -> Result<()> {
         let query = "DELETE FROM files WHERE id = :id".to_string();
         let mut q_params = new_query_params();
