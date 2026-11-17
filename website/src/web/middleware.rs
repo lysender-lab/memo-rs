@@ -110,7 +110,7 @@ pub async fn dir_type_middleware(
         });
     };
 
-    if dir_type != DirType::Photos && dir_type != DirType::Documents {
+    if dir_type != DirType::Photos && dir_type != DirType::Documents && dir_type != DirType::Notes {
         return Err(Error::BadRequest {
             msg: format!("Unsupported dir type: {}", params.dir_type),
         });

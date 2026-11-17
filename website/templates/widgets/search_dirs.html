@@ -22,12 +22,21 @@
 {% endif %}
 
 {% for dir in dirs %}
+    {% if dir_type == DirType::Notes %}
+    <span class="panel-block">
+        <span class="panel-icon">
+            <i class="fas fa-book" aria-hidden="true"></i>
+        </span>
+        {{ dir.label }}
+    </span>
+    {% else %}
     <a class="panel-block" href="/{{ dir_type }}/{{ dir.id }}">
         <span class="panel-icon">
             <i class="fas fa-book" aria-hidden="true"></i>
         </span>
         {{ dir.label }}
     </a>
+    {% endif %}
 {% endfor %}
 
 {% match pagination %}
