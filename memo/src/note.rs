@@ -34,6 +34,13 @@ pub struct NoteContentDto {
     pub created_at: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoteRevisionDto {
+    pub id: String,
+    pub file_id: String,
+    pub created_at: i64,
+}
+
 // Add a from conversion from NoteDto to NoteContentDto
 impl From<NoteDto> for NoteContentDto {
     fn from(note: NoteDto) -> Self {
@@ -41,6 +48,17 @@ impl From<NoteDto> for NoteContentDto {
             id: note.id,
             file_id: note.file_id,
             content: note.content,
+            created_at: note.created_at,
+        }
+    }
+}
+
+// Add a from conversion from NoteDto to NoteRevisionDto
+impl From<NoteDto> for NoteRevisionDto {
+    fn from(note: NoteDto) -> Self {
+        NoteRevisionDto {
+            id: note.id,
+            file_id: note.file_id,
             created_at: note.created_at,
         }
     }
