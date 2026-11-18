@@ -6,3 +6,4 @@ import '../public/assets/js/delete-album.js';
 import '../public/assets/js/upload.js';
 import '../public/assets/js/photo-gallery.js';
 import '../public/assets/js/file-listing.js';
+import '../public/assets/js/note.js';
