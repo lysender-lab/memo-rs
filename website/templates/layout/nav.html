@@ -3,7 +3,14 @@
         <a class="navbar-item" href="/">
             <span class="is-flex is-justify-content-space-between">
                 <img src="/assets/images/logos/memories-logo-50x50.png" alt="Memories" width="28" height="28">
-                <strong class="pl-1">Memories</strong>
+                <strong class="pl-1">
+                    {% match t.actor %}
+                        {% when Some with (actor) %}
+                            Memories: {{ actor.org_name }}
+                        {% when None %}
+                            Memories
+                    {% endmatch %}
+                </strong>
             </span>
         </a>
 
