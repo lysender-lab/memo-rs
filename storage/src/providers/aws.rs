@@ -9,7 +9,7 @@ use aws_sdk_s3::primitives::ByteStream;
 use snafu::ResultExt;
 use tokio::{fs::File, fs::create_dir_all, io::AsyncWriteExt};
 
-use crate::error::{CreateFileSnafu, UploadDirSnafu, UploadFileSnafu};
+use crate::error::{CreateFileSnafu, ReadFileSnafu, UploadDirSnafu, UploadFileSnafu};
 use crate::provider::{DownloadRequest, DownloadedFile, UploadUrlRequest};
 use crate::{Error, Result};
 use memo::dir::DirMeta;
@@ -98,6 +98,39 @@ impl AwsStorageProvider {
         }
 
         Ok(())
+    }
+
+    pub async fn reupload_original(
+        &self,
+        dir: &DirMeta,
+        filename: &str,
+        local_path: &Path,
+        verified_content_type: &str,
+    ) -> Result<()> {
+        let data = tokio::fs::read(local_path).await.context(ReadFileSnafu {
+            path: local_path.to_path_buf(),
+        })?;
+        let key = original_object_key(
+            &dir.org_id,
+            &dir.dir_type.to_string(),
+            &dir.dir_name,
+            filename,
+        );
+
+        let res = self
+            .client
+            .put_object()
+            .bucket(&dir.bucket_name)
+            .key(key)
+            .content_type(verified_content_type)
+            .body(ByteStream::from(data))
+            .send()
+            .await;
+
+        match res {
+            Ok(_) => Ok(()),
+            Err(err) => map_s3_error(err, "Failed to reupload original object to cloud storage."),
+        }
     }
 
     pub async fn download(&self, req: DownloadRequest<'_>) -> Result<DownloadedFile> {
@@ -220,9 +253,21 @@ fn derivative_content_type(original: &str) -> &str {
     }
 }
 
+fn original_object_key(org_id: &str, dir_type: &str, dir_name: &str, filename: &str) -> String {
+    format!("{org_id}/{dir_type}/{dir_name}/{ORIGINAL_PATH}/{filename}")
+}
+
 #[cfg(test)]
 mod tests {
-    use super::derivative_content_type;
+    use super::{derivative_content_type, original_object_key};
+
+    #[test]
+    fn original_key_uses_original_version_and_stored_filename() {
+        assert_eq!(
+            original_object_key("org", "images", "dir", "photo.jpg"),
+            "org/images/dir/orig/photo.jpg"
+        );
+    }
 
     #[test]
     fn webp_derivatives_are_jpeg() {

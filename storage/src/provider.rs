@@ -49,6 +49,22 @@ impl ProviderClient {
         }
     }
 
+    pub async fn reupload_original(
+        &self,
+        dir: &DirMeta,
+        filename: &str,
+        local_path: &Path,
+        verified_content_type: &str,
+    ) -> Result<()> {
+        match self {
+            Self::Aws(provider) => {
+                provider
+                    .reupload_original(dir, filename, local_path, verified_content_type)
+                    .await
+            }
+        }
+    }
+
     pub async fn download(&self, req: DownloadRequest<'_>) -> Result<DownloadedFile> {
         match self {
             Self::Aws(provider) => provider.download(req).await,

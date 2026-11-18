@@ -228,6 +228,23 @@ pub async fn create_file_svc(
         }
     }
 
+    if data.content_type == "image/avif"
+        && file_dto.content_type == "image/jpeg"
+        && let Err(err) = state
+            .storage_client
+            .reupload_original(
+                &dir_meta,
+                &data.filename,
+                &data.path,
+                &file_dto.content_type,
+            )
+            .await
+            .context(StorageSnafu)
+    {
+        cleanup(data, Some(&file_dto));
+        return Err(err);
+    }
+
     if let Err(upload_err) = state
         .storage_client
         .upload(&dir_meta, &data.upload_dir, &file_dto)
@@ -479,10 +496,9 @@ fn read_image(path: &PathBuf) -> Result<DynamicImage> {
 
 fn create_versions(data: &DownloadedFile, exif_info: &PhotoExif) -> Result<Vec<ImgVersionDto>> {
     let img = read_image(&data.path)?;
-    let jpeg_versions = matches!(
-        get_content_type(&data.path).as_deref(),
-        Some("image/webp" | "image/avif")
-    );
+    let content_type = get_content_type(&data.path);
+    let jpeg_versions = matches!(content_type.as_deref(), Some("image/webp" | "image/avif"));
+    let encode_jpeg = jpeg_versions || content_type.as_deref() == Some("image/jpeg");
 
     // Rotate based on exif orientation before creating versions
     let rotated_img = match exif_info.orientation {
@@ -525,14 +541,14 @@ fn create_versions(data: &DownloadedFile, exif_info: &PhotoExif) -> Result<Vec<I
         rotated_img
     };
 
-    // WebP and AVIF always need a JPEG preview, even when the original is small.
+    // These formats always need a JPEG preview, even when the original is small.
     if jpeg_versions || source_width > MAX_DIMENSION || source_height > MAX_DIMENSION {
-        let preview = create_preview(data, &version_img, jpeg_versions)?;
+        let preview = create_preview(data, &version_img, encode_jpeg)?;
         versions.push(preview);
     }
 
     // Create thumbnail
-    let thumb = create_thumbnail(data, &version_img, jpeg_versions)?;
+    let thumb = create_thumbnail(data, &version_img, encode_jpeg)?;
     versions.push(thumb);
 
     Ok(versions)
@@ -698,6 +714,44 @@ fn parse_exif_info(path: &PathBuf) -> Result<PhotoExif> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn jpeg_with_avif_filename_generates_jpeg_versions() {
+        for (width, height) in [(20, 10), (2100, 100)] {
+            let upload_dir = std::env::temp_dir().join(generate_prefixed_id(IdPrefix::File));
+            std::fs::create_dir_all(&upload_dir).unwrap();
+            let filename = "source.avif".to_string();
+            let path = upload_dir.join(&filename);
+            DynamicImage::new_rgb8(width, height)
+                .save_with_format(&path, image::ImageFormat::Jpeg)
+                .unwrap();
+            let original = std::fs::read(&path).unwrap();
+            assert_eq!(get_content_type(&path).as_deref(), Some("image/jpeg"));
+            let data = DownloadedFile {
+                upload_dir: upload_dir.clone(),
+                name: filename.clone(),
+                filename,
+                content_type: "image/avif".into(),
+                path: path.clone(),
+                size: original.len() as i64,
+            };
+
+            let versions = create_versions(&data, &PhotoExif::default()).unwrap();
+            assert_eq!(versions.len(), if width > MAX_DIMENSION { 3 } else { 2 });
+            for version in &versions[1..] {
+                let bytes = std::fs::read(version.to_path(&upload_dir, &data.filename)).unwrap();
+                assert_eq!(
+                    image::guess_format(&bytes).unwrap(),
+                    image::ImageFormat::Jpeg
+                );
+                let decoded = image::load_from_memory(&bytes).unwrap();
+                assert_eq!(decoded.width(), version.dimension.width);
+                assert_eq!(decoded.height(), version.dimension.height);
+            }
+            assert_eq!(std::fs::read(path).unwrap(), original);
+            std::fs::remove_dir_all(upload_dir).unwrap();
+        }
+    }
 
     #[test]
     fn webp_and_avif_versions_are_jpeg_and_preserve_original() {

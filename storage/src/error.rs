@@ -31,6 +31,12 @@ pub enum Error {
         source: std::io::Error,
     },
 
+    #[snafu(display("Unable to read file for upload: {:?}: {}", path, source))]
+    ReadFile {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
     #[snafu(display("File type not allowed"))]
     FileTypeNotAllowed,
 
