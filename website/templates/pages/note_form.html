@@ -9,7 +9,7 @@
                 <li><a href="/notes">Notes</a></li>
                 <li><a href="/notes/{{ dir.id }}">{{ dir.label }}</a></li>
                 {% if is_edit %}
-                <li><a href="/notes/{{ dir.id }}/entries/{{ note_id }}">{{ name }}</a></li>
+                <li><a href="/notes/{{ dir.id }}/entries/{{ note_id }}{{ revision_query }}">{{ name }}</a></li>
                 <li class="is-active"><a aria-current="page">Edit</a></li>
                 {% else %}
                 <li class="is-active"><a aria-current="page">New Note</a></li>

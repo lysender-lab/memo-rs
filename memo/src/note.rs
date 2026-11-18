@@ -38,6 +38,7 @@ pub struct NoteContentDto {
 pub struct NoteRevisionDto {
     pub id: String,
     pub file_id: String,
+    pub latest: bool,
     pub created_at: i64,
 }
 
@@ -59,6 +60,7 @@ impl From<NoteDto> for NoteRevisionDto {
         NoteRevisionDto {
             id: note.id,
             file_id: note.file_id,
+            latest: note.next_revision.as_str() == "latest",
             created_at: note.created_at,
         }
     }

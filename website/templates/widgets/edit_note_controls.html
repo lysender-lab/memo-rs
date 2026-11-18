@@ -1,0 +1,22 @@
+<div class="is-flex is-justify-content-space-between is-align-items-center">
+    <div class="buttons mb-0">
+        <a class="button" href="/notes/{{ dir.id }}">
+            <span class="icon is-small"><i class="fas fa-arrow-left" aria-hidden="true"></i></span>
+            <span>Back</span>
+        </a>
+        {% if !revisions.options.is_empty() %}
+        <div class="select">
+            <select id="note-revision-id" aria-label="Note revision">
+                <option value="" {% if revisions.latest_selected %}selected{% endif %}>Latest</option>
+                {% for revision in revisions.options %}
+                <option value="{{ revision.id }}" {% if revision.selected %}selected{% endif %}>{{ revision.date }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+    </div>
+    <div class="buttons mb-0">
+        {% if can_edit %}<a class="button is-primary" href="/notes/{{ dir.id }}/entries/{{ note.id }}/edit{{ revision_query }}">Edit</a>{% endif %}
+        {% if can_delete %}<button class="button is-danger is-light" type="button" hx-get="/notes/{{ dir.id }}/entries/{{ note.id }}/delete{{ revision_query }}" hx-target="#edit-note-container">Delete</button>{% endif %}
+    </div>
+</div>
