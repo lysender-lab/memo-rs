@@ -7,7 +7,7 @@ edition = "2024"
 axum.workspace = true
 base64.workspace = true
 chrono.workspace = true
-image.workspace = true
+image = { workspace = true, features = ["avif-native"] }
 infer.workspace = true
 jsonwebtoken.workspace = true
 kamadak-exif.workspace = true

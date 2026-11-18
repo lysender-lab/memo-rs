@@ -213,7 +213,7 @@ impl AwsStorageProvider {
 }
 
 fn derivative_content_type(original: &str) -> &str {
-    if original == "image/webp" {
+    if matches!(original, "image/webp" | "image/avif") {
         "image/jpeg"
     } else {
         original
@@ -229,6 +229,11 @@ mod tests {
         assert_eq!(derivative_content_type("image/webp"), "image/jpeg");
         assert_eq!(derivative_content_type("image/png"), "image/png");
         assert_eq!(derivative_content_type("image/jpeg"), "image/jpeg");
+    }
+
+    #[test]
+    fn avif_derivatives_are_jpeg() {
+        assert_eq!(derivative_content_type("image/avif"), "image/jpeg");
     }
 }
 

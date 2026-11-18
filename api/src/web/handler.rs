@@ -380,12 +380,14 @@ mod tests {
     #[test]
     fn image_content_type_matches_detected_format() {
         assert!(image_content_type_matches("image/webp", "image/webp"));
+        assert!(image_content_type_matches("image/avif", "image/avif"));
         assert!(image_content_type_matches("image/pjpeg", "image/jpeg"));
         assert!(!image_content_type_matches(
             "application/octet-stream",
             "image/webp"
         ));
         assert!(!image_content_type_matches("image/jpeg", "image/webp"));
+        assert!(!image_content_type_matches("image/webp", "image/avif"));
     }
 }
 
