@@ -5,6 +5,7 @@ use axum::{Extension, Form, body::Body, extract::State, response::Response};
 use chrono::{DateTime, Utc};
 use memo::dir::{DirDto, DirType};
 use memo::file::FileDto;
+use memo::note::{NoteContentDto, NoteRevisionDto};
 use memo::pagination::PaginatedMeta;
 use serde::Deserialize;
 use snafu::ResultExt;
@@ -13,7 +14,7 @@ use urlencoding::encode;
 use crate::models::{ListFilesParams, Pref, TemplateData, tokens::TokenFormData};
 use crate::services::notes::{
     CreateNoteFormData, UpdateNoteFormData, create_note_svc, delete_note_svc, get_note_content_svc,
-    list_notes_svc, update_note_svc,
+    list_note_revisions_svc, list_notes_svc, update_note_svc,
 };
 use crate::services::token::create_csrf_token;
 use crate::{
@@ -44,6 +45,17 @@ struct NoteRowView {
     name: String,
     size_text: String,
     updated_at_text: String,
+}
+
+struct RevisionOption {
+    id: String,
+    date: String,
+    selected: bool,
+}
+
+struct RevisionControls {
+    options: Vec<RevisionOption>,
+    latest_selected: bool,
 }
 
 #[derive(Template)]
@@ -96,6 +108,7 @@ struct NotePageTemplate {
     can_edit: bool,
     can_delete: bool,
     revision_query: String,
+    revisions: RevisionControls,
 }
 
 #[derive(Template)]
@@ -106,6 +119,7 @@ struct EditNoteControlsTemplate {
     can_edit: bool,
     can_delete: bool,
     revision_query: String,
+    revisions: RevisionControls,
 }
 
 #[derive(Template)]
@@ -145,6 +159,61 @@ fn format_updated_at(ts: i64) -> String {
                 .to_string()
         })
         .unwrap_or_else(|| "-".to_string())
+}
+
+fn revision_controls(
+    mut revisions: Vec<NoteRevisionDto>,
+    latest_id: &str,
+    selected: Option<&NoteContentDto>,
+) -> RevisionControls {
+    if let Some(selected) = selected
+        && selected.id != latest_id
+        && !revisions.iter().any(|revision| revision.id == selected.id)
+    {
+        revisions.push(NoteRevisionDto {
+            id: selected.id.clone(),
+            file_id: selected.file_id.clone(),
+            created_at: selected.created_at,
+        });
+    }
+    let selected_id = selected.map(|note| note.id.as_str());
+    RevisionControls {
+        options: revisions
+            .into_iter()
+            .filter(|revision| revision.id != latest_id)
+            .map(|revision| RevisionOption {
+                selected: selected_id == Some(revision.id.as_str()),
+                date: format_updated_at(revision.created_at),
+                id: revision.id,
+            })
+            .collect(),
+        latest_selected: selected_id.is_none_or(|id| id == latest_id),
+    }
+}
+
+async fn load_revision_controls(
+    state: &AppState,
+    token: &str,
+    dir_id: &str,
+    note_id: &str,
+    revision: Option<&str>,
+    content: Option<&NoteContentDto>,
+) -> Result<RevisionControls> {
+    let revisions = list_note_revisions_svc(state, token, dir_id, note_id).await?;
+    let latest = if revision.is_none() && content.is_some() {
+        content.cloned().expect("content was checked")
+    } else {
+        get_note_content_svc(state, token, dir_id, note_id, None).await?
+    };
+    let selected = if revision.is_some() {
+        match content {
+            Some(content) => Some(content.clone()),
+            None => Some(get_note_content_svc(state, token, dir_id, note_id, revision).await?),
+        }
+    } else {
+        None
+    };
+    Ok(revision_controls(revisions, &latest.id, selected.as_ref()))
 }
 
 pub async fn note_listing_handler(
@@ -283,6 +352,15 @@ pub async fn note_page_handler(
     let token = ctx.token().expect("token is required");
     let content =
         get_note_content_svc(&state, token, &dir.id, &note.id, query.revision.as_deref()).await?;
+    let revisions = load_revision_controls(
+        &state,
+        token,
+        &dir.id,
+        &note.id,
+        query.revision.as_deref(),
+        Some(&content),
+    )
+    .await?;
     let mut t = TemplateData::new(&state, actor, &pref);
     t.title = format!("Notes - {}", note.name);
     let tpl = NotePageTemplate {
@@ -293,6 +371,7 @@ pub async fn note_page_handler(
         can_edit: enforce_policy(actor, Resource::File, Action::Update).is_ok(),
         can_delete: enforce_policy(actor, Resource::File, Action::Delete).is_ok(),
         revision_query: query.suffix(),
+        revisions,
     };
 
     Response::builder()
@@ -305,17 +384,29 @@ pub async fn edit_note_controls_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(dir): Extension<DirDto>,
     Extension(note): Extension<FileDto>,
+    State(state): State<AppState>,
     Query(query): Query<NoteRevisionQuery>,
 ) -> Result<Response<Body>> {
     require_notes_dir(&dir)?;
     let actor = ctx.actor();
     enforce_policy(actor, Resource::File, Action::Read)?;
+    let token = ctx.token().expect("token is required");
+    let revisions = load_revision_controls(
+        &state,
+        token,
+        &dir.id,
+        &note.id,
+        query.revision.as_deref(),
+        None,
+    )
+    .await?;
     let tpl = EditNoteControlsTemplate {
         dir,
         note,
         can_edit: enforce_policy(actor, Resource::File, Action::Update).is_ok(),
         can_delete: enforce_policy(actor, Resource::File, Action::Delete).is_ok(),
         revision_query: query.suffix(),
+        revisions,
     };
     Response::builder()
         .status(StatusCode::OK)
@@ -494,6 +585,7 @@ mod tests {
             can_edit: false,
             can_delete: true,
             revision_query: String::new(),
+            revisions: revision_controls(Vec::new(), "latest", None),
         };
         let html = controls.render().unwrap();
         assert!(html.contains("hx-get=\"/notes/dir-id/entries/note-id/delete\""));
@@ -550,6 +642,7 @@ mod tests {
             can_edit: true,
             can_delete: true,
             revision_query: suffix.clone(),
+            revisions: revision_controls(Vec::new(), "latest", None),
         }
         .render()
         .unwrap();
@@ -609,6 +702,7 @@ mod tests {
             can_edit: true,
             can_delete: true,
             revision_query: String::new(),
+            revisions: revision_controls(Vec::new(), "latest", None),
         }
         .render()
         .unwrap();
@@ -617,5 +711,49 @@ mod tests {
         let controls = page.find("id=\"edit-note-container\"").unwrap();
         assert!(title < controls);
         assert!(!page[controls..].contains("<h1"));
+    }
+
+    #[test]
+    fn revision_selector_shows_latest_and_selected_history() {
+        let revision = |id: &str, created_at| NoteRevisionDto {
+            id: id.into(),
+            file_id: "note-id".into(),
+            created_at,
+        };
+        let mut controls = EditNoteControlsTemplate {
+            dir: dir(),
+            note: note(),
+            can_edit: true,
+            can_delete: true,
+            revision_query: String::new(),
+            revisions: revision_controls(vec![revision("latest", 100)], "latest", None),
+        };
+        assert!(!controls.render().unwrap().contains("<select"));
+
+        controls.revisions = revision_controls(
+            vec![revision("old", 0), revision("latest", 100)],
+            "latest",
+            None,
+        );
+        let html = controls.render().unwrap();
+        assert!(html.contains("<option value=\"\" selected>Latest</option>"));
+        assert!(html.contains("value=\"old\" >1970-01-01 00:00 UTC</option>"));
+        assert!(html.contains("window.location.pathname + (this.value ? '?revision=' + encodeURIComponent(this.value) : '')"));
+
+        let selected = NoteContentDto {
+            id: "older".into(),
+            file_id: "note-id".into(),
+            content: "content".into(),
+            created_at: 60,
+        };
+        controls.revisions = revision_controls(
+            vec![revision("latest", 100), revision("old", 0)],
+            "latest",
+            Some(&selected),
+        );
+        let html = controls.render().unwrap();
+        assert!(html.contains("value=\"older\" selected>1970-01-01 00:01 UTC</option>"));
+        assert!(html.contains("<option value=\"\" >Latest</option>"));
+        assert_eq!(html.matches(" selected>").count(), 1);
     }
 }
