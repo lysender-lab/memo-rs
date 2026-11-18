@@ -8,6 +8,7 @@ use crate::user::UserDto;
 pub struct ActorDto {
     pub id: String,
     pub org_id: String,
+    pub org_name: String,
     pub org_count: i32,
     pub scopes: Vec<Scope>,
     pub user: UserDto,
@@ -19,6 +20,7 @@ pub struct ActorDto {
 pub struct ActorPayloadDto {
     pub id: String,
     pub org_id: String,
+    pub org_name: String,
     pub org_count: i32,
     pub roles: Vec<Role>,
     pub scopes: Vec<Scope>,
@@ -45,6 +47,7 @@ impl Actor {
             actor: Some(ActorDto {
                 id: payload.id,
                 org_id: payload.org_id,
+                org_name: payload.org_name,
                 org_count: payload.org_count,
                 scopes: payload.scopes,
                 user,
