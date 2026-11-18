@@ -30,6 +30,9 @@ jobs:
       - name: Setup Rust cache
         uses: useblacksmith/rust-cache@v3
 
+      - name: Install AVIF decoder dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libdav1d-dev pkg-config
+
       - name: Build release binary - api
         run: cargo build -p api --release --locked
 

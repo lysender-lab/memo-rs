@@ -20,6 +20,23 @@ impl StorageClient {
         self.provider.upload(dir, source_dir, file).await
     }
 
+    /// Replaces the original object with a local copy and its verified content type.
+    ///
+    /// This overwrites the object and does not preserve its other S3 metadata.
+    /// The caller must ensure the local file is the intended original and that its
+    /// content type has been verified.
+    pub async fn reupload_original(
+        &self,
+        dir: &DirMeta,
+        filename: &str,
+        local_path: &Path,
+        verified_content_type: &str,
+    ) -> Result<()> {
+        self.provider
+            .reupload_original(dir, filename, local_path, verified_content_type)
+            .await
+    }
+
     pub async fn download(
         &self,
         dir: &DirMeta,

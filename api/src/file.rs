@@ -228,6 +228,23 @@ pub async fn create_file_svc(
         }
     }
 
+    if data.content_type == "image/avif"
+        && file_dto.content_type == "image/jpeg"
+        && let Err(err) = state
+            .storage_client
+            .reupload_original(
+                &dir_meta,
+                &data.filename,
+                &data.path,
+                &file_dto.content_type,
+            )
+            .await
+            .context(StorageSnafu)
+    {
+        cleanup(data, Some(&file_dto));
+        return Err(err);
+    }
+
     if let Err(upload_err) = state
         .storage_client
         .upload(&dir_meta, &data.upload_dir, &file_dto)
@@ -479,6 +496,9 @@ fn read_image(path: &PathBuf) -> Result<DynamicImage> {
 
 fn create_versions(data: &DownloadedFile, exif_info: &PhotoExif) -> Result<Vec<ImgVersionDto>> {
     let img = read_image(&data.path)?;
+    let content_type = get_content_type(&data.path);
+    let jpeg_versions = matches!(content_type.as_deref(), Some("image/webp" | "image/avif"));
+    let encode_jpeg = jpeg_versions || content_type.as_deref() == Some("image/jpeg");
 
     // Rotate based on exif orientation before creating versions
     let rotated_img = match exif_info.orientation {
@@ -506,20 +526,39 @@ fn create_versions(data: &DownloadedFile, exif_info: &PhotoExif) -> Result<Vec<I
 
     let mut versions: Vec<ImgVersionDto> = vec![orig_version];
 
-    // // Only create preview if original image has side longer than max
-    if source_width > MAX_DIMENSION || source_height > MAX_DIMENSION {
-        let preview = create_preview(data, &rotated_img)?;
+    // JPEG has no alpha channel; composite before resizing to avoid dark edges.
+    let version_img = if jpeg_versions {
+        let mut rgba = rotated_img.into_rgba8();
+        for pixel in rgba.pixels_mut() {
+            let alpha = u32::from(pixel[3]);
+            for channel in &mut pixel.0[..3] {
+                *channel = ((u32::from(*channel) * alpha + 255 * (255 - alpha) + 127) / 255) as u8;
+            }
+            pixel[3] = 255;
+        }
+        DynamicImage::ImageRgba8(rgba)
+    } else {
+        rotated_img
+    };
+
+    // These formats always need a JPEG preview, even when the original is small.
+    if jpeg_versions || source_width > MAX_DIMENSION || source_height > MAX_DIMENSION {
+        let preview = create_preview(data, &version_img, encode_jpeg)?;
         versions.push(preview);
     }
 
     // Create thumbnail
-    let thumb = create_thumbnail(data, &rotated_img)?;
+    let thumb = create_thumbnail(data, &version_img, encode_jpeg)?;
     versions.push(thumb);
 
     Ok(versions)
 }
 
-fn create_preview(data: &DownloadedFile, img: &DynamicImage) -> Result<ImgVersionDto> {
+fn create_preview(
+    data: &DownloadedFile,
+    img: &DynamicImage,
+    jpeg_versions: bool,
+) -> Result<ImgVersionDto> {
     // Prepare dir
     let prev_dir = data
         .upload_dir
@@ -555,14 +594,23 @@ fn create_preview(data: &DownloadedFile, img: &DynamicImage) -> Result<ImgVersio
 
     let dest_file = version.to_path(&data.upload_dir, &data.filename);
 
-    if let Err(err) = resized_img.save(dest_file) {
+    let save_result = if jpeg_versions {
+        resized_img.save_with_format(dest_file, image::ImageFormat::Jpeg)
+    } else {
+        resized_img.save(dest_file)
+    };
+    if let Err(err) = save_result {
         return Err(format!("Unable to save preview: {}", err).into());
     }
 
     Ok(version)
 }
 
-fn create_thumbnail(data: &DownloadedFile, img: &DynamicImage) -> Result<ImgVersionDto> {
+fn create_thumbnail(
+    data: &DownloadedFile,
+    img: &DynamicImage,
+    jpeg_versions: bool,
+) -> Result<ImgVersionDto> {
     // Prepare dir
     let prev_dir = data
         .upload_dir
@@ -598,7 +646,12 @@ fn create_thumbnail(data: &DownloadedFile, img: &DynamicImage) -> Result<ImgVers
 
     let dest_file = version.to_path(&data.upload_dir, &data.filename);
 
-    if let Err(err) = resized_img.save(dest_file) {
+    let save_result = if jpeg_versions {
+        resized_img.save_with_format(dest_file, image::ImageFormat::Jpeg)
+    } else {
+        resized_img.save(dest_file)
+    };
+    if let Err(err) = save_result {
         return Err(format!("Unable to save preview: {}", err).into());
     }
 
@@ -656,4 +709,105 @@ fn parse_exif_info(path: &PathBuf) -> Result<PhotoExif> {
         orientation,
         img_taken_at: taken_at,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn jpeg_with_avif_filename_generates_jpeg_versions() {
+        for (width, height) in [(20, 10), (2100, 100)] {
+            let upload_dir = std::env::temp_dir().join(generate_prefixed_id(IdPrefix::File));
+            std::fs::create_dir_all(&upload_dir).unwrap();
+            let filename = "source.avif".to_string();
+            let path = upload_dir.join(&filename);
+            DynamicImage::new_rgb8(width, height)
+                .save_with_format(&path, image::ImageFormat::Jpeg)
+                .unwrap();
+            let original = std::fs::read(&path).unwrap();
+            assert_eq!(get_content_type(&path).as_deref(), Some("image/jpeg"));
+            let data = DownloadedFile {
+                upload_dir: upload_dir.clone(),
+                name: filename.clone(),
+                filename,
+                content_type: "image/avif".into(),
+                path: path.clone(),
+                size: original.len() as i64,
+            };
+
+            let versions = create_versions(&data, &PhotoExif::default()).unwrap();
+            assert_eq!(versions.len(), if width > MAX_DIMENSION { 3 } else { 2 });
+            for version in &versions[1..] {
+                let bytes = std::fs::read(version.to_path(&upload_dir, &data.filename)).unwrap();
+                assert_eq!(
+                    image::guess_format(&bytes).unwrap(),
+                    image::ImageFormat::Jpeg
+                );
+                let decoded = image::load_from_memory(&bytes).unwrap();
+                assert_eq!(decoded.width(), version.dimension.width);
+                assert_eq!(decoded.height(), version.dimension.height);
+            }
+            assert_eq!(std::fs::read(path).unwrap(), original);
+            std::fs::remove_dir_all(upload_dir).unwrap();
+        }
+    }
+
+    #[test]
+    fn webp_and_avif_versions_are_jpeg_and_preserve_original() {
+        for (extension, content_type, format) in [
+            ("webp", "image/webp", image::ImageFormat::WebP),
+            ("avif", "image/avif", image::ImageFormat::Avif),
+        ] {
+            for (width, height) in [(20, 10), (2100, 100)] {
+                let upload_dir = std::env::temp_dir().join(generate_prefixed_id(IdPrefix::File));
+                std::fs::create_dir_all(&upload_dir).unwrap();
+                let filename = format!("source.{extension}");
+                let path = upload_dir.join(&filename);
+                let image = DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+                    width,
+                    height,
+                    image::Rgba([0, 0, 0, 0]),
+                ));
+                image.save_with_format(&path, format).unwrap();
+                let original = std::fs::read(&path).unwrap();
+                let data = DownloadedFile {
+                    upload_dir: upload_dir.clone(),
+                    name: filename.clone(),
+                    filename,
+                    content_type: content_type.into(),
+                    path: path.clone(),
+                    size: original.len() as i64,
+                };
+
+                let versions = create_versions(&data, &PhotoExif::default()).unwrap();
+                assert_eq!(versions.len(), 3);
+                for (version, limit) in [
+                    (&versions[1], MAX_PREVIEW_DIMENSION),
+                    (&versions[2], MAX_THUMB_DIMENSION),
+                ] {
+                    let bytes =
+                        std::fs::read(version.to_path(&upload_dir, &data.filename)).unwrap();
+                    assert_eq!(
+                        image::guess_format(&bytes).unwrap(),
+                        image::ImageFormat::Jpeg
+                    );
+                    let decoded = image::load_from_memory(&bytes).unwrap().to_rgb8();
+                    assert_eq!(decoded.width(), version.dimension.width);
+                    assert_eq!(decoded.height(), version.dimension.height);
+                    assert!(decoded.width() <= width.min(limit));
+                    assert!(decoded.height() <= height.min(limit));
+                    assert!(
+                        decoded
+                            .get_pixel(0, 0)
+                            .0
+                            .iter()
+                            .all(|channel| *channel >= 250)
+                    );
+                }
+                assert_eq!(std::fs::read(path).unwrap(), original);
+                std::fs::remove_dir_all(upload_dir).unwrap();
+            }
+        }
+    }
 }
