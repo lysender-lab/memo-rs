@@ -6,7 +6,7 @@
         </a>
         {% if !revisions.options.is_empty() %}
         <div class="select">
-            <select aria-label="Note revision" onchange="window.location.href = window.location.pathname + (this.value ? '?revision=' + encodeURIComponent(this.value) : '')">
+            <select id="note-revision-id" aria-label="Note revision">
                 <option value="" {% if revisions.latest_selected %}selected{% endif %}>Latest</option>
                 {% for revision in revisions.options %}
                 <option value="{{ revision.id }}" {% if revision.selected %}selected{% endif %}>{{ revision.date }}</option>

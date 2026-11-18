@@ -173,6 +173,7 @@ fn revision_controls(
         revisions.push(NoteRevisionDto {
             id: selected.id.clone(),
             file_id: selected.file_id.clone(),
+            latest: false,
             created_at: selected.created_at,
         });
     }
@@ -191,6 +192,13 @@ fn revision_controls(
     }
 }
 
+fn latest_revision_id(revisions: &[NoteRevisionDto]) -> Option<&str> {
+    revisions
+        .iter()
+        .find(|revision| revision.latest)
+        .map(|revision| revision.id.as_str())
+}
+
 async fn load_revision_controls(
     state: &AppState,
     token: &str,
@@ -200,10 +208,14 @@ async fn load_revision_controls(
     content: Option<&NoteContentDto>,
 ) -> Result<RevisionControls> {
     let revisions = list_note_revisions_svc(state, token, dir_id, note_id).await?;
-    let latest = if revision.is_none() && content.is_some() {
-        content.cloned().expect("content was checked")
+    let latest_id = if let Some(latest) = latest_revision_id(&revisions) {
+        latest.to_owned()
+    } else if revision.is_none() && content.is_some() {
+        content.expect("content was checked").id.clone()
     } else {
-        get_note_content_svc(state, token, dir_id, note_id, None).await?
+        get_note_content_svc(state, token, dir_id, note_id, None)
+            .await?
+            .id
     };
     let selected = if revision.is_some() {
         match content {
@@ -213,7 +225,7 @@ async fn load_revision_controls(
     } else {
         None
     };
-    Ok(revision_controls(revisions, &latest.id, selected.as_ref()))
+    Ok(revision_controls(revisions, &latest_id, selected.as_ref()))
 }
 
 pub async fn note_listing_handler(
@@ -718,6 +730,7 @@ mod tests {
         let revision = |id: &str, created_at| NoteRevisionDto {
             id: id.into(),
             file_id: "note-id".into(),
+            latest: id == "latest",
             created_at,
         };
         let mut controls = EditNoteControlsTemplate {
@@ -738,7 +751,8 @@ mod tests {
         let html = controls.render().unwrap();
         assert!(html.contains("<option value=\"\" selected>Latest</option>"));
         assert!(html.contains("value=\"old\" >1970-01-01 00:00 UTC</option>"));
-        assert!(html.contains("window.location.pathname + (this.value ? '?revision=' + encodeURIComponent(this.value) : '')"));
+        assert!(html.contains("id=\"note-revision-id\""));
+        assert!(!html.contains("onchange="));
 
         let selected = NoteContentDto {
             id: "older".into(),
@@ -755,5 +769,26 @@ mod tests {
         assert!(html.contains("value=\"older\" selected>1970-01-01 00:01 UTC</option>"));
         assert!(html.contains("<option value=\"\" >Latest</option>"));
         assert_eq!(html.matches(" selected>").count(), 1);
+
+        let revisions = vec![revision("old", 100), revision("latest", 0)];
+        assert_eq!(latest_revision_id(&revisions), Some("latest"));
+        assert_eq!(latest_revision_id(&[revision("old", 0)]), None);
+        assert_eq!(latest_revision_id(&[]), None);
+        controls.revisions = revision_controls(
+            revisions,
+            "latest",
+            Some(&NoteContentDto {
+                id: "latest".into(),
+                file_id: "note-id".into(),
+                content: "content".into(),
+                created_at: 0,
+            }),
+        );
+        assert!(
+            controls
+                .render()
+                .unwrap()
+                .contains("<option value=\"\" selected>Latest</option>")
+        );
     }
 }
