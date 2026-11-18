@@ -198,3 +198,39 @@ pub async fn update_note_svc(
 
     Ok(new_revision)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn revision_list_json_exposes_latest_marker_without_internal_fields() {
+        let note = |id: &str, next_revision: &str, created_at| NoteDto {
+            id: id.to_string(),
+            file_id: "file-id".to_string(),
+            content: "encrypted content".to_string(),
+            next_revision: next_revision.to_string(),
+            checksum: "checksum".to_string(),
+            created_at,
+        };
+        // List order is not used to determine which revision is latest.
+        let revisions: Vec<NoteRevisionDto> =
+            vec![note("older", "current", 2), note("current", "latest", 1)]
+                .into_iter()
+                .map(NoteRevisionDto::from)
+                .collect();
+
+        assert_eq!(
+            serde_json::to_value(&revisions).unwrap(),
+            json!([
+                {"id": "older", "file_id": "file-id", "latest": false, "created_at": 2},
+                {"id": "current", "file_id": "file-id", "latest": true, "created_at": 1}
+            ])
+        );
+        assert_eq!(
+            serde_json::to_value(Vec::<NoteRevisionDto>::new()).unwrap(),
+            json!([])
+        );
+    }
+}
