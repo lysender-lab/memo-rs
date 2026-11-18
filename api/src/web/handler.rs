@@ -341,6 +341,9 @@ pub async fn create_file_handler(
             .flatten()
             .map(|kind| kind.mime_type());
 
+        let detected2 = infer::get_from_path(&downloaded.path);
+        dbg!(&detected2);
+
         dbg!(&content_type);
         dbg!(&detected);
 
