@@ -66,7 +66,7 @@ impl AwsStorageProvider {
             .put_object()
             .bucket(&dir.bucket_name)
             .key(file_path)
-            .content_type(file.content_type.clone())
+            .content_type(derivative_content_type(&file.content_type))
             .body(ByteStream::from(data))
             .send()
             .await;
@@ -209,6 +209,26 @@ impl AwsStorageProvider {
         );
         generate_upload_signed_url(&self.client, req.bucket_name, &file_path, req.content_type)
             .await
+    }
+}
+
+fn derivative_content_type(original: &str) -> &str {
+    if original == "image/webp" {
+        "image/jpeg"
+    } else {
+        original
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::derivative_content_type;
+
+    #[test]
+    fn webp_derivatives_are_jpeg() {
+        assert_eq!(derivative_content_type("image/webp"), "image/jpeg");
+        assert_eq!(derivative_content_type("image/png"), "image/png");
+        assert_eq!(derivative_content_type("image/jpeg"), "image/jpeg");
     }
 }
 

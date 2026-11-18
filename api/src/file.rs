@@ -479,6 +479,7 @@ fn read_image(path: &PathBuf) -> Result<DynamicImage> {
 
 fn create_versions(data: &DownloadedFile, exif_info: &PhotoExif) -> Result<Vec<ImgVersionDto>> {
     let img = read_image(&data.path)?;
+    let is_webp = get_content_type(&data.path).as_deref() == Some("image/webp");
 
     // Rotate based on exif orientation before creating versions
     let rotated_img = match exif_info.orientation {
@@ -506,20 +507,39 @@ fn create_versions(data: &DownloadedFile, exif_info: &PhotoExif) -> Result<Vec<I
 
     let mut versions: Vec<ImgVersionDto> = vec![orig_version];
 
-    // // Only create preview if original image has side longer than max
-    if source_width > MAX_DIMENSION || source_height > MAX_DIMENSION {
-        let preview = create_preview(data, &rotated_img)?;
+    // JPEG has no alpha channel; composite before resizing to avoid dark edges.
+    let version_img = if is_webp {
+        let mut rgba = rotated_img.into_rgba8();
+        for pixel in rgba.pixels_mut() {
+            let alpha = u32::from(pixel[3]);
+            for channel in &mut pixel.0[..3] {
+                *channel = ((u32::from(*channel) * alpha + 255 * (255 - alpha) + 127) / 255) as u8;
+            }
+            pixel[3] = 255;
+        }
+        DynamicImage::ImageRgba8(rgba)
+    } else {
+        rotated_img
+    };
+
+    // WebP always needs a static preview, even when the original is small.
+    if is_webp || source_width > MAX_DIMENSION || source_height > MAX_DIMENSION {
+        let preview = create_preview(data, &version_img, is_webp)?;
         versions.push(preview);
     }
 
     // Create thumbnail
-    let thumb = create_thumbnail(data, &rotated_img)?;
+    let thumb = create_thumbnail(data, &version_img, is_webp)?;
     versions.push(thumb);
 
     Ok(versions)
 }
 
-fn create_preview(data: &DownloadedFile, img: &DynamicImage) -> Result<ImgVersionDto> {
+fn create_preview(
+    data: &DownloadedFile,
+    img: &DynamicImage,
+    is_webp: bool,
+) -> Result<ImgVersionDto> {
     // Prepare dir
     let prev_dir = data
         .upload_dir
@@ -555,14 +575,23 @@ fn create_preview(data: &DownloadedFile, img: &DynamicImage) -> Result<ImgVersio
 
     let dest_file = version.to_path(&data.upload_dir, &data.filename);
 
-    if let Err(err) = resized_img.save(dest_file) {
+    let save_result = if is_webp {
+        resized_img.save_with_format(dest_file, image::ImageFormat::Jpeg)
+    } else {
+        resized_img.save(dest_file)
+    };
+    if let Err(err) = save_result {
         return Err(format!("Unable to save preview: {}", err).into());
     }
 
     Ok(version)
 }
 
-fn create_thumbnail(data: &DownloadedFile, img: &DynamicImage) -> Result<ImgVersionDto> {
+fn create_thumbnail(
+    data: &DownloadedFile,
+    img: &DynamicImage,
+    is_webp: bool,
+) -> Result<ImgVersionDto> {
     // Prepare dir
     let prev_dir = data
         .upload_dir
@@ -598,7 +627,12 @@ fn create_thumbnail(data: &DownloadedFile, img: &DynamicImage) -> Result<ImgVers
 
     let dest_file = version.to_path(&data.upload_dir, &data.filename);
 
-    if let Err(err) = resized_img.save(dest_file) {
+    let save_result = if is_webp {
+        resized_img.save_with_format(dest_file, image::ImageFormat::Jpeg)
+    } else {
+        resized_img.save(dest_file)
+    };
+    if let Err(err) = save_result {
         return Err(format!("Unable to save preview: {}", err).into());
     }
 
@@ -656,4 +690,62 @@ fn parse_exif_info(path: &PathBuf) -> Result<PhotoExif> {
         orientation,
         img_taken_at: taken_at,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn webp_versions_are_jpeg_and_preserve_original() {
+        for (width, height) in [(20, 10), (2100, 100)] {
+            let upload_dir = std::env::temp_dir().join(generate_prefixed_id(IdPrefix::File));
+            std::fs::create_dir_all(&upload_dir).unwrap();
+            let path = upload_dir.join("source.webp");
+            let image = DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+                width,
+                height,
+                image::Rgba([0, 0, 0, 0]),
+            ));
+            image
+                .save_with_format(&path, image::ImageFormat::WebP)
+                .unwrap();
+            let original = std::fs::read(&path).unwrap();
+            let data = DownloadedFile {
+                upload_dir: upload_dir.clone(),
+                name: "source.webp".into(),
+                filename: "source.webp".into(),
+                content_type: "image/webp".into(),
+                path: path.clone(),
+                size: original.len() as i64,
+            };
+
+            let versions = create_versions(&data, &PhotoExif::default()).unwrap();
+            assert_eq!(versions.len(), 3);
+            for (version, limit) in [
+                (&versions[1], MAX_PREVIEW_DIMENSION),
+                (&versions[2], MAX_THUMB_DIMENSION),
+            ] {
+                let bytes = std::fs::read(version.to_path(&upload_dir, &data.filename)).unwrap();
+                assert_eq!(
+                    image::guess_format(&bytes).unwrap(),
+                    image::ImageFormat::Jpeg
+                );
+                let decoded = image::load_from_memory(&bytes).unwrap().to_rgb8();
+                assert_eq!(decoded.width(), version.dimension.width);
+                assert_eq!(decoded.height(), version.dimension.height);
+                assert!(decoded.width() <= width.min(limit));
+                assert!(decoded.height() <= height.min(limit));
+                assert!(
+                    decoded
+                        .get_pixel(0, 0)
+                        .0
+                        .iter()
+                        .all(|channel| *channel >= 250)
+                );
+            }
+            assert_eq!(std::fs::read(path).unwrap(), original);
+            std::fs::remove_dir_all(upload_dir).unwrap();
+        }
+    }
 }

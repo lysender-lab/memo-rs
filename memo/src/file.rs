@@ -3,7 +3,13 @@ use std::{path::PathBuf, str::FromStr};
 use validator::Validate;
 
 pub const ORIGINAL_PATH: &str = "orig";
-pub const ALLOWED_IMAGE_TYPES: [&str; 4] = ["image/jpeg", "image/pjpeg", "image/png", "image/gif"];
+pub const ALLOWED_IMAGE_TYPES: [&str; 5] = [
+    "image/jpeg",
+    "image/pjpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+];
 
 /// Maximum image dimension before creating a preview version
 pub const MAX_DIMENSION: u32 = 1000;

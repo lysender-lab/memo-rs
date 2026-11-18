@@ -13,7 +13,7 @@ use crate::{
     dir::{create_dir_svc, delete_dir_svc, update_dir_svc},
     error::{
         DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, NotFoundSnafu, Result,
-        StorageSnafu, WhateverSnafu,
+        StorageSnafu, ValidationSnafu, WhateverSnafu,
     },
     file::{create_file_svc, create_remote_file_svc, delete_file_svc, generate_upload_url_svc},
     health::{check_liveness, check_readiness},
@@ -321,7 +321,7 @@ pub async fn create_file_handler(
 
     let storage_client = state.storage_client.clone();
 
-    let file = if is_image {
+    let file = if is_image || dir.dir_type == DirType::Photos {
         // Download file locally
         let downloaded = state
             .storage_client
@@ -335,6 +335,23 @@ pub async fn create_file_handler(
             )
             .await
             .context(StorageSnafu)?;
+
+        let detected = infer::get_from_path(&downloaded.path)
+            .ok()
+            .flatten()
+            .map(|kind| kind.mime_type());
+        if (is_image
+            || detected.is_some_and(|mime| memo::file::ALLOWED_IMAGE_TYPES.contains(&mime)))
+            && !detected.is_some_and(|mime| image_content_type_matches(&content_type, mime))
+        {
+            if let Err(err) = tokio::fs::remove_file(&downloaded.path).await {
+                tracing::error!("Cleanup file: {}", err);
+            }
+            return ValidationSnafu {
+                msg: "Uploaded image content type does not match its contents".to_string(),
+            }
+            .fail();
+        }
 
         create_file_svc(state, &dir, &downloaded).await?
     } else {
@@ -350,6 +367,26 @@ pub async fn create_file_handler(
         StatusCode::CREATED,
         serde_json::to_string(&file).unwrap(),
     ))
+}
+
+fn image_content_type_matches(claimed: &str, detected: &str) -> bool {
+    claimed == detected || (claimed == "image/pjpeg" && detected == "image/jpeg")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::image_content_type_matches;
+
+    #[test]
+    fn image_content_type_matches_detected_format() {
+        assert!(image_content_type_matches("image/webp", "image/webp"));
+        assert!(image_content_type_matches("image/pjpeg", "image/jpeg"));
+        assert!(!image_content_type_matches(
+            "application/octet-stream",
+            "image/webp"
+        ));
+        assert!(!image_content_type_matches("image/jpeg", "image/webp"));
+    }
 }
 
 pub async fn get_file_handler(
