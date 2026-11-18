@@ -341,6 +341,9 @@ pub async fn create_file_handler(
             .flatten()
             .map(|kind| kind.mime_type());
 
+        dbg!(&content_type);
+        dbg!(&detected);
+
         if (is_image
             || detected.is_some_and(|mime| memo::file::ALLOWED_IMAGE_TYPES.contains(&mime)))
             && !detected.is_some_and(|mime| image_content_type_matches(&content_type, mime))
