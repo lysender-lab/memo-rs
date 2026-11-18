@@ -2,7 +2,7 @@
     <h1 class="title mb-0">{{ note.name }}</h1>
     <div class="buttons">
         <a class="button" href="/notes/{{ dir.id }}">Back</a>
-        {% if can_edit %}<a class="button is-primary" href="/notes/{{ dir.id }}/entries/{{ note.id }}/edit">Edit</a>{% endif %}
-        {% if can_delete %}<button class="button is-danger is-light" type="button" hx-get="/notes/{{ dir.id }}/entries/{{ note.id }}/delete" hx-target="#note-header">Delete</button>{% endif %}
+        {% if can_edit %}<a class="button is-primary" href="/notes/{{ dir.id }}/entries/{{ note.id }}/edit{{ revision_query }}">Edit</a>{% endif %}
+        {% if can_delete %}<button class="button is-danger is-light" type="button" hx-get="/notes/{{ dir.id }}/entries/{{ note.id }}/delete{{ revision_query }}" hx-target="#note-header">Delete</button>{% endif %}
     </div>
 </div>

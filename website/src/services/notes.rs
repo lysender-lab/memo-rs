@@ -109,20 +109,19 @@ pub async fn get_note_content_svc(
     token: &str,
     dir_id: &str,
     note_id: &str,
+    revision: Option<&str>,
 ) -> Result<NoteContentDto> {
     let url = format!(
         "{}/notes/{}/entries/{}/content",
         state.config.api_url, dir_id, note_id
     );
-    let response = state
-        .client
-        .get(url)
-        .bearer_auth(token)
-        .send()
-        .await
-        .context(HttpClientSnafu {
-            msg: "Unable to get note content. Try again later.".to_string(),
-        })?;
+    let mut request = state.client.get(url).bearer_auth(token);
+    if let Some(revision) = revision {
+        request = request.query(&[("revision", revision)]);
+    }
+    let response = request.send().await.context(HttpClientSnafu {
+        msg: "Unable to get note content. Try again later.".to_string(),
+    })?;
     if !response.status().is_success() {
         return Err(handle_response_error(response, "note", Error::FileNotFound).await);
     }

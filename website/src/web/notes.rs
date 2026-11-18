@@ -6,6 +6,7 @@ use chrono::{DateTime, Utc};
 use memo::dir::{DirDto, DirType};
 use memo::file::FileDto;
 use memo::pagination::PaginatedMeta;
+use serde::Deserialize;
 use snafu::ResultExt;
 use urlencoding::encode;
 
@@ -22,6 +23,20 @@ use crate::{
     run::AppState,
     web::{Action, Resource, enforce_policy},
 };
+
+#[derive(Deserialize)]
+pub struct NoteRevisionQuery {
+    revision: Option<String>,
+}
+
+impl NoteRevisionQuery {
+    fn suffix(&self) -> String {
+        self.revision
+            .as_deref()
+            .map(|revision| format!("?revision={}", encode(revision)))
+            .unwrap_or_default()
+    }
+}
 
 #[derive(Clone)]
 struct NoteRowView {
@@ -55,6 +70,7 @@ struct NoteFormPageTemplate {
     error_message: Option<String>,
     is_edit: bool,
     note_id: String,
+    revision_query: String,
 }
 
 #[derive(Template)]
@@ -67,6 +83,7 @@ struct NoteFormTemplate {
     error_message: Option<String>,
     is_edit: bool,
     note_id: String,
+    revision_query: String,
 }
 
 #[derive(Template)]
@@ -78,6 +95,7 @@ struct NotePageTemplate {
     content: String,
     can_edit: bool,
     can_delete: bool,
+    revision_query: String,
 }
 
 #[derive(Template)]
@@ -87,6 +105,7 @@ struct NoteHeaderTemplate {
     note: FileDto,
     can_edit: bool,
     can_delete: bool,
+    revision_query: String,
 }
 
 #[derive(Template)]
@@ -96,6 +115,7 @@ struct DeleteNoteTemplate {
     note: FileDto,
     token: String,
     error_message: Option<String>,
+    revision_query: String,
 }
 
 fn require_notes_dir(dir: &DirDto) -> Result<()> {
@@ -204,6 +224,7 @@ pub async fn new_note_handler(
         error_message: None,
         is_edit: false,
         note_id: String::new(),
+        revision_query: String::new(),
     };
 
     Response::builder()
@@ -238,6 +259,7 @@ pub async fn post_new_note_handler(
                 error_message: Some(error.message),
                 is_edit: false,
                 note_id: String::new(),
+                revision_query: String::new(),
             };
             Response::builder()
                 .status(error.status_code)
@@ -253,12 +275,14 @@ pub async fn note_page_handler(
     Extension(dir): Extension<DirDto>,
     Extension(note): Extension<FileDto>,
     State(state): State<AppState>,
+    Query(query): Query<NoteRevisionQuery>,
 ) -> Result<Response<Body>> {
     require_notes_dir(&dir)?;
     let actor = ctx.actor();
     enforce_policy(actor, Resource::File, Action::Read)?;
     let token = ctx.token().expect("token is required");
-    let content = get_note_content_svc(&state, token, &dir.id, &note.id).await?;
+    let content =
+        get_note_content_svc(&state, token, &dir.id, &note.id, query.revision.as_deref()).await?;
     let mut t = TemplateData::new(&state, actor, &pref);
     t.title = format!("Notes - {}", note.name);
     let tpl = NotePageTemplate {
@@ -268,6 +292,7 @@ pub async fn note_page_handler(
         content: content.content,
         can_edit: enforce_policy(actor, Resource::File, Action::Update).is_ok(),
         can_delete: enforce_policy(actor, Resource::File, Action::Delete).is_ok(),
+        revision_query: query.suffix(),
     };
 
     Response::builder()
@@ -280,6 +305,7 @@ pub async fn note_header_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(dir): Extension<DirDto>,
     Extension(note): Extension<FileDto>,
+    Query(query): Query<NoteRevisionQuery>,
 ) -> Result<Response<Body>> {
     require_notes_dir(&dir)?;
     let actor = ctx.actor();
@@ -289,6 +315,7 @@ pub async fn note_header_handler(
         note,
         can_edit: enforce_policy(actor, Resource::File, Action::Update).is_ok(),
         can_delete: enforce_policy(actor, Resource::File, Action::Delete).is_ok(),
+        revision_query: query.suffix(),
     };
     Response::builder()
         .status(StatusCode::OK)
@@ -301,6 +328,7 @@ pub async fn get_delete_note_handler(
     Extension(dir): Extension<DirDto>,
     Extension(note): Extension<FileDto>,
     State(state): State<AppState>,
+    Query(query): Query<NoteRevisionQuery>,
 ) -> Result<Response<Body>> {
     require_notes_dir(&dir)?;
     enforce_policy(ctx.actor(), Resource::File, Action::Delete)?;
@@ -309,6 +337,7 @@ pub async fn get_delete_note_handler(
         dir,
         note,
         error_message: None,
+        revision_query: query.suffix(),
     };
     Response::builder()
         .status(StatusCode::OK)
@@ -321,6 +350,7 @@ pub async fn post_delete_note_handler(
     Extension(dir): Extension<DirDto>,
     Extension(note): Extension<FileDto>,
     State(state): State<AppState>,
+    Query(query): Query<NoteRevisionQuery>,
     Form(payload): Form<TokenFormData>,
 ) -> Result<Response<Body>> {
     require_notes_dir(&dir)?;
@@ -339,6 +369,7 @@ pub async fn post_delete_note_handler(
                 dir,
                 note,
                 error_message: Some(error.message),
+                revision_query: query.suffix(),
             };
             Response::builder()
                 .status(error.status_code)
@@ -354,12 +385,14 @@ pub async fn edit_note_handler(
     Extension(dir): Extension<DirDto>,
     Extension(note): Extension<FileDto>,
     State(state): State<AppState>,
+    Query(query): Query<NoteRevisionQuery>,
 ) -> Result<Response<Body>> {
     require_notes_dir(&dir)?;
     let actor = ctx.actor();
     enforce_policy(actor, Resource::File, Action::Update)?;
     let token = ctx.token().expect("token is required");
-    let content = get_note_content_svc(&state, token, &dir.id, &note.id).await?;
+    let content =
+        get_note_content_svc(&state, token, &dir.id, &note.id, query.revision.as_deref()).await?;
     let mut t = TemplateData::new(&state, actor, &pref);
     t.title = format!("Notes - {} - Edit", note.name);
     let tpl = NoteFormPageTemplate {
@@ -371,6 +404,7 @@ pub async fn edit_note_handler(
         error_message: None,
         is_edit: true,
         note_id: note.id,
+        revision_query: query.suffix(),
     };
 
     Response::builder()
@@ -384,6 +418,7 @@ pub async fn post_edit_note_handler(
     Extension(dir): Extension<DirDto>,
     Extension(note): Extension<FileDto>,
     State(state): State<AppState>,
+    Query(query): Query<NoteRevisionQuery>,
     Form(payload): Form<UpdateNoteFormData>,
 ) -> Result<Response<Body>> {
     require_notes_dir(&dir)?;
@@ -406,6 +441,7 @@ pub async fn post_edit_note_handler(
                 error_message: Some(error.message),
                 is_edit: true,
                 note_id: note.id,
+                revision_query: query.suffix(),
             };
             Response::builder()
                 .status(error.status_code)
@@ -457,6 +493,7 @@ mod tests {
             note: note(),
             can_edit: false,
             can_delete: true,
+            revision_query: String::new(),
         };
         let html = header.render().unwrap();
         assert!(html.contains("hx-get=\"/notes/dir-id/entries/note-id/delete\""));
@@ -477,6 +514,7 @@ mod tests {
             note: note(),
             token: "csrf-token".into(),
             error_message: Some("Unable to delete".into()),
+            revision_query: String::new(),
         };
         let html = form.render().unwrap();
         assert!(html.contains("hx-post=\"/notes/dir-id/entries/note-id/delete\""));
@@ -485,5 +523,63 @@ mod tests {
         assert!(html.contains("value=\"csrf-token\""));
         assert!(html.contains("My note"));
         assert!(html.contains("Unable to delete"));
+    }
+
+    #[test]
+    fn revision_query_is_encoded_and_preserved_in_fragments() {
+        let query = NoteRevisionQuery {
+            revision: Some("old &/revision".into()),
+        };
+        let suffix = query.suffix();
+        assert_eq!(suffix, "?revision=old%20%26%2Frevision");
+        assert_eq!(NoteRevisionQuery { revision: None }.suffix(), "");
+        assert_eq!(
+            NoteRevisionQuery {
+                revision: Some(String::new())
+            }
+            .suffix(),
+            "?revision="
+        );
+
+        let header = NoteHeaderTemplate {
+            dir: dir(),
+            note: note(),
+            can_edit: true,
+            can_delete: true,
+            revision_query: suffix.clone(),
+        }
+        .render()
+        .unwrap();
+        assert!(header.contains("/edit?revision=old%20%26%2Frevision"));
+        assert!(header.contains("/delete?revision=old%20%26%2Frevision"));
+
+        let delete = DeleteNoteTemplate {
+            dir: dir(),
+            note: note(),
+            token: "token".into(),
+            error_message: Some("error".into()),
+            revision_query: suffix.clone(),
+        }
+        .render()
+        .unwrap();
+        assert!(delete.contains("/delete?revision=old%20%26%2Frevision"));
+        assert!(delete.contains("/header?revision=old%20%26%2Frevision"));
+        assert!(delete.contains("/entries/note-id?revision=old%20%26%2Frevision"));
+
+        let form = NoteFormTemplate {
+            dir: dir(),
+            name: "My note".into(),
+            content: "old content".into(),
+            token: "token".into(),
+            error_message: Some("error".into()),
+            is_edit: true,
+            note_id: "note-id".into(),
+            revision_query: suffix,
+        }
+        .render()
+        .unwrap();
+        assert!(form.contains("/edit?revision=old%20%26%2Frevision"));
+        assert!(form.contains("/entries/note-id?revision=old%20%26%2Frevision"));
+        assert!(form.contains("old content"));
     }
 }

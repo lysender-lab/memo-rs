@@ -2,8 +2,8 @@
     method="post"
     hx-target="#note-form-container"
     {% if is_edit %}
-    action="/notes/{{ dir.id }}/entries/{{ note_id }}/edit"
-    hx-post="/notes/{{ dir.id }}/entries/{{ note_id }}/edit"
+    action="/notes/{{ dir.id }}/entries/{{ note_id }}/edit{{ revision_query }}"
+    hx-post="/notes/{{ dir.id }}/entries/{{ note_id }}/edit{{ revision_query }}"
     {% else %}
     action="/notes/{{ dir.id }}/new_note"
     hx-post="/notes/{{ dir.id }}/new_note"
@@ -47,7 +47,7 @@
                 </div>
                 <div class="control">
                     {% if is_edit %}
-                    <a class="button is-light" href="/notes/{{ dir.id }}/entries/{{ note_id }}">Cancel</a>
+                    <a class="button is-light" href="/notes/{{ dir.id }}/entries/{{ note_id }}{{ revision_query }}">Cancel</a>
                     {% else %}
                     <a class="button is-light" href="/notes/{{ dir.id }}">Cancel</a>
                     {% endif %}
