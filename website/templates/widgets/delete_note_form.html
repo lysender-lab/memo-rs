@@ -1,4 +1,4 @@
-<form method="post" action="/notes/{{ dir.id }}/entries/{{ note.id }}/delete{{ revision_query }}" hx-post="/notes/{{ dir.id }}/entries/{{ note.id }}/delete{{ revision_query }}" hx-target="#note-header">
+<form method="post" action="/notes/{{ dir.id }}/entries/{{ note.id }}/delete{{ revision_query }}" hx-post="/notes/{{ dir.id }}/entries/{{ note.id }}/delete{{ revision_query }}" hx-target="#edit-note-container">
     <div class="columns">
         <div class="column is-half">
             {% match error_message %}
@@ -19,7 +19,7 @@
                             <button class="button is-danger" type="submit">Delete</button>
                         </div>
                         <div class="control">
-                            <a class="button is-link is-light" href="/notes/{{ dir.id }}/entries/{{ note.id }}{{ revision_query }}" hx-get="/notes/{{ dir.id }}/entries/{{ note.id }}/header{{ revision_query }}" hx-target="#note-header">Cancel</a>
+                            <a class="button is-link is-light" href="/notes/{{ dir.id }}/entries/{{ note.id }}{{ revision_query }}" hx-get="/notes/{{ dir.id }}/entries/{{ note.id }}/edit_controls{{ revision_query }}" hx-target="#edit-note-container">Cancel</a>
                         </div>
                     </div>
                 </div>

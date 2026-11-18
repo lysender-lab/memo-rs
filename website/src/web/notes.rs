@@ -99,8 +99,8 @@ struct NotePageTemplate {
 }
 
 #[derive(Template)]
-#[template(path = "widgets/note_header.html")]
-struct NoteHeaderTemplate {
+#[template(path = "widgets/edit_note_controls.html")]
+struct EditNoteControlsTemplate {
     dir: DirDto,
     note: FileDto,
     can_edit: bool,
@@ -301,7 +301,7 @@ pub async fn note_page_handler(
         .context(ResponseBuilderSnafu)
 }
 
-pub async fn note_header_handler(
+pub async fn edit_note_controls_handler(
     Extension(ctx): Extension<Ctx>,
     Extension(dir): Extension<DirDto>,
     Extension(note): Extension<FileDto>,
@@ -310,7 +310,7 @@ pub async fn note_header_handler(
     require_notes_dir(&dir)?;
     let actor = ctx.actor();
     enforce_policy(actor, Resource::File, Action::Read)?;
-    let tpl = NoteHeaderTemplate {
+    let tpl = EditNoteControlsTemplate {
         dir,
         note,
         can_edit: enforce_policy(actor, Resource::File, Action::Update).is_ok(),
@@ -487,22 +487,25 @@ mod tests {
     }
 
     #[test]
-    fn note_header_respects_delete_and_edit_permissions() {
-        let mut header = NoteHeaderTemplate {
+    fn note_controls_respect_delete_and_edit_permissions() {
+        let mut controls = EditNoteControlsTemplate {
             dir: dir(),
             note: note(),
             can_edit: false,
             can_delete: true,
             revision_query: String::new(),
         };
-        let html = header.render().unwrap();
+        let html = controls.render().unwrap();
         assert!(html.contains("hx-get=\"/notes/dir-id/entries/note-id/delete\""));
-        assert!(html.contains("hx-target=\"#note-header\""));
+        assert!(html.contains("hx-target=\"#edit-note-container\""));
+        assert!(html.contains("href=\"/notes/dir-id\""));
+        assert!(html.contains("fa-arrow-left"));
+        assert!(!html.contains("My note"));
         assert!(!html.contains("/edit\""));
 
-        header.can_edit = true;
-        header.can_delete = false;
-        let html = header.render().unwrap();
+        controls.can_edit = true;
+        controls.can_delete = false;
+        let html = controls.render().unwrap();
         assert!(html.contains("/notes/dir-id/entries/note-id/edit"));
         assert!(!html.contains(">Delete</button>"));
     }
@@ -518,8 +521,8 @@ mod tests {
         };
         let html = form.render().unwrap();
         assert!(html.contains("hx-post=\"/notes/dir-id/entries/note-id/delete\""));
-        assert!(html.contains("hx-get=\"/notes/dir-id/entries/note-id/header\""));
-        assert!(html.contains("hx-target=\"#note-header\""));
+        assert!(html.contains("hx-get=\"/notes/dir-id/entries/note-id/edit_controls\""));
+        assert!(html.contains("hx-target=\"#edit-note-container\""));
         assert!(html.contains("value=\"csrf-token\""));
         assert!(html.contains("My note"));
         assert!(html.contains("Unable to delete"));
@@ -541,7 +544,7 @@ mod tests {
             "?revision="
         );
 
-        let header = NoteHeaderTemplate {
+        let controls = EditNoteControlsTemplate {
             dir: dir(),
             note: note(),
             can_edit: true,
@@ -550,8 +553,8 @@ mod tests {
         }
         .render()
         .unwrap();
-        assert!(header.contains("/edit?revision=old%20%26%2Frevision"));
-        assert!(header.contains("/delete?revision=old%20%26%2Frevision"));
+        assert!(controls.contains("/edit?revision=old%20%26%2Frevision"));
+        assert!(controls.contains("/delete?revision=old%20%26%2Frevision"));
 
         let delete = DeleteNoteTemplate {
             dir: dir(),
@@ -563,7 +566,7 @@ mod tests {
         .render()
         .unwrap();
         assert!(delete.contains("/delete?revision=old%20%26%2Frevision"));
-        assert!(delete.contains("/header?revision=old%20%26%2Frevision"));
+        assert!(delete.contains("/edit_controls?revision=old%20%26%2Frevision"));
         assert!(delete.contains("/entries/note-id?revision=old%20%26%2Frevision"));
 
         let form = NoteFormTemplate {
@@ -581,5 +584,38 @@ mod tests {
         assert!(form.contains("/edit?revision=old%20%26%2Frevision"));
         assert!(form.contains("/entries/note-id?revision=old%20%26%2Frevision"));
         assert!(form.contains("old content"));
+    }
+
+    #[test]
+    fn note_title_is_outside_replaceable_controls() {
+        let page = NotePageTemplate {
+            t: TemplateData {
+                theme: "light".into(),
+                title: "Note".into(),
+                assets: crate::config::AssetManifest {
+                    main_js: String::new(),
+                    main_css: String::new(),
+                },
+                styles: Vec::new(),
+                scripts: Vec::new(),
+                async_scripts: Vec::new(),
+                script_vars: Vec::new(),
+                ga_tag_id: None,
+                actor: None,
+            },
+            dir: dir(),
+            note: note(),
+            content: "content".into(),
+            can_edit: true,
+            can_delete: true,
+            revision_query: String::new(),
+        }
+        .render()
+        .unwrap();
+
+        let title = page.find("<h1 class=\"title\">My note</h1>").unwrap();
+        let controls = page.find("id=\"edit-note-container\"").unwrap();
+        assert!(title < controls);
+        assert!(!page[controls..].contains("<h1"));
     }
 }
