@@ -17,7 +17,7 @@ chrono = "0.4.45"
 image = "0.25.10"
 infer = "0.22.0"
 jsonwebtoken = { version = "10.4.0", features = ["aws_lc_rs"] }
-moka = { version = "0.12.15", features = ["sync"] }
+moka = { version = "0.12.16", features = ["sync"] }
 kamadak-exif = "0.6.1"
 reqwest = { version = "0.13.4", features = ["json", "query", "form"] }
 serde = { version = "1.0.228", features = ["derive"] }
