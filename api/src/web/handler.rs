@@ -13,7 +13,7 @@ use crate::{
     dir::{create_dir_svc, delete_dir_svc, update_dir_svc},
     error::{
         DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, NotFoundSnafu, Result,
-        StorageSnafu, ValidationSnafu, WhateverSnafu,
+        StorageSnafu, WhateverSnafu,
     },
     file::{create_file_svc, create_remote_file_svc, delete_file_svc, generate_upload_url_svc},
     health::{check_liveness, check_readiness},
@@ -321,7 +321,7 @@ pub async fn create_file_handler(
 
     let storage_client = state.storage_client.clone();
 
-    let file = if is_image || dir.dir_type == DirType::Photos {
+    let file = if is_image {
         // Download file locally
         let downloaded = state
             .storage_client
@@ -335,30 +335,6 @@ pub async fn create_file_handler(
             )
             .await
             .context(StorageSnafu)?;
-
-        let detected = infer::get_from_path(&downloaded.path)
-            .ok()
-            .flatten()
-            .map(|kind| kind.mime_type());
-
-        let detected2 = infer::get_from_path(&downloaded.path);
-        dbg!(&detected2);
-
-        dbg!(&content_type);
-        dbg!(&detected);
-
-        if (is_image
-            || detected.is_some_and(|mime| memo::file::ALLOWED_IMAGE_TYPES.contains(&mime)))
-            && !detected.is_some_and(|mime| image_content_type_matches(&content_type, mime))
-        {
-            if let Err(err) = tokio::fs::remove_file(&downloaded.path).await {
-                tracing::error!("Cleanup file: {}", err);
-            }
-            return ValidationSnafu {
-                msg: "Uploaded image content type does not match its contents".to_string(),
-            }
-            .fail();
-        }
 
         create_file_svc(state, &dir, &downloaded).await?
     } else {
