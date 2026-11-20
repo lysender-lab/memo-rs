@@ -71,6 +71,15 @@ Every time you modify a note, a new revision is created.
 - Update note: creates a new note record and updates the file record with updated_at
 - Delete note: deletes both the note revisions and the file entry
 
+## Job Queue
+
+The api application will run a worker pool aside from running a web server.
+
+- Have a worker pool
+- Have a job queue which is backed by a simple database table
+- Jobs are pushed into the queue
+- Worker pool will drain the queue
+
 ## Models
 
 Dir:
