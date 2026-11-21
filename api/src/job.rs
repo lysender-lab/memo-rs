@@ -43,24 +43,10 @@ pub struct WorkerPool {
 impl WorkerPool {
     pub fn start(db: Arc<DbMapper>, count: usize) -> Self {
         let (shutdown, receiver) = watch::channel(false);
-        let shutdown_receiver = receiver.clone();
-        let mut tasks = JoinSet::new();
-        for worker in 0..count {
-            tasks.spawn(worker_loop(db.clone(), receiver.clone(), worker));
-        }
-        if count > 0 {
-            tasks.spawn(recovery_loop(db, receiver));
-            info!(count, "Job worker pool started");
-        }
         let supervisor = tokio::spawn(async move {
-            while let Some(result) = tasks.join_next().await {
-                match result {
-                    Err(error) => error!(%error, "Job worker task exited unexpectedly"),
-                    Ok(()) if !*shutdown_receiver.borrow() => {
-                        error!("Job worker task stopped unexpectedly");
-                    }
-                    Ok(()) => {}
-                }
+            if count > 0 {
+                info!(count, "Job worker pool started");
+                dispatcher_loop(db, receiver, count).await;
             }
         });
         Self {
@@ -82,38 +68,46 @@ impl WorkerPool {
     }
 }
 
-async fn wait_or_shutdown(shutdown: &mut watch::Receiver<bool>, delay: Duration) -> bool {
-    if *shutdown.borrow() {
-        return true;
-    }
-    tokio::select! {
-        _ = tokio::time::sleep(delay) => false,
-        _ = shutdown.changed() => true,
-    }
-}
-
-async fn worker_loop(db: Arc<DbMapper>, mut shutdown: watch::Receiver<bool>, worker: usize) {
+async fn dispatcher_loop(db: Arc<DbMapper>, mut shutdown: watch::Receiver<bool>, count: usize) {
+    let mut tasks = JoinSet::new();
+    let mut recovery = tokio::time::interval(RECOVERY_INTERVAL);
+    recovery.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut next_poll = tokio::time::Instant::now();
     loop {
         if *shutdown.borrow() {
             break;
         }
-        match db.jobs.claim_next(LEASE_DURATION).await {
-            Ok(Some(job)) => {
-                // A claim already in progress may finish after shutdown begins;
-                // finish that job instead of abandoning its newly acquired lease.
-                run_job(&db, job).await;
-            }
-            Ok(None) => {
-                if wait_or_shutdown(&mut shutdown, POLL_INTERVAL).await {
-                    break;
+        tokio::select! {
+            _ = shutdown.changed() => break,
+            _ = recovery.tick() => {
+                if let Err(error) = db.jobs.recover_expired().await {
+                    warn!(%error, "Unable to recover expired jobs");
                 }
             }
-            Err(error) => {
-                warn!(worker, %error, "Unable to claim job");
-                if wait_or_shutdown(&mut shutdown, POLL_INTERVAL).await {
-                    break;
+            Some(result) = tasks.join_next(), if !tasks.is_empty() => {
+                if let Err(error) = result {
+                    error!(%error, "Job worker task exited unexpectedly");
                 }
             }
+            _ = tokio::time::sleep_until(next_poll), if tasks.len() < count => {
+                match db.jobs.claim_next(LEASE_DURATION).await {
+                    Ok(Some(job)) => {
+                        let db = db.clone();
+                        tasks.spawn(async move { run_job(&db, job).await });
+                        next_poll = tokio::time::Instant::now();
+                    }
+                    Ok(None) => next_poll = tokio::time::Instant::now() + POLL_INTERVAL,
+                    Err(error) => {
+                        warn!(%error, "Unable to claim job");
+                        next_poll = tokio::time::Instant::now() + POLL_INTERVAL;
+                    }
+                }
+            }
+        }
+    }
+    while let Some(result) = tasks.join_next().await {
+        if let Err(error) = result {
+            error!(%error, "Job worker task exited unexpectedly");
         }
     }
 }
@@ -156,20 +150,6 @@ async fn run_job(db: &DbMapper, job: JobDto) {
         Ok(true) => {}
         Ok(false) => warn!(job_id = %job.id, "Job result not recorded because lease was lost"),
         Err(error) => warn!(job_id = %job.id, %error, "Unable to record job result"),
-    }
-}
-
-async fn recovery_loop(db: Arc<DbMapper>, mut shutdown: watch::Receiver<bool>) {
-    loop {
-        if *shutdown.borrow() {
-            break;
-        }
-        if let Err(error) = db.jobs.recover_expired().await {
-            warn!(%error, "Unable to recover expired jobs");
-        }
-        if wait_or_shutdown(&mut shutdown, RECOVERY_INTERVAL).await {
-            break;
-        }
     }
 }
 

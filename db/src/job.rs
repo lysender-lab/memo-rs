@@ -119,29 +119,62 @@ impl JobRepo {
         Ok(job)
     }
 
-    /// Atomically claim the next eligible job, or return None if none is available.
+    /// Conditionally claim the next eligible job, or return None if none is available.
     pub async fn claim_next(&self, lease_duration: Duration) -> Result<Option<JobDto>> {
         let conn = self.db_pool.acquire().await?;
+        // Validate even when there is no eligible job.
+        lease_expiry(now(), lease_duration)?;
+        let timestamp = now();
+        let select = format!(
+            "SELECT {COLUMNS} FROM jobs WHERE status = 'pending' \
+             AND available_at <= :now AND attempts < max_attempts \
+             ORDER BY available_at, created_at, id LIMIT 1"
+        );
+        let candidate: Option<JobDto> = {
+            let mut stmt = conn.prepare(select).await.context(DbPrepareSnafu)?;
+            collect_row(stmt.query_row(vec![integer_param(":now", timestamp)]).await)?
+        };
+        let Some(candidate) = candidate else {
+            return Ok(None);
+        };
         let timestamp = now();
         let expiry = lease_expiry(timestamp, lease_duration)?;
-        let sql = format!(
-            "UPDATE jobs SET status = 'running', attempts = attempts + 1, \
+        let token = generate_id();
+        let sql = "UPDATE jobs SET status = 'running', attempts = attempts + 1, \
              lease_token = :token, lease_expires_at = :expiry, updated_at = :now \
-             WHERE id = (SELECT id FROM jobs WHERE status = 'pending' \
-             AND available_at <= :now AND attempts < max_attempts \
-             ORDER BY available_at, created_at, id LIMIT 1) \
-             AND status = 'pending' AND available_at <= :now AND attempts < max_attempts \
-             RETURNING {COLUMNS}"
-        );
-        let mut stmt = conn.prepare(sql).await.context(DbPrepareSnafu)?;
-        let result = stmt
-            .query_row(vec![
-                text_param(":token", generate_id()),
+             WHERE id = :id AND status = 'pending' AND available_at <= :now \
+             AND attempts < max_attempts";
+        let affected = {
+            let mut stmt = conn.prepare(sql).await.context(DbPrepareSnafu)?;
+            stmt.execute(vec![
+                text_param(":id", candidate.id.clone()),
+                text_param(":token", token.clone()),
                 integer_param(":expiry", expiry),
                 integer_param(":now", timestamp),
             ])
-            .await;
-        collect_row(result)
+            .await
+            .context(DbStatementSnafu)?
+        };
+        if affected == 0 {
+            return Ok(None);
+        }
+        let query = format!(
+            "SELECT {COLUMNS} FROM jobs WHERE id = :id AND status = 'running' \
+             AND lease_token = :token AND lease_expires_at > :now"
+        );
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
+        let claimed = collect_row(
+            stmt.query_row(vec![
+                text_param(":id", candidate.id),
+                text_param(":token", token),
+                integer_param(":now", now()),
+            ])
+            .await,
+        )?;
+        match claimed {
+            Some(job) => Ok(Some(job)),
+            None => Err("Claimed job could not be retrieved with its unexpired lease".into()),
+        }
     }
 
     /// Complete a job if the lease token still matches and has not expired.
@@ -326,6 +359,31 @@ mod tests {
             .await
             .unwrap();
         assert!(repo.get(&stored.id).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn empty_polls_and_recovery_allow_later_claim() {
+        let ctx = TestCtx::new("jobs-empty-polls").await.unwrap();
+        let repo = &ctx.db.jobs;
+        for _ in 0..20 {
+            assert!(
+                repo.claim_next(Duration::from_secs(30))
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
+            assert_eq!(repo.recover_expired().await.unwrap(), 0);
+        }
+        let inserted = repo.enqueue(input(2, now())).await.unwrap();
+        let claimed = repo
+            .claim_next(Duration::from_secs(30))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(claimed.id, inserted.id);
+        assert_eq!(claimed.status, JobStatus::Running);
+        assert_eq!(claimed.attempts, 1);
+        assert!(claimed.lease_token.is_some());
     }
 
     #[tokio::test]
