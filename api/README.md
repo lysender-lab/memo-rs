@@ -81,8 +81,9 @@ The api application will run a worker pool aside from running a web server.
 - Worker pool will drain the queue
 
 Workers are disabled by default. Set `JOB_WORKERS=2` to run two workers in
-the API process. The initial job type `logger_job_handler` writes `TEST JOB`
-at info level. Jobs are stored in the main database and may be executed more
+the API process. The initial job type `logger_job_handler` logs its JSON
+`message` field at info level. Creating a note enqueues a log job on a
+best-effort basis. Jobs are stored in the main database and may be executed more
 than once, so future handlers must tolerate retries.
 
 ## Models

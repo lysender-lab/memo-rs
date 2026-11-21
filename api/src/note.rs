@@ -4,6 +4,7 @@ use validator::Validate;
 use crate::{
     Result,
     error::{CipherSnafu, DbSnafu, NotFoundSnafu, ValidationSnafu},
+    job::{self, LOGGER_JOB_TYPE, LoggerJobPayload},
     state::AppState,
 };
 use cipher::{decrypt, encrypt};
@@ -11,6 +12,7 @@ use db::file::MAX_FILES;
 use memo::{
     dir::DirDto,
     file::{FileDto, FileType},
+    job::NewJobDto,
     note::{CreateNoteDto, NoteDto, NoteRevisionDto, UpdateNoteDto},
     utils::{IdPrefix, generate_prefixed_id, str_checksum, truncate_string, valid_prefixed_id},
     validators::flatten_errors,
@@ -20,6 +22,7 @@ pub async fn create_note_svc(
     state: &AppState,
     dir: &DirDto,
     data: &CreateNoteDto,
+    user_name: &str,
 ) -> Result<FileDto> {
     let errors = data.validate();
     ensure!(
@@ -81,12 +84,31 @@ pub async fn create_note_svc(
     let cipher_content =
         encrypt(&state.config.notes_master_key, &data.content).context(CipherSnafu)?;
 
-    state
+    let file = state
         .db
         .files
         .retry_create_note(file, cipher_content, checksum, 5)
         .await
-        .context(DbSnafu)
+        .context(DbSnafu)?;
+
+    let job = note_created_log_job(user_name, &file.id);
+    if let Err(error) = job::enqueue(&state.db, job).await {
+        tracing::warn!(file_id = %file.id, %error, "Unable to enqueue note creation log");
+    }
+
+    Ok(file)
+}
+
+fn note_created_log_job(user_name: &str, file_id: &str) -> NewJobDto {
+    let payload = LoggerJobPayload {
+        message: format!("{} created a new note: {}", user_name, file_id),
+    };
+    NewJobDto {
+        job_type: LOGGER_JOB_TYPE.to_string(),
+        payload: serde_json::to_string(&payload).expect("logger payload must serialize"),
+        max_attempts: 3,
+        available_at: chrono::Utc::now().timestamp(),
+    }
 }
 
 pub async fn get_note_svc(
@@ -203,6 +225,15 @@ pub async fn update_note_svc(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn note_created_job_contains_user_and_file_id() {
+        let job = note_created_log_job("Alice", "fil_123");
+        let payload: LoggerJobPayload = serde_json::from_str(&job.payload).unwrap();
+        assert_eq!(job.job_type, LOGGER_JOB_TYPE);
+        assert_eq!(job.max_attempts, 3);
+        assert_eq!(payload.message, "Alice created a new note: fil_123");
+    }
 
     #[test]
     fn revision_list_json_exposes_latest_marker_without_internal_fields() {

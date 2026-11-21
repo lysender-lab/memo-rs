@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use db::DbMapper;
 use memo::job::{JobDto, NewJobDto};
+use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
@@ -16,19 +17,28 @@ const RETRY_DELAY_SECONDS: i64 = 30;
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Enqueue a job for later processing.
-#[allow(dead_code)]
 pub async fn enqueue(db: &DbMapper, job: NewJobDto) -> db::Result<JobDto> {
     db.jobs.enqueue(job).await
 }
 
-async fn logger_job_handler() {
-    info!("TEST JOB");
+pub const LOGGER_JOB_TYPE: &str = "logger_job_handler";
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LoggerJobPayload {
+    pub message: String,
+}
+
+async fn logger_job_handler(message: &str) {
+    info!("{}", message);
 }
 
 async fn dispatch(job: &JobDto) -> std::result::Result<(), String> {
     match job.job_type.as_str() {
-        "logger_job_handler" => {
-            logger_job_handler().await;
+        LOGGER_JOB_TYPE => {
+            let payload: LoggerJobPayload = serde_json::from_str(&job.payload)
+                .map_err(|_| "Invalid logger job payload".to_string())?;
+            logger_job_handler(&payload.message).await;
             Ok(())
         }
         _ => Err("Unknown job type".to_string()),
@@ -175,7 +185,18 @@ mod tests {
         let job = enqueue(
             &db,
             NewJobDto {
-                job_type: "logger_job_handler".into(),
+                job_type: LOGGER_JOB_TYPE.into(),
+                payload: r#"{"message":"a test message"}"#.into(),
+                max_attempts: 1,
+                available_at: chrono::Utc::now().timestamp(),
+            },
+        )
+        .await
+        .unwrap();
+        let invalid = enqueue(
+            &db,
+            NewJobDto {
+                job_type: LOGGER_JOB_TYPE.into(),
                 payload: "{}".into(),
                 max_attempts: 1,
                 available_at: chrono::Utc::now().timestamp(),
@@ -206,8 +227,13 @@ mod tests {
             loop {
                 let a = db.jobs.get(&job.id).await.unwrap().unwrap();
                 let b = db.jobs.get(&unknown.id).await.unwrap().unwrap();
-                if a.status == JobStatus::Completed && b.status == JobStatus::Failed {
+                let c = db.jobs.get(&invalid.id).await.unwrap().unwrap();
+                if a.status == JobStatus::Completed
+                    && b.status == JobStatus::Failed
+                    && c.status == JobStatus::Failed
+                {
                     assert_eq!(b.last_error.as_deref(), Some("Unknown job type"));
+                    assert_eq!(c.last_error.as_deref(), Some("Invalid logger job payload"));
                     break;
                 }
                 tokio::time::sleep(Duration::from_millis(50)).await;
