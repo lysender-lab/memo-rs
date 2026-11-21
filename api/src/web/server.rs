@@ -7,12 +7,19 @@ use tracing::{Level, error, info};
 use crate::Result;
 use crate::config::Config;
 use crate::error::{ErrorInfo, ErrorResponse};
+use crate::job::WorkerPool;
 use crate::state::create_app_state;
 use crate::web::routes::all_routes;
 
 pub async fn run_web_server(config: &Config) -> Result<()> {
     let server_address = config.server.address.clone();
     let state = create_app_state(config).await?;
+    let listener = TcpListener::bind(&server_address)
+        .await
+        .map_err(|e| crate::Error::Config {
+            msg: format!("Unable to bind HTTP server: {e}"),
+        })?;
+    let workers = WorkerPool::start(state.db.clone(), config.job_workers);
 
     let routes_all = Router::new()
         .merge(all_routes(state))
@@ -28,11 +35,13 @@ pub async fn run_web_server(config: &Config) -> Result<()> {
     // Setup the server
     info!("HTTP server running on {}", server_address);
 
-    let listener = TcpListener::bind(server_address).await.unwrap();
-    axum::serve(listener, routes_all.into_make_service())
+    let result = axum::serve(listener, routes_all.into_make_service())
         .with_graceful_shutdown(shutdown_signal())
-        .await
-        .unwrap();
+        .await;
+    workers.shutdown().await;
+    result.map_err(|e| crate::Error::Config {
+        msg: format!("HTTP server failed: {e}"),
+    })?;
 
     info!("HTTP server stopped");
 

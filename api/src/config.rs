@@ -14,6 +14,7 @@ pub struct Config {
     pub server: ServerConfig,
     pub db: DbConfig,
     pub auth: AuthConfig,
+    pub job_workers: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +58,13 @@ impl Config {
             .and_then(|s| s.parse::<usize>().ok())
             .unwrap_or(DEFAULT_DB_POOL_SIZE);
 
+        let job_workers = match optional_env("JOB_WORKERS") {
+            Some(value) => value.parse::<usize>().map_err(|_| Error::Config {
+                msg: "JOB_WORKERS must be a non-negative integer.".to_string(),
+            })?,
+            None => 0,
+        };
+
         let config = Config {
             jwt_secret: required_env("JWT_SECRET")?,
             notes_master_key: required_env("NOTES_MASTER_KEY")?,
@@ -77,6 +85,7 @@ impl Config {
             auth: AuthConfig {
                 api_url: required_env("AUTH_API_BASE_URL")?,
             },
+            job_workers,
         };
 
         // Validate config values

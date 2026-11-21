@@ -6,6 +6,7 @@ mod dir;
 mod error;
 mod file;
 mod health;
+mod job;
 mod note;
 mod oauth;
 mod run;
