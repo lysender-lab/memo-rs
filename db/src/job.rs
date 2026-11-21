@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use memo::job::{JobDto, JobStatus, NewJobDto};
-use memo::utils::generate_id;
+use memo::utils::{IdPrefix, generate_id, generate_prefixed_id};
 use snafu::ResultExt;
 use turso::Row;
 
@@ -88,7 +88,7 @@ impl JobRepo {
         let conn = self.db_pool.acquire().await?;
         let timestamp = now();
         let job = JobDto {
-            id: generate_id(),
+            id: generate_prefixed_id(IdPrefix::Job),
             job_type: input.job_type,
             payload: input.payload,
             status: JobStatus::Pending,
@@ -305,7 +305,10 @@ mod tests {
         bad.job_type = " ".into();
         assert!(repo.enqueue(bad).await.is_err());
         let job = repo.enqueue(input(3, now())).await.unwrap();
+        assert!(job.id.starts_with("job_"));
+        assert!(memo::utils::valid_prefixed_id(&job.id));
         let stored = repo.get(&job.id).await.unwrap().unwrap();
+        assert_eq!(stored.id, job.id);
         assert_eq!(stored.status, JobStatus::Pending);
         assert_eq!(stored.attempts, 0);
         assert!(
