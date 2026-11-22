@@ -20,7 +20,6 @@ use db::file::MAX_FILES;
 use memo::dir::DirDto;
 use memo::dir::DirMeta;
 use memo::dir::DirType;
-use memo::file::FileType;
 use memo::file::MAX_FILE_SIZE;
 use memo::file::RemoteUploadDto;
 use memo::file::SignedFileUploadDto;
@@ -28,6 +27,7 @@ use memo::file::{
     ALLOWED_IMAGE_TYPES, FileDto, ImgDimension, ImgVersion, ImgVersionDto, MAX_DIMENSION,
     MAX_PREVIEW_DIMENSION, MAX_THUMB_DIMENSION, ORIGINAL_PATH,
 };
+use memo::file::{FileStatus, FileType};
 use memo::utils::IdPrefix;
 use memo::utils::generate_prefixed_id;
 use memo::utils::slugify_prefixed;
@@ -331,6 +331,7 @@ pub async fn create_remote_file_svc(
         org_id: dir.org_id.clone(),
         dir_id: dir.id.clone(),
         file_type: FileType::File,
+        status: FileStatus::Active,
         name: data.orig_filename.clone(),
         filename: data.new_filename.clone(),
         content_type: data.content_type.clone(),
@@ -455,6 +456,7 @@ fn init_file(dir: &DirDto, data: &DownloadedFile) -> Result<FileDto> {
         org_id: dir.org_id.clone(),
         dir_id: dir.id.clone(),
         file_type,
+        status: FileStatus::Active,
         name: data.name.clone(),
         filename: data.filename.clone(),
         content_type,

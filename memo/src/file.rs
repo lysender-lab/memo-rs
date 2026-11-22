@@ -52,12 +52,65 @@ impl core::fmt::Display for FileType {
     }
 }
 
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub enum FileStatus {
+    Active,
+    Uploading,
+    Processing,
+    Inactive,
+}
+
+impl TryFrom<&str> for FileStatus {
+    type Error = String;
+
+    fn try_from(value: &str) -> core::result::Result<Self, Self::Error> {
+        match value {
+            "active" => Ok(Self::Active),
+            "uploading" => Ok(Self::Uploading),
+            "processing" => Ok(Self::Processing),
+            "inactive" => Ok(Self::Inactive),
+            _ => Err(format!("Invalid file status: {value}")),
+        }
+    }
+}
+
+impl core::fmt::Display for FileStatus {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        f.write_str(match self {
+            Self::Active => "active",
+            Self::Uploading => "uploading",
+            Self::Processing => "processing",
+            Self::Inactive => "inactive",
+        })
+    }
+}
+
+#[cfg(test)]
+mod file_status_tests {
+    use super::FileStatus;
+
+    #[test]
+    fn database_values_round_trip() {
+        for (status, value) in [
+            (FileStatus::Active, "active"),
+            (FileStatus::Uploading, "uploading"),
+            (FileStatus::Processing, "processing"),
+            (FileStatus::Inactive, "inactive"),
+        ] {
+            assert_eq!(status.to_string(), value);
+            assert_eq!(FileStatus::try_from(value), Ok(status));
+        }
+        assert!(FileStatus::try_from("unknown").is_err());
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileDto {
     pub id: String,
     pub org_id: String,
     pub dir_id: String,
     pub file_type: FileType,
+    pub status: FileStatus,
     pub name: String,
     pub filename: String,
     pub content_type: String,
