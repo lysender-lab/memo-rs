@@ -6,6 +6,7 @@ use tracing::{Level, error, info};
 
 use crate::Result;
 use crate::config::Config;
+use crate::cron;
 use crate::error::{ErrorInfo, ErrorResponse};
 use crate::job::WorkerPool;
 use crate::state::create_app_state;
@@ -19,6 +20,7 @@ pub async fn run_web_server(config: &Config) -> Result<()> {
         .map_err(|e| crate::Error::Config {
             msg: format!("Unable to bind HTTP server: {e}"),
         })?;
+    let scheduler = cron::start(state.clone()).await?;
     let workers = WorkerPool::start(state.db.clone(), config.job_workers);
 
     let routes_all = Router::new()
@@ -38,10 +40,15 @@ pub async fn run_web_server(config: &Config) -> Result<()> {
     let result = axum::serve(listener, routes_all.into_make_service())
         .with_graceful_shutdown(shutdown_signal())
         .await;
+    let cron_result = cron::shutdown(scheduler).await;
     workers.shutdown().await;
+    if let Err(ref e) = cron_result {
+        error!("Cron scheduler shutdown failed: {}", e);
+    }
     result.map_err(|e| crate::Error::Config {
         msg: format!("HTTP server failed: {e}"),
     })?;
+    cron_result?;
 
     info!("HTTP server stopped");
 

@@ -17,6 +17,11 @@ pub enum Error {
     #[snafu(display("Config error: {}", msg))]
     Config { msg: String },
 
+    #[snafu(display("Cron scheduler error: {}", source))]
+    Cron {
+        source: tokio_cron_scheduler::JobSchedulerError,
+    },
+
     #[snafu(display("{}", source))]
     Db { source: db::Error },
 
