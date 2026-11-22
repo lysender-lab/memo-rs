@@ -19,7 +19,7 @@ use crate::{
 };
 use memo::{
     dir::{DirDto, DirType},
-    file::{FileDto, FileType},
+    file::{FileDto, FileStatus, FileType},
 };
 use yaas::{actor::Actor, role::Permission};
 
@@ -173,7 +173,9 @@ pub async fn file_middleware(
         // Fetch from database
         file_res = state.db.files.get(&params.file_id).await.context(DbSnafu)?;
 
-        if let Some(f) = file_res.clone() {
+        if let Some(f) = file_res.clone()
+            && f.status != FileStatus::Inactive
+        {
             // Store to cache if present
             state.file_cache.insert(params.file_id.clone(), f);
         }
@@ -182,6 +184,13 @@ pub async fn file_middleware(
     let file = file_res.context(NotFoundSnafu {
         msg: "File not found",
     })?;
+
+    ensure!(
+        file.status != FileStatus::Inactive,
+        NotFoundSnafu {
+            msg: "File not found"
+        }
+    );
 
     ensure!(
         file.dir_id == params.dir_id,

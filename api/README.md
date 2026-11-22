@@ -97,6 +97,11 @@ and marks the file `active`. Failed jobs are retried by the queue; a file stays
 in `processing` if all attempts fail or enqueueing fails. Workers must be enabled
 for images to be processed.
 
+Deleting a non-note file marks an active file `inactive` and queues a
+`delete_file` job. The worker deletes the record and then its storage objects.
+Only active files can be deleted. If enqueueing fails, the file remains inactive
+without a job; storage failures are retried using the metadata in the job.
+
 ## Models
 
 Dir:

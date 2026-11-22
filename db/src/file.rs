@@ -223,10 +223,10 @@ impl FileRepo {
     }
 
     pub async fn listing_count(&self, dir_id: &str, params: &ListFilesParams) -> Result<i64> {
-        let mut query =
-            "SELECT COUNT(*) AS total_count FROM files WHERE dir_id = :dir_id".to_string();
+        let mut query = "SELECT COUNT(*) AS total_count FROM files WHERE dir_id = :dir_id AND status = :active_status".to_string();
         let mut q_params = new_query_params();
         q_params.push(text_param(":dir_id", dir_id.to_owned()));
+        q_params.push(text_param(":active_status", FileStatus::Active.to_string()));
 
         if let Some(keyword) = &params.keyword
             && !keyword.is_empty()
@@ -715,6 +715,18 @@ impl FileRepo {
         }
     }
 
+    /// Reserve an active file for deletion.
+    pub async fn mark_inactive(&self, id: &str) -> Result<bool> {
+        let query = "UPDATE files SET status = 'inactive', updated_at = :updated_at WHERE id = :id AND status = 'active' AND deleted_at IS NULL";
+        let mut params = new_query_params();
+        params.push(text_param(":id", id.to_owned()));
+        params.push(integer_param(":updated_at", chrono::Utc::now().timestamp()));
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
+        let affected = stmt.execute(params).await.context(DbStatementSnafu)?;
+        Ok(affected > 0)
+    }
+
     /// Finalize an image only if it still exists and is awaiting processing.
     pub async fn finish_image_processing(&self, file: &FileDto) -> Result<bool> {
         let row: FileRow = file.clone().into();
@@ -1021,6 +1033,44 @@ mod tests {
         assert!(!ctx.db.files.finish_image_processing(&file).await.unwrap());
         ctx.db.files.delete(&file.id).await.unwrap();
         assert!(!ctx.db.files.finish_image_processing(&file).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn only_active_files_can_be_marked_inactive() {
+        let ctx = TestCtx::new("mark-file-inactive").await.unwrap();
+        let mut file = note_file();
+        file.file_type = FileType::Image;
+        file.status = FileStatus::Processing;
+        ctx.db.files.create(file.clone()).await.unwrap();
+        assert!(!ctx.db.files.mark_inactive(&file.id).await.unwrap());
+        assert!(ctx.db.files.finish_image_processing(&file).await.unwrap());
+        assert!(ctx.db.files.mark_inactive(&file.id).await.unwrap());
+        assert!(!ctx.db.files.mark_inactive(&file.id).await.unwrap());
+        assert_eq!(
+            ctx.db.files.get(&file.id).await.unwrap().unwrap().status,
+            FileStatus::Inactive
+        );
+        let params = ListFilesParams {
+            page: None,
+            per_page: None,
+            keyword: None,
+        };
+        assert_eq!(
+            ctx.db
+                .files
+                .listing_count(&file.dir_id, &params)
+                .await
+                .unwrap(),
+            0
+        );
+        assert!(
+            ctx.db
+                .files
+                .find_by_name(&file.dir_id, &file.name)
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[tokio::test]
