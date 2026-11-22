@@ -19,7 +19,7 @@ use crate::turso_params::{
 };
 use crate::{Error, Result};
 use memo::dir::DirDto;
-use memo::file::{FileDto, FileType, ImgVersionDto};
+use memo::file::{FileDto, FileStatus, FileType, ImgVersionDto};
 use memo::note::NoteDto;
 use memo::pagination::Paginated;
 use memo::utils::{IdPrefix, generate_prefixed_id};
@@ -31,6 +31,7 @@ pub struct FileRow {
     pub org_id: String,
     pub dir_id: String,
     pub file_type: String,
+    pub status: String,
     pub name: String,
     pub filename: String,
     pub content_type: String,
@@ -85,6 +86,7 @@ impl From<FileDto> for FileRow {
             org_id: file.org_id,
             dir_id: file.dir_id,
             file_type: file.file_type.to_string(),
+            status: file.status.to_string(),
             name: file.name,
             filename: file.filename,
             content_type: file.content_type,
@@ -98,8 +100,10 @@ impl From<FileDto> for FileRow {
     }
 }
 
-impl From<FileRow> for FileDto {
-    fn from(file: FileRow) -> Self {
+impl TryFrom<FileRow> for FileDto {
+    type Error = Error;
+
+    fn try_from(file: FileRow) -> Result<Self> {
         let img_versions = match file.img_versions {
             Some(versions_str) => {
                 let versions: Vec<ImgVersionDto> = versions_str
@@ -119,12 +123,14 @@ impl From<FileRow> for FileDto {
         // NOTE: This should return an error but current design prevents us to
         // for now, will default to FileType::File on error
         let file_type = FileType::try_from(file.file_type.as_str()).unwrap_or(FileType::File);
+        let status = FileStatus::try_from(file.status.as_str()).map_err(Error::from)?;
 
-        Self {
+        Ok(Self {
             id: file.id,
             org_id: file.org_id,
             dir_id: file.dir_id,
             file_type,
+            status,
             name: file.name,
             filename: file.filename,
             content_type: file.content_type,
@@ -134,7 +140,7 @@ impl From<FileRow> for FileDto {
             url: None,
             created_at: file.created_at,
             updated_at: file.updated_at,
-        }
+        })
     }
 }
 
@@ -164,6 +170,7 @@ impl FromTursoRow for FileDto {
             org_id: row_text(row, 1)?,
             dir_id: row_text(row, 2)?,
             file_type,
+            status: FileStatus::try_from(row_text(row, 13)?.as_str()).map_err(Error::from)?,
             name: row_text(row, 4)?,
             filename: row_text(row, 5)?,
             content_type: row_text(row, 6)?,
@@ -216,10 +223,10 @@ impl FileRepo {
     }
 
     pub async fn listing_count(&self, dir_id: &str, params: &ListFilesParams) -> Result<i64> {
-        let mut query =
-            "SELECT COUNT(*) AS total_count FROM files WHERE dir_id = :dir_id".to_string();
+        let mut query = "SELECT COUNT(*) AS total_count FROM files WHERE dir_id = :dir_id AND status = :active_status".to_string();
         let mut q_params = new_query_params();
         q_params.push(text_param(":dir_id", dir_id.to_owned()));
+        q_params.push(text_param(":active_status", FileStatus::Active.to_string()));
 
         if let Some(keyword) = &params.keyword
             && !keyword.is_empty()
@@ -283,14 +290,18 @@ impl FileRepo {
                 img_versions,
                 img_taken_at,
                 created_at,
-                updated_at
+                updated_at,
+                status
             FROM files
-            WHERE dir_id = :dir_id
+            WHERE
+                dir_id = :dir_id
+                AND status = :active_status
         "#
         .to_string();
 
         let mut q_params = new_query_params();
         q_params.push(text_param(":dir_id", dir.id.clone()));
+        q_params.push(text_param(":active_status", FileStatus::Active.to_string()));
 
         if let Some(keyword) = &params.keyword
             && !keyword.is_empty()
@@ -321,6 +332,7 @@ impl FileRepo {
                 org_id,
                 dir_id,
                 file_type,
+                status,
                 name,
                 filename,
                 content_type,
@@ -337,6 +349,7 @@ impl FileRepo {
                 :org_id,
                 :dir_id,
                 :file_type,
+                :status,
                 :name,
                 :filename,
                 :content_type,
@@ -354,6 +367,7 @@ impl FileRepo {
         q_params.push(text_param(":org_id", file.org_id.clone()));
         q_params.push(text_param(":dir_id", file.dir_id.clone()));
         q_params.push(text_param(":file_type", file.file_type.to_string()));
+        q_params.push(text_param(":status", file.status.clone()));
         q_params.push(text_param(":name", file.name.clone()));
         q_params.push(text_param(":filename", file.filename.clone()));
         q_params.push(text_param(":content_type", file.content_type.clone()));
@@ -368,7 +382,7 @@ impl FileRepo {
         let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         stmt.execute(q_params).await.context(DbStatementSnafu)?;
 
-        Ok(file.into())
+        file.try_into()
     }
 
     pub async fn retry_create(&self, file_dto: FileDto, max_retries: usize) -> Result<FileDto> {
@@ -466,12 +480,12 @@ impl FileRepo {
         let file_query = r#"
             INSERT INTO files
             (
-                id, org_id, dir_id, file_type, name, filename, content_type, size,
+                id, org_id, dir_id, file_type, status, name, filename, content_type, size,
                 is_image, img_versions, img_taken_at, created_at, updated_at
             )
             VALUES
             (
-                :id, :org_id, :dir_id, :file_type, :name, :filename, :content_type, :size,
+                :id, :org_id, :dir_id, :file_type, :status, :name, :filename, :content_type, :size,
                 :is_image, :img_versions, :img_taken_at, :created_at, :updated_at
             )
         "#;
@@ -485,6 +499,7 @@ impl FileRepo {
         file_params.push(text_param(":org_id", file_row.org_id));
         file_params.push(text_param(":dir_id", file_row.dir_id));
         file_params.push(text_param(":file_type", file_row.file_type));
+        file_params.push(text_param(":status", file_row.status));
         file_params.push(text_param(":name", file_row.name));
         file_params.push(text_param(":filename", file_row.filename));
         file_params.push(text_param(":content_type", file_row.content_type));
@@ -700,6 +715,41 @@ impl FileRepo {
         }
     }
 
+    /// Reserve an active file for deletion.
+    pub async fn mark_inactive(&self, id: &str) -> Result<bool> {
+        let query = "UPDATE files SET status = 'inactive', updated_at = :updated_at WHERE id = :id AND status = 'active' AND deleted_at IS NULL";
+        let mut params = new_query_params();
+        params.push(text_param(":id", id.to_owned()));
+        params.push(integer_param(":updated_at", chrono::Utc::now().timestamp()));
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
+        let affected = stmt.execute(params).await.context(DbStatementSnafu)?;
+        Ok(affected > 0)
+    }
+
+    /// Finalize an image only if it still exists and is awaiting processing.
+    pub async fn finish_image_processing(&self, file: &FileDto) -> Result<bool> {
+        let row: FileRow = file.clone().into();
+        let query = r#"
+            UPDATE files
+            SET img_versions = :img_versions, img_taken_at = :img_taken_at,
+                content_type = :content_type, size = :size, status = 'active',
+                updated_at = :updated_at
+            WHERE id = :id AND status = 'processing' AND deleted_at IS NULL
+        "#;
+        let mut params = new_query_params();
+        params.push(opt_text_param(":img_versions", row.img_versions));
+        params.push(opt_integer_param(":img_taken_at", row.img_taken_at));
+        params.push(text_param(":content_type", row.content_type));
+        params.push(integer_param(":size", row.size));
+        params.push(integer_param(":updated_at", chrono::Utc::now().timestamp()));
+        params.push(text_param(":id", row.id));
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
+        let affected = stmt.execute(params).await.context(DbStatementSnafu)?;
+        Ok(affected > 0)
+    }
+
     pub async fn get(&self, id: &str) -> Result<Option<FileDto>> {
         let query = r#"
             SELECT
@@ -715,7 +765,8 @@ impl FileRepo {
                 img_versions,
                 img_taken_at,
                 created_at,
-                updated_at
+                updated_at,
+                status
             FROM files
             WHERE id = :id
             LIMIT 1
@@ -747,7 +798,8 @@ impl FileRepo {
                 img_versions,
                 img_taken_at,
                 created_at,
-                updated_at
+                updated_at,
+                status
             FROM files
             WHERE dir_id = :dir_id AND name = :name
             LIMIT 1
@@ -893,6 +945,7 @@ mod tests {
             org_id: "org-note".to_string(),
             dir_id: "dir-note".to_string(),
             file_type: FileType::Note,
+            status: FileStatus::Active,
             name: "Shopping list".to_string(),
             filename: "Shopping list".to_string(),
             content_type: "text/plain".to_string(),
@@ -923,6 +976,11 @@ mod tests {
             .unwrap();
 
         assert_eq!(created.id, file.id);
+        assert_eq!(created.status, FileStatus::Active);
+        assert_eq!(
+            ctx.db.files.get(&file.id).await.unwrap().unwrap().status,
+            FileStatus::Active
+        );
         assert_eq!(
             ctx.db.files.get(&file.id).await.unwrap().unwrap().name,
             file.name
@@ -933,6 +991,86 @@ mod tests {
         assert_eq!(note.content, "ciphertext");
         assert_eq!(note.checksum, "checksum");
         assert_eq!(note.next_revision, LATEST_REVISION);
+    }
+
+    #[tokio::test]
+    async fn create_preserves_non_active_status() {
+        let ctx = TestCtx::new("create-file-status").await.unwrap();
+        let mut file = note_file();
+        file.status = FileStatus::Processing;
+
+        let created = ctx.db.files.create(file.clone()).await.unwrap();
+        assert_eq!(created.status, FileStatus::Processing);
+        assert_eq!(
+            ctx.db.files.get(&file.id).await.unwrap().unwrap().status,
+            FileStatus::Processing
+        );
+        assert_eq!(
+            ctx.db
+                .files
+                .find_by_name(&file.dir_id, &file.name)
+                .await
+                .unwrap()
+                .unwrap()
+                .status,
+            FileStatus::Processing
+        );
+    }
+
+    #[tokio::test]
+    async fn finish_image_processing_updates_only_processing_files() {
+        let ctx = TestCtx::new("finish-image").await.unwrap();
+        let mut file = note_file();
+        file.file_type = FileType::Image;
+        file.status = FileStatus::Processing;
+        file.img_taken_at = Some(42);
+        ctx.db.files.create(file.clone()).await.unwrap();
+
+        assert!(ctx.db.files.finish_image_processing(&file).await.unwrap());
+        let updated = ctx.db.files.get(&file.id).await.unwrap().unwrap();
+        assert_eq!(updated.status, FileStatus::Active);
+        assert_eq!(updated.img_taken_at, Some(42));
+        assert!(!ctx.db.files.finish_image_processing(&file).await.unwrap());
+        ctx.db.files.delete(&file.id).await.unwrap();
+        assert!(!ctx.db.files.finish_image_processing(&file).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn only_active_files_can_be_marked_inactive() {
+        let ctx = TestCtx::new("mark-file-inactive").await.unwrap();
+        let mut file = note_file();
+        file.file_type = FileType::Image;
+        file.status = FileStatus::Processing;
+        ctx.db.files.create(file.clone()).await.unwrap();
+        assert!(!ctx.db.files.mark_inactive(&file.id).await.unwrap());
+        assert!(ctx.db.files.finish_image_processing(&file).await.unwrap());
+        assert!(ctx.db.files.mark_inactive(&file.id).await.unwrap());
+        assert!(!ctx.db.files.mark_inactive(&file.id).await.unwrap());
+        assert_eq!(
+            ctx.db.files.get(&file.id).await.unwrap().unwrap().status,
+            FileStatus::Inactive
+        );
+        let params = ListFilesParams {
+            page: None,
+            per_page: None,
+            keyword: None,
+        };
+        assert_eq!(
+            ctx.db
+                .files
+                .listing_count(&file.dir_id, &params)
+                .await
+                .unwrap(),
+            0
+        );
+        assert!(
+            ctx.db
+                .files
+                .find_by_name(&file.dir_id, &file.name)
+                .await
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[tokio::test]

@@ -10,7 +10,7 @@ use cipher::{decrypt, encrypt};
 use db::file::MAX_FILES;
 use memo::{
     dir::DirDto,
-    file::{FileDto, FileType},
+    file::{FileDto, FileStatus, FileType},
     note::{CreateNoteDto, NoteDto, NoteRevisionDto, UpdateNoteDto},
     utils::{IdPrefix, generate_prefixed_id, str_checksum, truncate_string, valid_prefixed_id},
     validators::flatten_errors,
@@ -64,6 +64,7 @@ pub async fn create_note_svc(
         org_id: dir.org_id.clone(),
         dir_id: dir.id.clone(),
         file_type: FileType::Note,
+        status: FileStatus::Active,
         name: data.name.clone(),
         filename: data.name.clone(),
         content_type: "text/plain".to_string(),
@@ -81,12 +82,14 @@ pub async fn create_note_svc(
     let cipher_content =
         encrypt(&state.config.notes_master_key, &data.content).context(CipherSnafu)?;
 
-    state
+    let file = state
         .db
         .files
         .retry_create_note(file, cipher_content, checksum, 5)
         .await
-        .context(DbSnafu)
+        .context(DbSnafu)?;
+
+    Ok(file)
 }
 
 pub async fn get_note_svc(

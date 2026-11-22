@@ -71,6 +71,37 @@ Every time you modify a note, a new revision is created.
 - Update note: creates a new note record and updates the file record with updated_at
 - Delete note: deletes both the note revisions and the file entry
 
+## Job Queue
+
+The queue uses the `jobs` table in the main database. Producers enqueue a job
+with a type, JSON payload, maximum attempts, and availability time. A single
+dispatcher polls for eligible jobs and conditionally claims them before
+passing them to available workers. Workers execute handlers concurrently.
+
+Workers are disabled by default. Set `JOB_WORKERS=2` to allow two concurrent
+jobs in the API process. The dispatcher recovers expired leases; workers renew
+leases while running and record completion or failure. Failed attempts are
+retried after a delay until the maximum is reached. Jobs may execute more than
+once, so handlers must tolerate retries. Completed and failed jobs remain in
+the table; automatic cleanup is not currently scheduled.
+
+The initial `logger_job_handler` accepts a JSON payload such as
+`{"message":"Hello"}` and logs the message at info level. Creating a note
+enqueues a log job on a best-effort basis: an enqueue failure is logged but
+does not undo note creation.
+
+Image uploads create a file record with status `processing` and enqueue a
+`create_image_versions` job. The response is returned before image versions
+are available. A worker downloads the original, generates and uploads versions,
+and marks the file `active`. Failed jobs are retried by the queue; a file stays
+in `processing` if all attempts fail or enqueueing fails. Workers must be enabled
+for images to be processed.
+
+Deleting a non-note file marks an active file `inactive` and queues a
+`delete_file` job. The worker deletes the record and then its storage objects.
+Only active files can be deleted. If enqueueing fails, the file remains inactive
+without a job; storage failures are retried using the metadata in the job.
+
 ## Models
 
 Dir:
@@ -104,3 +135,17 @@ Note:
 - next_revision ('latest' or the next revision's notes.id)
 - created_at
 
+Job:
+- id (`job_` prefix)
+- job_type
+- payload (JSON text)
+- status (`pending`, `running`, `completed`, or `failed`)
+- attempts, max_attempts
+- available_at
+- lease_token, lease_expires_at (nullable)
+- last_error (nullable)
+- created_at, updated_at
+
+Job timestamps are Unix seconds. A lease identifies the current claim and
+expires if the worker cannot renew it; an expired job can be retried if it has
+attempts remaining.

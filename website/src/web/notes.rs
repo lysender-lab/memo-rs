@@ -557,7 +557,7 @@ pub async fn post_edit_note_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use memo::file::FileType;
+    use memo::file::{FileStatus, FileType};
 
     fn dir() -> DirDto {
         DirDto {
@@ -577,6 +577,7 @@ mod tests {
             org_id: "org-id".into(),
             dir_id: "dir-id".into(),
             file_type: FileType::Note,
+            status: FileStatus::Active,
             name: "My note".into(),
             filename: "note".into(),
             content_type: "text/plain".into(),
