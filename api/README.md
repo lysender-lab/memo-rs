@@ -73,18 +73,22 @@ Every time you modify a note, a new revision is created.
 
 ## Job Queue
 
-The api application will run a worker pool aside from running a web server.
+The queue uses the `jobs` table in the main database. Producers enqueue a job
+with a type, JSON payload, maximum attempts, and availability time. A single
+dispatcher polls for eligible jobs and conditionally claims them before
+passing them to available workers. Workers execute handlers concurrently.
 
-- Have a worker pool
-- Have a job queue which is backed by a simple database table
-- Jobs are pushed into the queue
-- Worker pool will drain the queue
+Workers are disabled by default. Set `JOB_WORKERS=2` to allow two concurrent
+jobs in the API process. The dispatcher recovers expired leases; workers renew
+leases while running and record completion or failure. Failed attempts are
+retried after a delay until the maximum is reached. Jobs may execute more than
+once, so handlers must tolerate retries. Completed and failed jobs remain in
+the table; automatic cleanup is not currently scheduled.
 
-Workers are disabled by default. Set `JOB_WORKERS=2` to run two workers in
-the API process. The initial job type `logger_job_handler` logs its JSON
-`message` field at info level. Creating a note enqueues a log job on a
-best-effort basis. Jobs are stored in the main database and may be executed more
-than once, so future handlers must tolerate retries.
+The initial `logger_job_handler` accepts a JSON payload such as
+`{"message":"Hello"}` and logs the message at info level. Creating a note
+enqueues a log job on a best-effort basis: an enqueue failure is logged but
+does not undo note creation.
 
 ## Models
 
@@ -118,3 +122,18 @@ Note:
 - content
 - next_revision ('latest' or the next revision's notes.id)
 - created_at
+
+Job:
+- id (`job_` prefix)
+- job_type
+- payload (JSON text)
+- status (`pending`, `running`, `completed`, or `failed`)
+- attempts, max_attempts
+- available_at
+- lease_token, lease_expires_at (nullable)
+- last_error (nullable)
+- created_at, updated_at
+
+Job timestamps are Unix seconds. A lease identifies the current claim and
+expires if the worker cannot renew it; an expired job can be retried if it has
+attempts remaining.
