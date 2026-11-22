@@ -2,12 +2,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use db::DbMapper;
-use memo::job::{JobDto, NewJobDto};
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
+
+use db::DbMapper;
+use memo::job::{JobDto, NewJobDto};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
 const LEASE_DURATION: Duration = Duration::from_secs(60);
@@ -59,6 +60,7 @@ impl WorkerPool {
                 dispatcher_loop(db, receiver, count).await;
             }
         });
+
         Self {
             shutdown,
             supervisor,
