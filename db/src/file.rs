@@ -293,12 +293,15 @@ impl FileRepo {
                 updated_at,
                 status
             FROM files
-            WHERE dir_id = :dir_id
+            WHERE
+                dir_id = :dir_id
+                AND status = :active_status
         "#
         .to_string();
 
         let mut q_params = new_query_params();
         q_params.push(text_param(":dir_id", dir.id.clone()));
+        q_params.push(text_param(":active_status", FileStatus::Active.to_string()));
 
         if let Some(keyword) = &params.keyword
             && !keyword.is_empty()
