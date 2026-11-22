@@ -24,6 +24,7 @@ pub fn create_image_versions_job(file_id: String) -> NewJobDto {
 }
 
 async fn create_image_versions_job_handler(state: &AppState, file_id: &str) -> crate::Result<()> {
+    info!("Creating image versions for file: {}", file_id);
     crate::file::process_image_svc(state, file_id).await
 }
 
@@ -31,17 +32,6 @@ async fn create_image_versions_job_handler(state: &AppState, file_id: &str) -> c
 #[serde(deny_unknown_fields)]
 pub(super) struct LoggerJobPayload {
     pub message: String,
-}
-
-/// Create a logger job available for immediate processing.
-pub fn logger_job(message: String) -> NewJobDto {
-    let payload = LoggerJobPayload { message };
-    NewJobDto {
-        job_type: LOGGER_JOB_TYPE.to_string(),
-        payload: serde_json::to_string(&payload).expect("logger payload must serialize"),
-        max_attempts: 3,
-        available_at: chrono::Utc::now().timestamp(),
-    }
 }
 
 async fn logger_job_handler(message: &str) {
@@ -70,19 +60,6 @@ pub(super) async fn dispatch(state: &AppState, job: &JobDto) -> std::result::Res
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn logger_job_has_expected_payload_and_defaults() {
-        let before = chrono::Utc::now().timestamp();
-        let job = logger_job("hello".to_string());
-        let after = chrono::Utc::now().timestamp();
-        let payload: LoggerJobPayload = serde_json::from_str(&job.payload).unwrap();
-
-        assert_eq!(job.job_type, LOGGER_JOB_TYPE);
-        assert_eq!(payload.message, "hello");
-        assert_eq!(job.max_attempts, 3);
-        assert!((before..=after).contains(&job.available_at));
-    }
 
     #[test]
     fn image_job_has_expected_payload_and_defaults() {

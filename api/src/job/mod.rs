@@ -6,7 +6,7 @@ mod worker;
 use db::DbMapper;
 use memo::job::{JobDto, NewJobDto};
 
-pub use handlers::{create_image_versions_job, logger_job};
+pub use handlers::create_image_versions_job;
 pub use worker::WorkerPool;
 
 /// Enqueue a job for later processing.
