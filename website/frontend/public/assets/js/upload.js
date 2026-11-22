@@ -188,9 +188,7 @@ async function uploadFiles() {
     document.getElementById('upload-files-token') ||
     document.getElementById('upload-photos-token');
   const prepareUploadInput = document.getElementById('prepare-upload-url');
-  const galleryContainer =
-    document.getElementById('uploaded-items') ||
-    document.getElementById('photo-gallery');
+  const uploadedItems = document.getElementById('uploaded-items');
   const uploadContainer =
     document.getElementById('files-input-w') ||
     document.getElementById('photos-input-w');
@@ -205,7 +203,6 @@ async function uploadFiles() {
     !filesInput ||
     !tokenInput ||
     !prepareUploadInput ||
-    !galleryContainer ||
     !progressContainer ||
     !errorsContainer ||
     !successElement ||
@@ -270,8 +267,8 @@ async function uploadFiles() {
       file,
     )
       .then((res) => {
-        if (res.html) {
-          galleryContainer.appendChild(createDomElement(res.html));
+        if (uploadedItems && res.html) {
+          uploadedItems.appendChild(createDomElement(res.html));
         }
 
         uploadedCount++;

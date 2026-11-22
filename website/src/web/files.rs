@@ -287,18 +287,22 @@ struct UploadDocumentsPageTemplate {
 }
 
 #[derive(Template)]
-#[template(path = "widgets/photo_grid_item.html")]
-struct UploadedPhotoTemplate {
-    theme: String,
-    photo: Photo,
-}
-
-#[derive(Template)]
 #[template(path = "widgets/uploaded_file_item.html")]
 struct UploadedFileTemplate {
     name: String,
     icon_class: String,
     url: Option<String>,
+}
+
+impl From<FileDto> for UploadedFileTemplate {
+    fn from(file: FileDto) -> Self {
+        let icon_class = file_icon_class(&file.name, &file.content_type).to_string();
+        Self {
+            name: file.name,
+            icon_class,
+            url: file.url,
+        }
+    }
 }
 
 pub async fn upload_page_handler(
@@ -356,7 +360,6 @@ pub async fn generate_upload_url_handler(
 
 pub async fn add_file_handler(
     Extension(ctx): Extension<Ctx>,
-    Extension(pref): Extension<Pref>,
     Extension(dir): Extension<DirDto>,
     State(state): State<AppState>,
     payload: Form<CommitUploadPayload>,
@@ -372,25 +375,8 @@ pub async fn add_file_handler(
 
     match result {
         Ok(file) => {
-            let html = if dir.dir_type == DirType::Documents {
-                let name = file.name;
-                let icon_class = file_icon_class(&name, &file.content_type).to_string();
-                let tpl = UploadedFileTemplate {
-                    name,
-                    icon_class,
-                    url: file.url,
-                };
-
-                tpl.render().context(TemplateSnafu)?
-            } else {
-                let photo: Photo = Photo::try_from(file).map_err(|msg| Error::Whatever { msg })?;
-                let tpl = UploadedPhotoTemplate {
-                    photo,
-                    theme: pref.theme,
-                };
-
-                tpl.render().context(TemplateSnafu)?
-            };
+            let tpl = UploadedFileTemplate::from(file);
+            let html = tpl.render().context(TemplateSnafu)?;
 
             Ok(Response::builder()
                 .status(201)
@@ -399,6 +385,53 @@ pub async fn add_file_handler(
                 .context(ResponseBuilderSnafu)?)
         }
         Err(err) => Ok(handle_error_message(&err)),
+    }
+}
+
+#[cfg(test)]
+mod upload_result_tests {
+    use super::*;
+    use memo::file::{FileStatus, FileType};
+
+    fn file(file_type: FileType, status: FileStatus, url: Option<String>) -> FileDto {
+        FileDto {
+            id: "file-id".into(),
+            org_id: "org-id".into(),
+            dir_id: "dir-id".into(),
+            file_type,
+            status,
+            name: "example.png".into(),
+            filename: "stored.png".into(),
+            content_type: "image/png".into(),
+            size: 10,
+            url,
+            img_versions: None,
+            img_taken_at: None,
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+
+    #[test]
+    fn processing_image_renders_without_versions_or_url() {
+        let html = UploadedFileTemplate::from(file(FileType::Image, FileStatus::Processing, None))
+            .render()
+            .unwrap();
+        assert!(html.contains("example.png"));
+        assert!(html.contains("file-link-disabled"));
+    }
+
+    #[test]
+    fn document_result_preserves_link() {
+        let html = UploadedFileTemplate::from(file(
+            FileType::File,
+            FileStatus::Active,
+            Some("https://example.com/file".into()),
+        ))
+        .render()
+        .unwrap();
+        assert!(html.contains("https://example.com/file"));
+        assert!(html.contains("example.png"));
     }
 }
 
