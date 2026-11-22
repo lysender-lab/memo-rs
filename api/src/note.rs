@@ -4,7 +4,7 @@ use validator::Validate;
 use crate::{
     Result,
     error::{CipherSnafu, DbSnafu, NotFoundSnafu, ValidationSnafu},
-    job::{self, LOGGER_JOB_TYPE, LoggerJobPayload},
+    job,
     state::AppState,
 };
 use cipher::{decrypt, encrypt};
@@ -100,15 +100,7 @@ pub async fn create_note_svc(
 }
 
 fn note_created_log_job(user_name: &str, file_id: &str) -> NewJobDto {
-    let payload = LoggerJobPayload {
-        message: format!("{} created a new note: {}", user_name, file_id),
-    };
-    NewJobDto {
-        job_type: LOGGER_JOB_TYPE.to_string(),
-        payload: serde_json::to_string(&payload).expect("logger payload must serialize"),
-        max_attempts: 3,
-        available_at: chrono::Utc::now().timestamp(),
-    }
+    job::logger_job(format!("{} created a new note: {}", user_name, file_id))
 }
 
 pub async fn get_note_svc(
@@ -229,10 +221,10 @@ mod tests {
     #[test]
     fn note_created_job_contains_user_and_file_id() {
         let job = note_created_log_job("Alice", "fil_123");
-        let payload: LoggerJobPayload = serde_json::from_str(&job.payload).unwrap();
-        assert_eq!(job.job_type, LOGGER_JOB_TYPE);
+        let payload: serde_json::Value = serde_json::from_str(&job.payload).unwrap();
+        assert_eq!(job.job_type, "logger_job_handler");
         assert_eq!(job.max_attempts, 3);
-        assert_eq!(payload.message, "Alice created a new note: fil_123");
+        assert_eq!(payload["message"], "Alice created a new note: fil_123");
     }
 
     #[test]

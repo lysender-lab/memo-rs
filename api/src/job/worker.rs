@@ -1,14 +1,15 @@
-//! Database-backed job workers and job dispatch.
+//! Database-backed job workers.
 use std::sync::Arc;
 use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 
 use db::DbMapper;
-use memo::job::{JobDto, NewJobDto};
+use memo::job::JobDto;
+
+use super::handlers::dispatch;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
 const LEASE_DURATION: Duration = Duration::from_secs(60);
@@ -16,35 +17,6 @@ const RENEW_INTERVAL: Duration = Duration::from_secs(20);
 const RECOVERY_INTERVAL: Duration = Duration::from_secs(30);
 const RETRY_DELAY_SECONDS: i64 = 30;
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(30);
-
-/// Enqueue a job for later processing.
-pub async fn enqueue(db: &DbMapper, job: NewJobDto) -> db::Result<JobDto> {
-    db.jobs.enqueue(job).await
-}
-
-pub const LOGGER_JOB_TYPE: &str = "logger_job_handler";
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct LoggerJobPayload {
-    pub message: String,
-}
-
-async fn logger_job_handler(message: &str) {
-    info!("{}", message);
-}
-
-async fn dispatch(job: &JobDto) -> std::result::Result<(), String> {
-    match job.job_type.as_str() {
-        LOGGER_JOB_TYPE => {
-            let payload: LoggerJobPayload = serde_json::from_str(&job.payload)
-                .map_err(|_| "Invalid logger job payload".to_string())?;
-            logger_job_handler(&payload.message).await;
-            Ok(())
-        }
-        _ => Err("Unknown job type".to_string()),
-    }
-}
 
 pub struct WorkerPool {
     shutdown: watch::Sender<bool>,
@@ -168,16 +140,19 @@ async fn run_job(db: &DbMapper, job: JobDto) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use memo::job::JobStatus;
+    use crate::job::{enqueue, handlers::LOGGER_JOB_TYPE};
+    use memo::job::{JobStatus, NewJobDto};
 
     #[tokio::test]
-    async fn workers_execute_and_retry_jobs() {
+    async fn workers_execute_and_fail_invalid_jobs() {
         let dir =
             std::env::temp_dir().join(format!("memo-worker-test-{}", memo::utils::generate_id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("jobs.db");
         let conn = db::db::create_db_pool(&path).await.unwrap();
-        for statement in include_str!("../../db/db/migrations/memo/12-create-jobs.sql").split(';') {
+        for statement in
+            include_str!("../../../db/db/migrations/memo/12-create-jobs.sql").split(';')
+        {
             if !statement.trim().is_empty() {
                 conn.execute(statement.trim(), ()).await.unwrap();
             }
