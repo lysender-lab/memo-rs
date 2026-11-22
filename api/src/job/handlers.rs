@@ -32,6 +32,7 @@ async fn delete_file_job_handler(
     state: &AppState,
     payload: &DeleteFilePayload,
 ) -> crate::Result<()> {
+    info!("Deleting file: {}", &payload.file.id);
     state
         .db
         .files
