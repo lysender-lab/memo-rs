@@ -452,6 +452,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn cleanup_only_deletes_terminal_jobs_before_cutoff() {
+        let ctx = TestCtx::new("jobs-cleanup-retention").await.unwrap();
+        let repo = &ctx.db.jobs;
+        let cutoff = now() - 7 * 24 * 60 * 60;
+        let cases = [
+            ("completed", cutoff - 1, true),
+            ("failed", cutoff - 1, true),
+            ("completed", cutoff, false),
+            ("failed", cutoff + 1, false),
+            ("pending", cutoff - 1, false),
+            ("running", cutoff - 1, false),
+        ];
+        let mut jobs = Vec::new();
+        for (status, updated_at, deleted) in cases {
+            let job = repo.enqueue(input(1, now())).await.unwrap();
+            ctx.db
+                .any
+                .execute(
+                    "UPDATE jobs SET status = :status, updated_at = :updated_at WHERE id = :id"
+                        .into(),
+                    vec![
+                        (":status".into(), Value::Text(status.into())),
+                        (":updated_at".into(), Value::Integer(updated_at)),
+                        (":id".into(), Value::Text(job.id.clone())),
+                    ],
+                )
+                .await
+                .unwrap();
+            jobs.push((job.id, deleted));
+        }
+
+        assert_eq!(repo.delete_finished_before(cutoff).await.unwrap(), 2);
+        for (id, deleted) in jobs {
+            assert_eq!(repo.get(&id).await.unwrap().is_none(), deleted);
+        }
+    }
+
+    #[tokio::test]
     async fn expired_lease_recovery_and_exhaustion() {
         let ctx = TestCtx::new("jobs-expiry").await.unwrap();
         let repo = &ctx.db.jobs;
