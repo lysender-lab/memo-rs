@@ -188,7 +188,6 @@ async function uploadFiles() {
     document.getElementById('upload-files-token') ||
     document.getElementById('upload-photos-token');
   const prepareUploadInput = document.getElementById('prepare-upload-url');
-  const uploadedItems = document.getElementById('uploaded-items');
   const uploadContainer =
     document.getElementById('files-input-w') ||
     document.getElementById('photos-input-w');
@@ -267,10 +266,6 @@ async function uploadFiles() {
       file,
     )
       .then((res) => {
-        if (uploadedItems && res.html) {
-          uploadedItems.appendChild(createDomElement(res.html));
-        }
-
         uploadedCount++;
         updateOverallProgress();
 
