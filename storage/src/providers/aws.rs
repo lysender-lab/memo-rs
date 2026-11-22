@@ -193,6 +193,14 @@ impl AwsStorageProvider {
                     );
                     self.delete_object_by_path(&dir.bucket_name, &path).await?;
                 }
+            } else {
+                let path = original_object_key(
+                    &dir.org_id,
+                    &dir.dir_type.to_string(),
+                    &dir.dir_name,
+                    &file.filename,
+                );
+                self.delete_object_by_path(&dir.bucket_name, &path).await?;
             }
         } else {
             let path = format!(

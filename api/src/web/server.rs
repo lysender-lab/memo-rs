@@ -21,7 +21,7 @@ pub async fn run_web_server(config: &Config) -> Result<()> {
             msg: format!("Unable to bind HTTP server: {e}"),
         })?;
     let scheduler = cron::start(state.clone()).await?;
-    let workers = WorkerPool::start(state.db.clone(), config.job_workers);
+    let workers = WorkerPool::start(state.clone(), config.job_workers);
 
     let routes_all = Router::new()
         .merge(all_routes(state))

@@ -712,6 +712,29 @@ impl FileRepo {
         }
     }
 
+    /// Finalize an image only if it still exists and is awaiting processing.
+    pub async fn finish_image_processing(&self, file: &FileDto) -> Result<bool> {
+        let row: FileRow = file.clone().into();
+        let query = r#"
+            UPDATE files
+            SET img_versions = :img_versions, img_taken_at = :img_taken_at,
+                content_type = :content_type, size = :size, status = 'active',
+                updated_at = :updated_at
+            WHERE id = :id AND status = 'processing' AND deleted_at IS NULL
+        "#;
+        let mut params = new_query_params();
+        params.push(opt_text_param(":img_versions", row.img_versions));
+        params.push(opt_integer_param(":img_taken_at", row.img_taken_at));
+        params.push(text_param(":content_type", row.content_type));
+        params.push(integer_param(":size", row.size));
+        params.push(integer_param(":updated_at", chrono::Utc::now().timestamp()));
+        params.push(text_param(":id", row.id));
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
+        let affected = stmt.execute(params).await.context(DbStatementSnafu)?;
+        Ok(affected > 0)
+    }
+
     pub async fn get(&self, id: &str) -> Result<Option<FileDto>> {
         let query = r#"
             SELECT
@@ -977,6 +1000,24 @@ mod tests {
                 .status,
             FileStatus::Processing
         );
+    }
+
+    #[tokio::test]
+    async fn finish_image_processing_updates_only_processing_files() {
+        let ctx = TestCtx::new("finish-image").await.unwrap();
+        let mut file = note_file();
+        file.file_type = FileType::Image;
+        file.status = FileStatus::Processing;
+        file.img_taken_at = Some(42);
+        ctx.db.files.create(file.clone()).await.unwrap();
+
+        assert!(ctx.db.files.finish_image_processing(&file).await.unwrap());
+        let updated = ctx.db.files.get(&file.id).await.unwrap().unwrap();
+        assert_eq!(updated.status, FileStatus::Active);
+        assert_eq!(updated.img_taken_at, Some(42));
+        assert!(!ctx.db.files.finish_image_processing(&file).await.unwrap());
+        ctx.db.files.delete(&file.id).await.unwrap();
+        assert!(!ctx.db.files.finish_image_processing(&file).await.unwrap());
     }
 
     #[tokio::test]

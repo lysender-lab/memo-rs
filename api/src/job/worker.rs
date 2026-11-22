@@ -1,12 +1,11 @@
 //! Database-backed job workers.
-use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 
-use db::DbMapper;
+use crate::state::AppState;
 use memo::job::JobDto;
 
 use super::handlers::dispatch;
@@ -24,12 +23,12 @@ pub struct WorkerPool {
 }
 
 impl WorkerPool {
-    pub fn start(db: Arc<DbMapper>, count: usize) -> Self {
+    pub fn start(state: AppState, count: usize) -> Self {
         let (shutdown, receiver) = watch::channel(false);
         let supervisor = tokio::spawn(async move {
             if count > 0 {
                 info!(count, "Job worker pool started");
-                dispatcher_loop(db, receiver, count).await;
+                dispatcher_loop(state, receiver, count).await;
             }
         });
 
@@ -52,7 +51,7 @@ impl WorkerPool {
     }
 }
 
-async fn dispatcher_loop(db: Arc<DbMapper>, mut shutdown: watch::Receiver<bool>, count: usize) {
+async fn dispatcher_loop(state: AppState, mut shutdown: watch::Receiver<bool>, count: usize) {
     let mut tasks = JoinSet::new();
     let mut recovery = tokio::time::interval(RECOVERY_INTERVAL);
     recovery.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -64,7 +63,7 @@ async fn dispatcher_loop(db: Arc<DbMapper>, mut shutdown: watch::Receiver<bool>,
         tokio::select! {
             _ = shutdown.changed() => break,
             _ = recovery.tick() => {
-                if let Err(error) = db.jobs.recover_expired().await {
+                if let Err(error) = state.db.jobs.recover_expired().await {
                     warn!(%error, "Unable to recover expired jobs");
                 }
             }
@@ -74,10 +73,10 @@ async fn dispatcher_loop(db: Arc<DbMapper>, mut shutdown: watch::Receiver<bool>,
                 }
             }
             _ = tokio::time::sleep_until(next_poll), if tasks.len() < count => {
-                match db.jobs.claim_next(LEASE_DURATION).await {
+                match state.db.jobs.claim_next(LEASE_DURATION).await {
                     Ok(Some(job)) => {
-                        let db = db.clone();
-                        tasks.spawn(async move { run_job(&db, job).await });
+                        let state = state.clone();
+                        tasks.spawn(async move { run_job(&state, job).await });
                         next_poll = tokio::time::Instant::now();
                     }
                     Ok(None) => next_poll = tokio::time::Instant::now() + POLL_INTERVAL,
@@ -96,12 +95,13 @@ async fn dispatcher_loop(db: Arc<DbMapper>, mut shutdown: watch::Receiver<bool>,
     }
 }
 
-async fn run_job(db: &DbMapper, job: JobDto) {
+async fn run_job(state: &AppState, job: JobDto) {
+    let db = &state.db;
     let Some(token) = job.lease_token.as_deref() else {
         error!(job_id = %job.id, "Claimed job has no lease token");
         return;
     };
-    let handler = dispatch(&job);
+    let handler = dispatch(state, &job);
     tokio::pin!(handler);
     let outcome = loop {
         tokio::select! {
@@ -142,6 +142,7 @@ mod tests {
     use super::*;
     use crate::job::{enqueue, handlers::LOGGER_JOB_TYPE};
     use memo::job::{JobStatus, NewJobDto};
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn workers_execute_and_fail_invalid_jobs() {
@@ -159,6 +160,37 @@ mod tests {
         }
         drop(conn);
         let db = Arc::new(db::create_db_mapper(&path, 4).await.unwrap());
+        let config = crate::config::Config {
+            jwt_secret: String::new(),
+            notes_master_key: String::new(),
+            upload_dir: dir.clone(),
+            cloud: crate::config::CloudConfig {
+                aws_access_key_id: String::new(),
+                aws_secret_access_key: String::new(),
+                aws_region: String::new(),
+                bucket: String::new(),
+            },
+            server: crate::config::ServerConfig {
+                address: String::new(),
+            },
+            db: crate::config::DbConfig {
+                dir: dir.clone(),
+                pool_size: 4,
+            },
+            auth: crate::config::AuthConfig {
+                api_url: String::new(),
+            },
+            job_workers: 2,
+        };
+        let state = AppState {
+            config,
+            client: reqwest::Client::new(),
+            storage_client: Arc::new(storage::StorageClient::new_aws().await.unwrap()),
+            db: db.clone(),
+            auth_cache: moka::sync::Cache::new(10),
+            dir_cache: moka::sync::Cache::new(10),
+            file_cache: moka::sync::Cache::new(10),
+        };
         let job = enqueue(
             &db,
             NewJobDto {
@@ -192,14 +224,14 @@ mod tests {
         )
         .await
         .unwrap();
-        let disabled = WorkerPool::start(db.clone(), 0);
+        let disabled = WorkerPool::start(state.clone(), 0);
         tokio::time::sleep(Duration::from_millis(50)).await;
         assert_eq!(
             db.jobs.get(&job.id).await.unwrap().unwrap().status,
             JobStatus::Pending
         );
         disabled.shutdown().await;
-        let pool = WorkerPool::start(db.clone(), 2);
+        let pool = WorkerPool::start(state.clone(), 2);
         tokio::time::timeout(Duration::from_secs(10), async {
             loop {
                 let a = db.jobs.get(&job.id).await.unwrap().unwrap();
@@ -219,6 +251,7 @@ mod tests {
         .await
         .unwrap();
         pool.shutdown().await;
+        drop(state);
         drop(db);
         std::fs::remove_dir_all(dir).unwrap();
     }

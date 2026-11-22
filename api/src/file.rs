@@ -40,6 +40,90 @@ pub struct PhotoExif {
     pub img_taken_at: Option<i64>,
 }
 
+/// Process a previously reserved image record.
+pub async fn process_image_svc(state: &AppState, file_id: &str) -> Result<()> {
+    let Some(mut file) = state.db.files.get(file_id).await.context(DbSnafu)? else {
+        return Ok(());
+    };
+    if file.file_type != FileType::Image || file.status != FileStatus::Processing {
+        return Ok(());
+    }
+    let Some(dir) = state.db.dirs.get(&file.dir_id).await.context(DbSnafu)? else {
+        return Ok(());
+    };
+    let dir_meta = DirMeta {
+        bucket_name: state.config.cloud.bucket.clone(),
+        org_id: dir.org_id,
+        dir_type: dir.dir_type,
+        dir_name: dir.name,
+    };
+    // Each attempt uses its own directory, including when a lease is lost.
+    let temp_dir = state
+        .config
+        .upload_dir
+        .join(format!("image-job-{}", memo::utils::generate_id()));
+    let result = async {
+        let downloaded = state
+            .storage_client
+            .download(
+                &dir_meta,
+                ORIGINAL_PATH,
+                &file.name,
+                &file.filename,
+                &file.content_type,
+                &temp_dir,
+            )
+            .await
+            .context(StorageSnafu)?;
+        let data = downloaded.clone();
+        let (versions, taken_at, content_type) = tokio::task::spawn_blocking(move || {
+            let content_type = get_content_type(&data.path).unwrap_or(data.content_type.clone());
+            let exif = parse_exif_info(&data.path).unwrap_or_default();
+            let versions = create_versions(&data, &exif)?;
+            Ok::<_, Error>((versions, exif.img_taken_at, content_type))
+        })
+        .await
+        .context(TokioJoinSnafu)??;
+        file.img_versions = Some(versions);
+        file.img_taken_at = taken_at;
+        file.content_type = content_type;
+        file.size = downloaded.size;
+
+        if downloaded.content_type == "image/avif" && file.content_type == "image/jpeg" {
+            state
+                .storage_client
+                .reupload_original(
+                    &dir_meta,
+                    &file.filename,
+                    &downloaded.path,
+                    &file.content_type,
+                )
+                .await
+                .context(StorageSnafu)?;
+        }
+        state
+            .storage_client
+            .upload(&dir_meta, &temp_dir, &file)
+            .await
+            .context(StorageSnafu)?;
+        state
+            .db
+            .files
+            .finish_image_processing(&file)
+            .await
+            .context(DbSnafu)?;
+        state.file_cache.remove(file_id);
+        Ok(())
+    }
+    .await;
+    if let Err(err) = tokio::fs::remove_dir_all(&temp_dir).await
+        && err.kind() != std::io::ErrorKind::NotFound
+    {
+        error!("Unable to clean image job temporary directory: {}", err);
+    }
+    result
+}
+
 impl Default for PhotoExif {
     fn default() -> Self {
         Self {
@@ -128,6 +212,7 @@ pub async fn generate_upload_url_svc(
 
 /// Creates a file record by downloading the file first, capture metadata
 /// create image versions, then upload to cloud storage, and finally save to database
+#[allow(dead_code)]
 pub async fn create_file_svc(
     state: AppState,
     dir: &DirDto,
@@ -317,7 +402,6 @@ pub async fn delete_file_svc(state: AppState, dir_meta: &DirMeta, file: &FileDto
 
 /// Creates a file record relying completely from upload metadata
 /// Assumes that the file has been uploaded already
-/// Applicable to non-image files
 pub async fn create_remote_file_svc(
     state: AppState,
     dir: &DirDto,
@@ -325,13 +409,27 @@ pub async fn create_remote_file_svc(
 ) -> Result<FileDto> {
     let today = chrono::Utc::now().timestamp();
 
-    // Assumes FileType::File, however, in the future, there will be a Video type
+    let is_image = data.is_image();
+    if dir.dir_type == DirType::Photos && !is_image {
+        return ValidationSnafu {
+            msg: "Only photos are allowed".to_string(),
+        }
+        .fail();
+    }
     let file = FileDto {
         id: generate_prefixed_id(IdPrefix::File),
         org_id: dir.org_id.clone(),
         dir_id: dir.id.clone(),
-        file_type: FileType::File,
-        status: FileStatus::Active,
+        file_type: if is_image {
+            FileType::Image
+        } else {
+            FileType::File
+        },
+        status: if is_image {
+            FileStatus::Processing
+        } else {
+            FileStatus::Active
+        },
         name: data.orig_filename.clone(),
         filename: data.new_filename.clone(),
         content_type: data.content_type.clone(),

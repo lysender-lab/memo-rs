@@ -90,6 +90,13 @@ The initial `logger_job_handler` accepts a JSON payload such as
 enqueues a log job on a best-effort basis: an enqueue failure is logged but
 does not undo note creation.
 
+Image uploads create a file record with status `processing` and enqueue a
+`create_image_versions` job. The response is returned before image versions
+are available. A worker downloads the original, generates and uploads versions,
+and marks the file `active`. Failed jobs are retried by the queue; a file stays
+in `processing` if all attempts fail or enqueueing fails. Workers must be enabled
+for images to be processed.
+
 ## Models
 
 Dir:
