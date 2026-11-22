@@ -4,7 +4,6 @@ use validator::Validate;
 use crate::{
     Result,
     error::{CipherSnafu, DbSnafu, NotFoundSnafu, ValidationSnafu},
-    job,
     state::AppState,
 };
 use cipher::{decrypt, encrypt};
@@ -12,7 +11,6 @@ use db::file::MAX_FILES;
 use memo::{
     dir::DirDto,
     file::{FileDto, FileType},
-    job::NewJobDto,
     note::{CreateNoteDto, NoteDto, NoteRevisionDto, UpdateNoteDto},
     utils::{IdPrefix, generate_prefixed_id, str_checksum, truncate_string, valid_prefixed_id},
     validators::flatten_errors,
@@ -22,7 +20,6 @@ pub async fn create_note_svc(
     state: &AppState,
     dir: &DirDto,
     data: &CreateNoteDto,
-    user_name: &str,
 ) -> Result<FileDto> {
     let errors = data.validate();
     ensure!(
@@ -91,16 +88,7 @@ pub async fn create_note_svc(
         .await
         .context(DbSnafu)?;
 
-    let job = note_created_log_job(user_name, &file.id);
-    if let Err(error) = job::enqueue(&state.db, job).await {
-        tracing::warn!(file_id = %file.id, %error, "Unable to enqueue note creation log");
-    }
-
     Ok(file)
-}
-
-fn note_created_log_job(user_name: &str, file_id: &str) -> NewJobDto {
-    job::logger_job(format!("{} created a new note: {}", user_name, file_id))
 }
 
 pub async fn get_note_svc(

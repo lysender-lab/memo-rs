@@ -1,6 +1,7 @@
-use memo::job::{JobDto, NewJobDto};
 use serde::{Deserialize, Serialize};
 use tracing::info;
+
+use memo::job::{JobDto, NewJobDto};
 
 pub(super) const LOGGER_JOB_TYPE: &str = "logger_job_handler";
 

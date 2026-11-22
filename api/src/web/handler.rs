@@ -466,10 +466,7 @@ pub async fn create_note_handler(
         msg: "Invalid request payload",
     })?;
 
-    let user = actor.actor.as_ref().context(ForbiddenSnafu {
-        msg: "Authentication required",
-    })?;
-    let file = create_note_svc(&state, &dir, &data, &user.user.name).await?;
+    let file = create_note_svc(&state, &dir, &data).await?;
 
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,
