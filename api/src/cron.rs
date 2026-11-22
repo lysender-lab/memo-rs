@@ -14,7 +14,7 @@ pub async fn start(state: AppState) -> Result<JobScheduler> {
     let shared_state = state.clone();
 
     // Test job to demonstrate cron job capability
-    let test_job = Job::new_repeated_async(Duration::from_secs(10), move |_id, _scheduler| {
+    let test_job = Job::new_repeated_async(Duration::from_mins(1), move |_id, _scheduler| {
         Box::pin(log_cron_handler(state.clone()))
     })
     .context(CronSnafu)?;
