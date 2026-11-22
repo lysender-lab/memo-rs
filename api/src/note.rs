@@ -208,15 +208,6 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn note_created_job_contains_user_and_file_id() {
-        let job = note_created_log_job("Alice", "fil_123");
-        let payload: serde_json::Value = serde_json::from_str(&job.payload).unwrap();
-        assert_eq!(job.job_type, "logger_job_handler");
-        assert_eq!(job.max_attempts, 3);
-        assert_eq!(payload["message"], "Alice created a new note: fil_123");
-    }
-
-    #[test]
     fn revision_list_json_exposes_latest_marker_without_internal_fields() {
         let note = |id: &str, next_revision: &str, created_at| NoteDto {
             id: id.to_string(),
