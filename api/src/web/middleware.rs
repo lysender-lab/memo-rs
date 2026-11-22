@@ -174,7 +174,7 @@ pub async fn file_middleware(
         file_res = state.db.files.get(&params.file_id).await.context(DbSnafu)?;
 
         if let Some(f) = file_res.clone()
-            && f.status != FileStatus::Inactive
+            && f.status == FileStatus::Active
         {
             // Store to cache if present
             state.file_cache.insert(params.file_id.clone(), f);
@@ -186,7 +186,7 @@ pub async fn file_middleware(
     })?;
 
     ensure!(
-        file.status != FileStatus::Inactive,
+        file.status == FileStatus::Active,
         NotFoundSnafu {
             msg: "File not found"
         }
