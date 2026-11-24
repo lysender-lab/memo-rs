@@ -77,6 +77,12 @@ impl ProviderClient {
         }
     }
 
+    pub async fn delete_processing_file(&self, dir: &DirMeta, file: &FileDto) -> Result<()> {
+        match self {
+            Self::Aws(provider) => provider.delete_processing_file(dir, file).await,
+        }
+    }
+
     pub async fn attach_urls(&self, dir: &DirMeta, files: Vec<FileDto>) -> Result<Vec<FileDto>> {
         match self {
             Self::Aws(provider) => provider.attach_urls(dir, files).await,
