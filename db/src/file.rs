@@ -120,8 +120,6 @@ impl TryFrom<FileRow> for FileDto {
             None => None,
         };
 
-        // NOTE: This should return an error but current design prevents us to
-        // for now, will default to FileType::File on error
         let file_type = FileType::try_from(file.file_type.as_str()).unwrap_or(FileType::File);
         let status = FileStatus::try_from(file.status.as_str()).map_err(Error::from)?;
 
@@ -161,8 +159,6 @@ impl FromTursoRow for FileDto {
             None => None,
         };
 
-        // NOTE: This should return an error but current design prevents us to
-        // for now, will default to FileType::File on error
         let file_type = FileType::try_from(row_text(row, 3)?.as_str()).unwrap_or(FileType::File);
 
         Ok(Self {
