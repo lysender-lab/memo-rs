@@ -12,19 +12,12 @@ const FILE_PROCESSING_TIMEOUT_SECONDS: i64 = 60 * 60;
 
 pub async fn start(state: AppState) -> Result<JobScheduler> {
     let scheduler = JobScheduler::new().await.context(CronSnafu)?;
-    let shared_state = state.clone();
+    let job_cleanup_state = state.clone();
     let file_cleanup_state = state.clone();
-
-    // Test job to demonstrate cron job capability
-    let test_job = Job::new_repeated_async(Duration::from_mins(1), move |_id, _scheduler| {
-        Box::pin(log_cron_handler(state.clone()))
-    })
-    .context(CronSnafu)?;
-    scheduler.add(test_job).await.context(CronSnafu)?;
 
     // Cleanup finished jobs
     let cleanup_queue_job = Job::new_repeated_async(CLEANUP_INTERVAL, move |_id, _scheduler| {
-        Box::pin(cleanup_finished_jobs_handler(shared_state.clone()))
+        Box::pin(cleanup_finished_jobs_handler(job_cleanup_state.clone()))
     })
     .context(CronSnafu)?;
     scheduler.add(cleanup_queue_job).await.context(CronSnafu)?;
@@ -38,10 +31,6 @@ pub async fn start(state: AppState) -> Result<JobScheduler> {
 
     scheduler.start().await.context(CronSnafu)?;
     Ok(scheduler)
-}
-
-async fn log_cron_handler(_state: AppState) {
-    info!("hello from cron");
 }
 
 fn cleanup_cutoff(now: i64) -> i64 {
