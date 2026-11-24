@@ -65,6 +65,11 @@ impl StorageClient {
         self.provider.delete(dir, file).await
     }
 
+    /// Attempt every possible image object, including partially uploaded versions.
+    pub async fn delete_processing_file(&self, dir: &DirMeta, file: &FileDto) -> Result<()> {
+        self.provider.delete_processing_file(dir, file).await
+    }
+
     pub async fn attach_urls(&self, dir: &DirMeta, files: Vec<FileDto>) -> Result<Vec<FileDto>> {
         self.provider.attach_urls(dir, files).await
     }

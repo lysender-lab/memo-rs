@@ -1,15 +1,94 @@
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::state::AppState;
 use memo::dir::DirMeta;
-use memo::file::FileDto;
+use memo::file::{FileDto, FileStatus};
 use memo::job::{JobDto, NewJobDto};
 use snafu::ResultExt;
 
 pub(super) const LOGGER_JOB_TYPE: &str = "logger_job_handler";
 pub(super) const CREATE_IMAGE_VERSIONS_JOB_TYPE: &str = "create_image_versions";
 pub(super) const DELETE_FILE_JOB_TYPE: &str = "delete_file";
+pub(super) const CLEANUP_FILE_JOB_TYPE: &str = "cleanup_file";
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CleanupFilePayload {
+    file_id: String,
+}
+
+pub fn cleanup_file_job(file_id: String) -> NewJobDto {
+    NewJobDto {
+        job_type: CLEANUP_FILE_JOB_TYPE.to_string(),
+        payload: serde_json::to_string(&CleanupFilePayload { file_id })
+            .expect("cleanup file payload must serialize"),
+        max_attempts: 3,
+        available_at: chrono::Utc::now().timestamp(),
+    }
+}
+
+async fn cleanup_file_job_handler(state: &AppState, file_id: &str) -> crate::Result<()> {
+    let cutoff = chrono::Utc::now().timestamp().saturating_sub(60 * 60);
+    let Some(file) = state
+        .db
+        .files
+        .get(file_id)
+        .await
+        .context(crate::error::DbSnafu)?
+    else {
+        return Ok(());
+    };
+    if file.created_at > cutoff {
+        return Ok(());
+    }
+    if file.status == FileStatus::Processing {
+        if !state
+            .db
+            .files
+            .claim_processing_cleanup(file_id, cutoff)
+            .await
+            .context(crate::error::DbSnafu)?
+        {
+            return Ok(());
+        }
+        state.file_cache.remove(file_id);
+    } else if file.status != FileStatus::Cleaning {
+        return Ok(());
+    }
+
+    if let Some(dir) = state
+        .db
+        .dirs
+        .get(&file.dir_id)
+        .await
+        .context(crate::error::DbSnafu)?
+    {
+        let dir_meta = DirMeta {
+            bucket_name: state.config.cloud.bucket.clone(),
+            org_id: dir.org_id,
+            dir_type: dir.dir_type,
+            dir_name: dir.name,
+        };
+        if let Err(error) = state
+            .storage_client
+            .delete_processing_file(&dir_meta, &file)
+            .await
+        {
+            warn!(%error, %file_id, "Unable to delete all processing file objects");
+        }
+    } else {
+        warn!(%file_id, "Cannot clean up storage objects: directory not found");
+    }
+    state
+        .db
+        .files
+        .delete_cleaning(file_id)
+        .await
+        .context(crate::error::DbSnafu)?;
+    state.file_cache.remove(file_id);
+    Ok(())
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -101,6 +180,13 @@ pub(super) async fn dispatch(state: &AppState, job: &JobDto) -> std::result::Res
                 .await
                 .map_err(|error| error.to_string())
         }
+        CLEANUP_FILE_JOB_TYPE => {
+            let payload: CleanupFilePayload = serde_json::from_str(&job.payload)
+                .map_err(|_| "Invalid cleanup file job payload".to_string())?;
+            cleanup_file_job_handler(state, &payload.file_id)
+                .await
+                .map_err(|error| error.to_string())
+        }
         _ => Err("Unknown job type".to_string()),
     }
 }
@@ -116,6 +202,15 @@ mod tests {
         let job = create_image_versions_job("file-123".to_string());
         let payload: CreateImageVersionsPayload = serde_json::from_str(&job.payload).unwrap();
         assert_eq!(job.job_type, "create_image_versions");
+        assert_eq!(payload.file_id, "file-123");
+        assert_eq!(job.max_attempts, 3);
+    }
+
+    #[test]
+    fn cleanup_job_has_expected_payload_and_defaults() {
+        let job = cleanup_file_job("file-123".to_string());
+        let payload: CleanupFilePayload = serde_json::from_str(&job.payload).unwrap();
+        assert_eq!(job.job_type, "cleanup_file");
         assert_eq!(payload.file_id, "file-123");
         assert_eq!(job.max_attempts, 3);
     }

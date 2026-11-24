@@ -120,8 +120,6 @@ impl TryFrom<FileRow> for FileDto {
             None => None,
         };
 
-        // NOTE: This should return an error but current design prevents us to
-        // for now, will default to FileType::File on error
         let file_type = FileType::try_from(file.file_type.as_str()).unwrap_or(FileType::File);
         let status = FileStatus::try_from(file.status.as_str()).map_err(Error::from)?;
 
@@ -161,8 +159,6 @@ impl FromTursoRow for FileDto {
             None => None,
         };
 
-        // NOTE: This should return an error but current design prevents us to
-        // for now, will default to FileType::File on error
         let file_type = FileType::try_from(row_text(row, 3)?.as_str()).unwrap_or(FileType::File);
 
         Ok(Self {
@@ -220,6 +216,41 @@ impl FileRepo {
         let items: Vec<FileIdDto> = collect_rows(&mut rows).await?;
 
         Ok(items.into_iter().map(|item| item.id).collect())
+    }
+
+    /// Find stale processing files and interrupted cleanup claims.
+    pub async fn list_stale_processing_ids(&self, cutoff: i64) -> Result<Vec<String>> {
+        let query = "SELECT id FROM files WHERE deleted_at IS NULL AND status IN ('processing', 'cleaning') AND created_at <= :cutoff ORDER BY created_at ASC";
+        let mut params = new_query_params();
+        params.push(integer_param(":cutoff", cutoff));
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
+        let mut rows = stmt.query(params).await.context(DbStatementSnafu)?;
+        let items: Vec<FileIdDto> = collect_rows(&mut rows).await?;
+        Ok(items.into_iter().map(|item| item.id).collect())
+    }
+
+    /// Prevent image finalization while an abandoned file is being cleaned up.
+    pub async fn claim_processing_cleanup(&self, id: &str, cutoff: i64) -> Result<bool> {
+        let query = "UPDATE files SET status = 'cleaning', updated_at = :now WHERE id = :id AND status = 'processing' AND created_at <= :cutoff AND deleted_at IS NULL";
+        let mut params = new_query_params();
+        params.push(text_param(":id", id.to_owned()));
+        params.push(integer_param(":cutoff", cutoff));
+        params.push(integer_param(":now", chrono::Utc::now().timestamp()));
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
+        Ok(stmt.execute(params).await.context(DbStatementSnafu)? > 0)
+    }
+
+    pub async fn delete_cleaning(&self, id: &str) -> Result<bool> {
+        let mut params = new_query_params();
+        params.push(text_param(":id", id.to_owned()));
+        let conn = self.db_pool.acquire().await?;
+        let mut stmt = conn
+            .prepare("DELETE FROM files WHERE id = :id AND status = 'cleaning'")
+            .await
+            .context(DbPrepareSnafu)?;
+        Ok(stmt.execute(params).await.context(DbStatementSnafu)? > 0)
     }
 
     pub async fn listing_count(&self, dir_id: &str, params: &ListFilesParams) -> Result<i64> {
@@ -1033,6 +1064,56 @@ mod tests {
         assert!(!ctx.db.files.finish_image_processing(&file).await.unwrap());
         ctx.db.files.delete(&file.id).await.unwrap();
         assert!(!ctx.db.files.finish_image_processing(&file).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn stale_processing_cleanup_claim_is_conditional_and_recoverable() {
+        let ctx = TestCtx::new("stale-processing-cleanup").await.unwrap();
+        let mut file = note_file();
+        file.status = FileStatus::Processing;
+        file.created_at = 100;
+        ctx.db.files.create(file.clone()).await.unwrap();
+
+        assert!(
+            ctx.db
+                .files
+                .list_stale_processing_ids(99)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            !ctx.db
+                .files
+                .claim_processing_cleanup(&file.id, 99)
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            ctx.db.files.list_stale_processing_ids(100).await.unwrap(),
+            vec![file.id.clone()]
+        );
+        assert!(
+            ctx.db
+                .files
+                .claim_processing_cleanup(&file.id, 100)
+                .await
+                .unwrap()
+        );
+        assert!(
+            !ctx.db
+                .files
+                .claim_processing_cleanup(&file.id, 100)
+                .await
+                .unwrap()
+        );
+        assert!(!ctx.db.files.finish_image_processing(&file).await.unwrap());
+        assert_eq!(
+            ctx.db.files.list_stale_processing_ids(100).await.unwrap(),
+            vec![file.id.clone()]
+        );
+        assert!(ctx.db.files.delete_cleaning(&file.id).await.unwrap());
+        assert!(!ctx.db.files.delete_cleaning(&file.id).await.unwrap());
     }
 
     #[tokio::test]

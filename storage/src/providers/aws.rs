@@ -213,6 +213,29 @@ impl AwsStorageProvider {
         Ok(())
     }
 
+    pub async fn delete_processing_file(&self, dir: &DirMeta, file: &FileDto) -> Result<()> {
+        let versions: &[&str] = if file.file_type == FileType::Image {
+            &["prev", "thumb", ORIGINAL_PATH]
+        } else {
+            &[ORIGINAL_PATH]
+        };
+        let mut failure = None;
+        for version in versions {
+            let path = format!(
+                "{}/{}/{}/{}/{}",
+                dir.org_id, dir.dir_type, dir.dir_name, version, file.filename
+            );
+            if let Err(error) = self.delete_object_by_path(&dir.bucket_name, &path).await {
+                tracing::warn!(%error, %path, "Unable to delete processing file object");
+                failure = Some(error);
+            }
+        }
+        match failure {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
+    }
+
     pub async fn attach_urls(&self, dir: &DirMeta, files: Vec<FileDto>) -> Result<Vec<FileDto>> {
         let client = self.client.clone();
 

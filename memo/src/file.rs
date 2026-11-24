@@ -57,6 +57,7 @@ pub enum FileStatus {
     Active,
     Uploading,
     Processing,
+    Cleaning,
     Inactive,
 }
 
@@ -68,6 +69,7 @@ impl TryFrom<&str> for FileStatus {
             "active" => Ok(Self::Active),
             "uploading" => Ok(Self::Uploading),
             "processing" => Ok(Self::Processing),
+            "cleaning" => Ok(Self::Cleaning),
             "inactive" => Ok(Self::Inactive),
             _ => Err(format!("Invalid file status: {value}")),
         }
@@ -80,6 +82,7 @@ impl core::fmt::Display for FileStatus {
             Self::Active => "active",
             Self::Uploading => "uploading",
             Self::Processing => "processing",
+            Self::Cleaning => "cleaning",
             Self::Inactive => "inactive",
         })
     }
@@ -95,6 +98,7 @@ mod file_status_tests {
             (FileStatus::Active, "active"),
             (FileStatus::Uploading, "uploading"),
             (FileStatus::Processing, "processing"),
+            (FileStatus::Cleaning, "cleaning"),
             (FileStatus::Inactive, "inactive"),
         ] {
             assert_eq!(status.to_string(), value);

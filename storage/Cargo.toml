@@ -9,4 +9,5 @@ aws-sdk-s3.workspace = true
 bytes.workspace = true
 snafu.workspace = true
 tokio.workspace = true
+tracing.workspace = true
 memo = { path = "../memo" }
