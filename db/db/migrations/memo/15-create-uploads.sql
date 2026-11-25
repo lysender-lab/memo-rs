@@ -7,7 +7,7 @@ CREATE TABLE uploads (
     content_type TEXT NOT NULL,
     size INTEGER NOT NULL,
     storage_key TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT,
+    status TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     expires_at INTEGER NOT NULL
 ) STRICT;
