@@ -102,6 +102,17 @@ Deleting a non-note file marks an active file `inactive` and queues a
 Only active files can be deleted. If enqueueing fails, the file remains inactive
 without a job; storage failures are retried using the metadata in the job.
 
+## Uploads
+
+When uploading files, the application generates an upload URL first so the user can
+upload directly to AWS S3. It records the target upload path/filename as well in the
+uploads table. Once the upload completes, the application then records
+the file entry and process the file if it is an image. Lastly, it deletes the upload
+entry as the last cleanup step.
+
+If for some reason the upload entry is still present after an hour, we can interpret
+it as a failed capture. A cron job will collect this uploads to delete the file in storage.
+
 ## Models
 
 Dir:
