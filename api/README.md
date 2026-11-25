@@ -104,14 +104,50 @@ without a job; storage failures are retried using the metadata in the job.
 
 ## Uploads
 
-When uploading files, the application generates an upload URL first so the user can
-upload directly to AWS S3. It records the target upload path/filename as well in the
-uploads table. Once the upload completes, the application then records
-the file entry and process the file if it is an image. Lastly, it deletes the upload
-entry as the last cleanup step.
+**Planned; not yet implemented.** Today, the API signs a direct S3 upload URL
+and returns a token containing the upload metadata. File creation trusts that
+metadata and assumes the upload succeeded. Upload reservations and abandoned
+upload cleanup are not yet wired into the API.
 
-If for some reason the upload entry is still present after two hours, we can interpret
-it as a failed capture. A cron job will collect this uploads to delete the file in storage.
+The intended lifecycle uses the `uploads` table as the authoritative reservation:
+
+1. When an upload URL is requested, validate the request and persist a `pending`
+   reservation before returning a usable URL. Store the organization and directory
+   IDs, original and generated filenames, content type, declared size, and exact
+   S3 object key. Cleanup uses the configured bucket; this assumes it remains the
+   correct bucket for the reservation's lifetime.
+2. Set `created_at` to the current Unix time in seconds and `expires_at` to that
+   time plus the upload lifetime. Sign a token containing the upload ID, purpose
+   (`upload`), and expiry. The token and S3 PUT URL must expire no later than
+   `expires_at`; calculate the URL lifetime from the time remaining. Do not
+   return the URL if the reservation could not be persisted or has expired.
+   The current token and PUT URL lifetimes differ and must be aligned.
+3. After uploading, the client requests file creation with the token. Verify its
+   signature, purpose, and expiry; load the reservation; and check its status,
+   expiry, organization, and directory against the authorized request. Confirm
+   the directory still exists. Use the stored metadata, not client-supplied
+   metadata, for the file record. Decide whether to verify the S3 object's
+   existence and metadata before finalization.
+4. In one database transaction, conditionally consume the pending reservation,
+   create the file record, and enqueue image processing if needed. Image
+   processing runs separately. A failed transaction leaves the reservation
+   available for retry or cleanup. A consumed token cannot create another file.
+   Decide whether to retain completed reservations with a file ID if idempotent
+   retries of successful requests are needed.
+5. A scheduled cleanup finds reservations whose expiry is older than a configured
+   grace period. It atomically changes `pending` to `cleaning` before deleting
+   the exact stored key, so cleanup and finalization cannot both succeed. A
+   `cleaning` reservation must never become finalizable again. Delete the
+   reservation only after storage deletion succeeds; retry failures and recover
+   interrupted cleanup. Deletion and duplicate cleanup attempts must be
+   idempotent. If cleanup uses queue workers, they must be enabled.
+
+The grace period allows time for an upload started before URL expiry to finish.
+It is not stored per reservation; changing it affects existing reservations.
+It reduces but does not eliminate the risk of a late upload appearing after
+cleanup. Stronger guarantees require an upload-duration limit or later
+reconciliation. This cleanup is separate from cleanup of file records stuck in
+image processing.
 
 ## Models
 
@@ -141,8 +177,11 @@ File:
 
 Upload:
 - id
+- org_id, dir_id
+- original_filename, filename, content_type, size
 - storage_key
-- created_at
+- status (`pending` or `cleaning`)
+- created_at, expires_at (Unix seconds)
 
 Note:
 - id
