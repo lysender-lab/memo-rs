@@ -350,7 +350,7 @@ async fn generate_upload_signed_url(
     file_path: &str,
     content_type: &str,
 ) -> Result<String> {
-    let expires = Duration::from_hours(2);
+    let expires = Duration::from_hours(1);
     let presign_config = PresigningConfig::expires_in(expires).map_err(|err| Error::Whatever {
         msg: format!("Failed to create signed URL config: {err}"),
     })?;
