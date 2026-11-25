@@ -1,7 +1,6 @@
 CREATE TABLE uploads (
     id TEXT PRIMARY KEY,
-    filename TEXT NOT NULL,
-    content_type TEXT NOT NULL,
+    storage_key TEXT NOT NULL,
     created_at INTEGER NOT NULL
 ) STRICT;
 

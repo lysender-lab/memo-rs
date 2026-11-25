@@ -110,7 +110,7 @@ uploads table. Once the upload completes, the application then records
 the file entry and process the file if it is an image. Lastly, it deletes the upload
 entry as the last cleanup step.
 
-If for some reason the upload entry is still present after an hour, we can interpret
+If for some reason the upload entry is still present after two hours, we can interpret
 it as a failed capture. A cron job will collect this uploads to delete the file in storage.
 
 ## Models
@@ -141,8 +141,7 @@ File:
 
 Upload:
 - id
-- filename
-- content_type
+- storage_key
 - created_at
 
 Note:
