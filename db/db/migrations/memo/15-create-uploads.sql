@@ -6,4 +6,4 @@ CREATE TABLE uploads (
 ) STRICT;
 
 CREATE INDEX idx_uploads_created_at
-    ON jobs(created_at);
+    ON uploads(created_at);
