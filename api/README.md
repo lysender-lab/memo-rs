@@ -139,6 +139,12 @@ File:
 - created_at
 - updated_at
 
+Upload:
+- id
+- filename
+- content_type
+- created_at
+
 Note:
 - id
 - file_id
