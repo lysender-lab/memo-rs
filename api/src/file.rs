@@ -6,6 +6,9 @@ use exif::{In, Tag};
 use image::DynamicImage;
 use image::ImageReader;
 use image::imageops;
+use memo::file::UploadDto;
+use memo::file::UploadStatus;
+use memo::utils::IdPrefix::Upload;
 use snafu::ResultExt;
 use tracing::error;
 
@@ -185,8 +188,23 @@ pub async fn generate_upload_url_svc(
     // Low chance of collision but higher than the full uuid v7 string
     // Prefer a shorter filename for better readability
     let uniq_filename = slugify_prefixed(&data.filename);
+    let now_ts = chrono::Utc::now();
 
     // Reserve filename in the uploads record
+    let upload_id = generate_prefixed_id(IdPrefix::Upload);
+    let upload = UploadDto {
+        id: upload_id,
+        org_id: dir.org_id.clone(),
+        dir_id: dir.id.clone(),
+        original_filename: data.filename.clone(),
+        filename: uniq_filename.clone(),
+        content_type: data.content_type.clone(),
+        size: data.size,
+        storage_key: "".to_string(),
+        status: UploadStatus::Pending,
+        created_at: now_ts.timestamp(),
+        expires_at: now_ts.timestamp(),
+    };
 
     let token = create_upload_token(
         data.filename.clone(),
