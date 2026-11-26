@@ -165,7 +165,7 @@ pub async fn generate_upload_url_svc(
         });
     }
 
-    // Name must be unique for the dir (not filename)
+    // Name must be unique for the dir
     if state
         .db
         .files
@@ -185,6 +185,8 @@ pub async fn generate_upload_url_svc(
     // Low chance of collision but higher than the full uuid v7 string
     // Prefer a shorter filename for better readability
     let uniq_filename = slugify_prefixed(&data.filename);
+
+    // Reserve filename in the uploads record
 
     let token = create_upload_token(
         data.filename.clone(),
