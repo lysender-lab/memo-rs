@@ -21,6 +21,7 @@ pub enum IdPrefix {
     Dir,
     Note,
     Job,
+    Upload,
     Any,
 }
 
@@ -33,6 +34,7 @@ impl TryFrom<&str> for IdPrefix {
             "dir" => Ok(Self::Dir),
             "not" => Ok(Self::Note),
             "job" => Ok(Self::Job),
+            "upl" => Ok(Self::Upload),
             "any" => Ok(Self::Any),
             _ => Err(format!("Invalid ID Prefix: {value}")),
         }
@@ -46,6 +48,7 @@ impl core::fmt::Display for IdPrefix {
             Self::Dir => write!(f, "dir"),
             Self::Note => write!(f, "not"),
             Self::Job => write!(f, "job"),
+            Self::Upload => write!(f, "upl"),
             Self::Any => write!(f, "any"),
         }
     }
@@ -105,6 +108,7 @@ mod tests {
         assert_eq!(IdPrefix::File.to_string(), "fil");
         assert_eq!(IdPrefix::Dir.to_string(), "dir");
         assert_eq!(IdPrefix::Job.to_string(), "job");
+        assert_eq!(IdPrefix::Upload.to_string(), "upl");
         assert_eq!(IdPrefix::try_from("job"), Ok(IdPrefix::Job));
         assert_eq!(IdPrefix::Any.to_string(), "any");
     }
