@@ -175,8 +175,7 @@ async function remoteUploadPhoto(prepareUrl, commitUrl, token, file) {
 }
 
 async function uploadFiles() {
-  // Match chunks with server's core (2)
-  const CHUNK_SIZE = window.MEMO_UPLOAD_CHUNK_SIZE || 2;
+  const CHUNK_SIZE = window.MEMO_UPLOAD_CHUNK_SIZE || 4;
 
   const form =
     document.getElementById('upload-files-form') ||
