@@ -1,10 +1,18 @@
 use std::path::Path;
+use std::time::SystemTime;
 
 use crate::Result;
 use crate::provider::{DownloadRequest, DownloadedFile, ProviderClient, UploadUrlRequest};
 use crate::providers::AwsStorageProvider;
 use memo::dir::DirMeta;
-use memo::file::FileDto;
+use memo::file::{FileDto, ORIGINAL_PATH};
+
+pub fn original_object_key(dir: &DirMeta, filename: &str) -> String {
+    format!(
+        "{}/{}/{}/{ORIGINAL_PATH}/{filename}",
+        dir.org_id, dir.dir_type, dir.dir_name
+    )
+}
 
 pub struct StorageClient {
     provider: ProviderClient,
@@ -78,22 +86,29 @@ impl StorageClient {
         self.provider.attach_url(dir, file).await
     }
 
+    pub async fn generate_download_url(
+        &self,
+        bucket_name: &str,
+        storage_key: &str,
+    ) -> Result<String> {
+        self.provider
+            .generate_download_url(bucket_name, storage_key)
+            .await
+    }
+
     pub async fn generate_upload_url(
         &self,
-        dir: &DirMeta,
-        version: &str,
-        filename: &str,
+        bucket_name: &str,
+        storage_key: &str,
         content_type: &str,
+        deadline: SystemTime,
     ) -> Result<String> {
         self.provider
             .generate_upload_url(UploadUrlRequest {
-                bucket_name: &dir.bucket_name,
-                org_id: &dir.org_id,
-                dir_type: &dir.dir_type.to_string(),
-                dir_name: &dir.dir_name,
-                version,
-                filename,
+                bucket_name,
+                storage_key,
                 content_type,
+                deadline,
             })
             .await
     }

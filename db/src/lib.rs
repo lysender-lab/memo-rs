@@ -6,10 +6,12 @@ mod error;
 pub mod file;
 pub mod job;
 pub mod note;
+mod retry;
 #[cfg(test)]
 mod test;
 mod turso_decode;
 mod turso_params;
+pub mod upload;
 
 pub use db::{DbMapper, create_db_mapper};
 pub use error::{Error, Result};

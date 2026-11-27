@@ -94,13 +94,68 @@ Image uploads create a file record with status `processing` and enqueue a
 `create_image_versions` job. The response is returned before image versions
 are available. A worker downloads the original, generates and uploads versions,
 and marks the file `active`. Failed jobs are retried by the queue; a file stays
-in `processing` if all attempts fail or enqueueing fails. Workers must be enabled
-for images to be processed.
+in `processing` if all attempts fail. If enqueueing fails, file creation rolls
+back and the upload reservation remains available. Workers must be enabled for
+images to be processed.
 
 Deleting a non-note file marks an active file `inactive` and queues a
 `delete_file` job. The worker deletes the record and then its storage objects.
 Only active files can be deleted. If enqueueing fails, the file remains inactive
 without a job; storage failures are retried using the metadata in the job.
+
+## Uploads
+
+**Partially implemented.** The API persists a pending reservation before
+returning a direct S3 upload URL and a token, both with a one-hour deadline.
+The upload-URL response and signed token both include the required `upload_id`.
+Deploy the updated API before the updated website. Tokens issued before this
+change cannot finalize, so let in-flight uploads finish before the API cutover.
+Apply migration `15-create-uploads.sql` before deploying this change. File
+creation validates the reservation against the authorized directory and uses
+its metadata. It consumes the reservation in the same transaction as creating
+the file and enqueuing any image-processing job. The API still assumes the S3
+upload succeeded. Abandoned-upload cleanup has not been implemented.
+Reservations left by older API instances may already have a corresponding
+file record. Reconcile those rows before enabling abandoned-upload cleanup.
+
+The intended lifecycle uses the `uploads` table as the authoritative reservation:
+
+1. When an upload URL is requested, validate the request and persist a `pending`
+   reservation before returning a usable URL. Store the organization and directory
+   IDs, original and generated filenames, content type, declared size, and exact
+   S3 object key. Cleanup uses the configured bucket; this assumes it remains the
+   correct bucket for the reservation's lifetime.
+2. Set `created_at` to the current Unix time in seconds and `expires_at` to that
+   time plus the upload lifetime. Sign a token containing the upload ID, purpose
+   (`upload`), and expiry. The token and S3 PUT URL must expire no later than
+   `expires_at`; calculate the URL lifetime from the time remaining. Do not
+   return the URL if the reservation could not be persisted or has expired.
+3. After uploading, the client requests file creation with the token. Verify its
+   signature, purpose, and expiry; load the reservation; and check its status,
+   expiry, organization, and directory against the authorized request. Confirm
+   the directory still exists. Use the stored metadata, not client-supplied
+   metadata, for the file record. Decide whether to verify the S3 object's
+   existence and metadata before finalization.
+4. In one database transaction, conditionally consume the pending reservation,
+   create the file record, and enqueue image processing if needed. Image
+   processing runs separately. A failed transaction leaves the reservation
+   available for retry or cleanup. A consumed token cannot create another file.
+   Decide whether to retain completed reservations with a file ID if idempotent
+   retries of successful requests are needed.
+5. A scheduled cleanup finds reservations whose expiry is older than a configured
+   grace period. It atomically changes `pending` to `cleaning` before deleting
+   the exact stored key, so cleanup and finalization cannot both succeed. A
+   `cleaning` reservation must never become finalizable again. Delete the
+   reservation only after storage deletion succeeds; retry failures and recover
+   interrupted cleanup. Deletion and duplicate cleanup attempts must be
+   idempotent. If cleanup uses queue workers, they must be enabled.
+
+The grace period allows time for an upload started before URL expiry to finish.
+It is not stored per reservation; changing it affects existing reservations.
+It reduces but does not eliminate the risk of a late upload appearing after
+cleanup. Stronger guarantees require an upload-duration limit or later
+reconciliation. This cleanup is separate from cleanup of file records stuck in
+image processing.
 
 ## Models
 
@@ -127,6 +182,14 @@ File:
 - img_taken_at
 - created_at
 - updated_at
+
+Upload:
+- id
+- org_id, dir_id
+- original_filename, filename, content_type, size
+- storage_key
+- status (`pending` or `cleaning`)
+- created_at, expires_at (Unix seconds)
 
 Note:
 - id

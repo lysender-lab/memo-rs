@@ -1,19 +1,21 @@
 use std::fs::File;
 use std::path::PathBuf;
+use std::time::{Duration, UNIX_EPOCH};
 
 use chrono::{DateTime, NaiveDateTime};
 use exif::{In, Tag};
 use image::DynamicImage;
 use image::ImageReader;
 use image::imageops;
-use snafu::ResultExt;
+use snafu::{OptionExt, ResultExt};
 use tracing::error;
 
 use crate::error::DbSnafu;
 use crate::error::TokioJoinSnafu;
-use crate::error::{ExifInfoSnafu, StorageSnafu, UploadFileSnafu, ValidationSnafu};
+use crate::error::{
+    ExifInfoSnafu, StorageSnafu, UploadFileSnafu, UploadTokenSnafu, ValidationSnafu,
+};
 use crate::state::AppState;
-use crate::token::FileUploadClaims;
 use crate::token::create_upload_token;
 use crate::{Error, Result};
 use db::file::MAX_FILES;
@@ -27,12 +29,15 @@ use memo::file::{
     ALLOWED_IMAGE_TYPES, FileDto, ImgDimension, ImgVersion, ImgVersionDto, MAX_DIMENSION,
     MAX_PREVIEW_DIMENSION, MAX_THUMB_DIMENSION, ORIGINAL_PATH,
 };
-use memo::file::{FileStatus, FileType};
+use memo::file::{FileStatus, FileType, UploadDto, UploadStatus};
 use memo::utils::IdPrefix;
 use memo::utils::generate_prefixed_id;
 use memo::utils::slugify_prefixed;
 use memo::utils::truncate_string;
 use storage::DownloadedFile;
+use storage::original_object_key;
+
+const UPLOAD_LIFETIME_SECONDS: i64 = 60 * 60;
 
 #[derive(Debug, Clone)]
 pub struct PhotoExif {
@@ -138,18 +143,18 @@ pub async fn generate_upload_url_svc(
     dir: &DirDto,
     data: &RemoteUploadDto,
 ) -> Result<SignedFileUploadDto> {
+    if data.size < 0 {
+        return ValidationSnafu {
+            msg: "File size must not be negative",
+        }
+        .fail();
+    }
+
     if data.size > MAX_FILE_SIZE {
         return Err(Error::Validation {
             msg: "File size exceeds maximum allowed".to_string(),
         });
     }
-
-    let dir_meta = DirMeta {
-        bucket_name: state.config.cloud.bucket,
-        org_id: dir.org_id.clone(),
-        dir_type: dir.dir_type.clone(),
-        dir_name: dir.name.clone(),
-    };
 
     // Limit the number of files per dir
     let count = state
@@ -165,7 +170,7 @@ pub async fn generate_upload_url_svc(
         });
     }
 
-    // Name must be unique for the dir (not filename)
+    // Name must be unique for the dir
     if state
         .db
         .files
@@ -182,30 +187,67 @@ pub async fn generate_upload_url_svc(
         .fail();
     }
 
-    // Low chance of collision but higher than the full uuid v7 string
-    // Prefer a shorter filename for better readability
-    let uniq_filename = slugify_prefixed(&data.filename);
+    let dir_meta = DirMeta {
+        bucket_name: state.config.cloud.bucket,
+        org_id: dir.org_id.clone(),
+        dir_type: dir.dir_type.clone(),
+        dir_name: dir.name.clone(),
+    };
 
-    let token = create_upload_token(
-        data.filename.clone(),
-        uniq_filename.clone(),
-        data.content_type.clone(),
-        data.size,
-        &state.config.jwt_secret,
-    )?;
+    let filename = slugify_prefixed(&data.filename);
+    let storage_key = original_object_key(&dir_meta, &filename);
+    let created_at = chrono::Utc::now().timestamp();
 
+    let upload = UploadDto {
+        id: generate_prefixed_id(IdPrefix::Upload),
+        org_id: dir.org_id.clone(),
+        dir_id: dir.id.clone(),
+        original_filename: data.filename.clone(),
+        filename,
+        content_type: data.content_type.clone(),
+        size: data.size,
+        storage_key,
+        status: UploadStatus::Pending,
+        created_at,
+        expires_at: created_at + UPLOAD_LIFETIME_SECONDS,
+    };
+
+    let deadline = UNIX_EPOCH + Duration::from_secs(upload.expires_at as u64);
     let upload_url = state
         .storage_client
-        .generate_upload_url(&dir_meta, ORIGINAL_PATH, &uniq_filename, &data.content_type)
+        .generate_upload_url(
+            &dir_meta.bucket_name,
+            &upload.storage_key,
+            &upload.content_type,
+            deadline,
+        )
         .await
         .context(StorageSnafu)?;
 
+    let response = signed_upload_response(&upload, upload_url, &state.config.jwt_secret)?;
+
+    // Neither signed credential leaves the API until the reservation is durable.
+    state.db.uploads.reserve(&upload).await.context(DbSnafu)?;
+    if chrono::Utc::now().timestamp() >= upload.expires_at {
+        return Err("Upload reservation expired before the URL could be returned".into());
+    }
+
+    Ok(response)
+}
+
+fn signed_upload_response(
+    upload: &UploadDto,
+    url: String,
+    secret: &str,
+) -> Result<SignedFileUploadDto> {
+    let token = create_upload_token(upload, secret)?;
     Ok(SignedFileUploadDto {
-        orig_filename: data.filename.clone(),
-        new_filename: uniq_filename,
-        content_type: data.content_type.clone(),
-        size: data.size,
-        url: upload_url,
+        upload_id: upload.id.clone(),
+        orig_filename: upload.original_filename.clone(),
+        new_filename: upload.filename.clone(),
+        content_type: upload.content_type.clone(),
+        size: upload.size,
+        url,
         token,
     })
 }
@@ -377,70 +419,48 @@ pub async fn create_file_svc(
 
 pub async fn delete_file_svc(state: AppState, dir_meta: &DirMeta, file: &FileDto) -> Result<()> {
     if file.file_type == FileType::Note {
-        state.db.files.delete(&file.id).await.context(DbSnafu)?;
-        state.file_cache.remove(&file.id);
-        // Also delete all note revisions
-        state
-            .db
-            .notes
-            .delete_revisions(&file.id)
-            .await
-            .context(DbSnafu)?;
-    } else {
-        if !state
-            .db
-            .files
-            .mark_inactive(&file.id)
-            .await
-            .context(DbSnafu)?
-        {
-            return ValidationSnafu {
-                msg: "Only active files can be deleted".to_string(),
-            }
-            .fail();
-        }
-        state.file_cache.remove(&file.id);
-        // Read after the transition so the payload includes completed image metadata.
-        let current = state
-            .db
-            .files
-            .get(&file.id)
-            .await
-            .context(DbSnafu)?
-            .ok_or_else(|| Error::NotFound {
-                msg: "File not found".to_string(),
-            })?;
-        crate::job::enqueue(
-            &state.db,
-            crate::job::delete_file_job(current, dir_meta.clone()),
-        )
-        .await
-        .context(DbSnafu)?;
+        return crate::note::delete_note_svc(&state, &file.id).await;
     }
 
+    if !state
+        .db
+        .files
+        .enqueue_delete(&file.id, |current| {
+            crate::job::delete_file_job(current, dir_meta.clone())
+        })
+        .await
+        .context(DbSnafu)?
+    {
+        return ValidationSnafu {
+            msg: "Only active files can be deleted".to_string(),
+        }
+        .fail();
+    }
+
+    state.file_cache.remove(&file.id);
     Ok(())
 }
 
-/// Creates a file record relying completely from upload metadata
-/// Assumes that the file has been uploaded already
+/// Records a completed upload using reservation metadata.
 pub async fn create_remote_file_svc(
-    state: AppState,
+    state: &AppState,
     dir: &DirDto,
-    data: &FileUploadClaims,
+    upload: &UploadDto,
 ) -> Result<FileDto> {
     let today = chrono::Utc::now().timestamp();
 
-    let is_image = data.is_image();
+    let is_image = ALLOWED_IMAGE_TYPES.contains(&upload.content_type.as_str());
     if dir.dir_type == DirType::Photos && !is_image {
         return ValidationSnafu {
             msg: "Only photos are allowed".to_string(),
         }
         .fail();
     }
+
     let file = FileDto {
         id: generate_prefixed_id(IdPrefix::File),
-        org_id: dir.org_id.clone(),
-        dir_id: dir.id.clone(),
+        org_id: upload.org_id.clone(),
+        dir_id: upload.dir_id.clone(),
         file_type: if is_image {
             FileType::Image
         } else {
@@ -451,10 +471,10 @@ pub async fn create_remote_file_svc(
         } else {
             FileStatus::Active
         },
-        name: data.orig_filename.clone(),
-        filename: data.new_filename.clone(),
-        content_type: data.content_type.clone(),
-        size: data.size,
+        name: upload.original_filename.clone(),
+        filename: upload.filename.clone(),
+        content_type: upload.content_type.clone(),
+        size: upload.size,
         url: None,
         img_versions: None,
         img_taken_at: None,
@@ -480,41 +500,38 @@ pub async fn create_remote_file_svc(
     if state
         .db
         .files
-        .find_by_name(&dir.id, &data.orig_filename)
+        .find_by_name(&dir.id, &upload.original_filename)
         .await
         .context(DbSnafu)?
         .is_some()
     {
         // Show error but ensure name is not too long
-        let short_name = truncate_string(&data.orig_filename, 20);
+        let short_name = truncate_string(&upload.original_filename, 20);
         return Err(Error::Validation {
             msg: format!("{} already exists", short_name),
         });
     }
 
-    // Save to database
-    let create_res = state.db.files.retry_create(file, 5).await.context(DbSnafu);
+    let job = is_image.then(|| crate::job::create_image_versions_job(file.id.clone()));
 
-    match create_res {
-        Ok(file) => {
-            // Also update dir
-            let today = chrono::Utc::now().timestamp();
-            let dir_result = state
-                .db
-                .dirs
-                .retry_update_timestamp(&dir.id, today, 5)
-                .await
-                .context(DbSnafu);
+    let file = state
+        .db
+        .files
+        .finalize_upload(&upload.id, &file, job)
+        .await
+        .context(DbSnafu)?
+        .context(UploadTokenSnafu)?;
 
-            if let Err(e) = dir_result {
-                // Can't afford to fail here, we will just log the error...
-                error!("{}", e);
-            }
-
-            Ok(file)
-        }
-        Err(e) => Err(e),
+    if let Err(error) = state
+        .db
+        .dirs
+        .retry_update_timestamp(&dir.id, chrono::Utc::now().timestamp(), 5)
+        .await
+        .context(DbSnafu)
+    {
+        error!("{}", error);
     }
+    Ok(file)
 }
 
 fn cleanup_temp_uploads(data: &DownloadedFile, file: Option<&FileDto>) -> Result<()> {
@@ -835,6 +852,36 @@ fn parse_exif_info(path: &PathBuf) -> Result<PhotoExif> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::token::verify_upload_token;
+
+    #[test]
+    fn signed_upload_response_matches_token_reservation_id() {
+        let created_at = chrono::Utc::now().timestamp();
+        let reservation = UploadDto {
+            id: generate_prefixed_id(IdPrefix::Upload),
+            org_id: "org".into(),
+            dir_id: "dir".into(),
+            original_filename: "photo.jpg".into(),
+            filename: "stored-photo.jpg".into(),
+            content_type: "image/jpeg".into(),
+            size: 10,
+            storage_key: "org/photos/dir/orig/stored-photo.jpg".into(),
+            status: UploadStatus::Pending,
+            created_at,
+            expires_at: created_at + UPLOAD_LIFETIME_SECONDS,
+        };
+        let secret = "test-secret";
+        let response =
+            signed_upload_response(&reservation, "https://example.com/upload".into(), secret)
+                .unwrap();
+        let json = serde_json::to_value(response).unwrap();
+        assert_eq!(json["upload_id"].as_str(), Some(reservation.id.as_str()));
+
+        // The website decodes this JSON using the same shared DTO.
+        let response: SignedFileUploadDto = serde_json::from_value(json).unwrap();
+        let claims = verify_upload_token(&response.token, secret).unwrap();
+        assert_eq!(response.upload_id, claims.upload_id);
+    }
 
     #[test]
     fn jpeg_with_avif_filename_generates_jpeg_versions() {

@@ -150,6 +150,48 @@ impl FileDto {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UploadDto {
+    pub id: String,
+    pub org_id: String,
+    pub dir_id: String,
+    pub original_filename: String,
+    pub filename: String,
+    pub content_type: String,
+    pub size: i64,
+    pub storage_key: String,
+    pub status: UploadStatus,
+    pub created_at: i64,
+    pub expires_at: i64,
+}
+
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub enum UploadStatus {
+    Pending,
+    Cleaning,
+}
+
+impl TryFrom<&str> for UploadStatus {
+    type Error = String;
+
+    fn try_from(value: &str) -> core::result::Result<Self, Self::Error> {
+        match value {
+            "pending" => Ok(Self::Pending),
+            "cleaning" => Ok(Self::Cleaning),
+            _ => Err(format!("Invalid file type: {value}")),
+        }
+    }
+}
+
+impl core::fmt::Display for UploadStatus {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        match self {
+            Self::Pending => write!(f, "{}", "pending"),
+            Self::Cleaning => write!(f, "{}", "cleaning"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImgDimension {
     pub width: u32,
     pub height: u32,
@@ -268,6 +310,7 @@ pub struct SignedRemoteUploadDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedFileUploadDto {
+    pub upload_id: String,
     pub orig_filename: String,
     pub new_filename: String,
     pub content_type: String,

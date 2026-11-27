@@ -13,7 +13,7 @@ use crate::{
     dir::{create_dir_svc, delete_dir_svc, update_dir_svc},
     error::{
         DbSnafu, ErrorResponse, ForbiddenSnafu, JsonRejectionSnafu, NotFoundSnafu, Result,
-        StorageSnafu, WhateverSnafu,
+        StorageSnafu, UploadTokenSnafu, WhateverSnafu,
     },
     file::{create_remote_file_svc, delete_file_svc, generate_upload_url_svc},
     health::{check_liveness, check_readiness},
@@ -28,7 +28,7 @@ use db::dir::{ListDirsParams, NewDir, UpdateDir};
 use db::file::ListFilesParams;
 use memo::{
     dir::{DirDto, DirMeta, DirType},
-    file::{FileDto, RemoteUploadDto, SignedRemoteUploadDto},
+    file::{FileDto, RemoteUploadDto, SignedRemoteUploadDto, UploadStatus},
     note::{CreateNoteDto, NoteContentDto, NoteRevisionDto, UpdateNoteDto},
     pagination::Paginated,
 };
@@ -304,9 +304,16 @@ pub async fn create_file_handler(
 
     // Validate token
     let upload_claims = verify_upload_token(&data.token, &state.config.jwt_secret)?;
-    let is_image = upload_claims.is_image();
+    let upload = state
+        .db
+        .uploads
+        .get(&upload_claims.upload_id)
+        .await
+        .context(DbSnafu)?
+        .context(UploadTokenSnafu)?;
 
     let actor = actor.actor.expect("Actor must be present");
+
     let dir_meta = DirMeta {
         bucket_name: state.config.cloud.bucket.clone(),
         org_id: actor.org_id,
@@ -314,22 +321,26 @@ pub async fn create_file_handler(
         dir_name: dir.name.clone(),
     };
 
-    let storage_client = state.storage_client.clone();
+    ensure!(
+        upload.org_id == dir_meta.org_id
+            && upload.org_id == dir.org_id
+            && upload.dir_id == dir.id
+            && upload.status == UploadStatus::Pending
+            && upload.expires_at > chrono::Utc::now().timestamp()
+            && upload.storage_key == storage::original_object_key(&dir_meta, &upload.filename),
+        UploadTokenSnafu
+    );
 
-    let file = create_remote_file_svc(state.clone(), &dir, &upload_claims).await?;
-    if is_image {
-        crate::job::enqueue(
-            &state.db,
-            crate::job::create_image_versions_job(file.id.clone()),
-        )
-        .await
-        .context(DbSnafu)?;
+    let mut file = create_remote_file_svc(&state, &dir, &upload).await?;
+    if !file.is_image() {
+        file.url = Some(
+            state
+                .storage_client
+                .generate_download_url(&dir_meta.bucket_name, &upload.storage_key)
+                .await
+                .context(StorageSnafu)?,
+        );
     }
-
-    let file = storage_client
-        .attach_url(&dir_meta, file)
-        .await
-        .context(StorageSnafu)?;
 
     Ok(JsonResponse::with_status(
         StatusCode::CREATED,

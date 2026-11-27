@@ -10,6 +10,7 @@ use crate::dir::DirRepo;
 use crate::error::{DbBuilderSnafu, DbConnectSnafu};
 use crate::file::FileRepo;
 use crate::job::JobRepo;
+use crate::upload::UploadRepo;
 
 use crate::Result;
 use crate::note::NoteRepo;
@@ -33,6 +34,7 @@ pub struct DbMapper {
     pub files: FileRepo,
     pub jobs: JobRepo,
     pub notes: NoteRepo,
+    pub uploads: UploadRepo,
     pub any: AnyRepo,
 }
 
@@ -49,6 +51,7 @@ pub async fn create_db_mapper(filename: &Path, pool_size: usize) -> Result<DbMap
         files: FileRepo::new(arc_pool.clone()),
         jobs: JobRepo::new(arc_pool.clone()),
         notes: NoteRepo::new(arc_pool.clone()),
+        uploads: UploadRepo::new(arc_pool.clone()),
         any: AnyRepo::new(arc_pool),
     })
 }

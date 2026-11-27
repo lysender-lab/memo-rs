@@ -1,7 +1,6 @@
 use base64::prelude::*;
-use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
-use memo::file::ALLOWED_IMAGE_TYPES;
+use memo::file::UploadDto;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use snafu::ensure;
@@ -38,6 +37,7 @@ pub fn decode_auth_token(token: &str) -> Result<AuthClaims> {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct FileUploadClaims {
     pub sub: String,
+    pub upload_id: String,
     pub orig_filename: String,
     pub new_filename: String,
     pub content_type: String,
@@ -45,29 +45,16 @@ pub struct FileUploadClaims {
     pub exp: usize,
 }
 
-impl FileUploadClaims {
-    pub fn is_image(&self) -> bool {
-        ALLOWED_IMAGE_TYPES.contains(&self.content_type.as_str())
-    }
-}
-
-pub fn create_upload_token(
-    orig_filename: String,
-    new_filename: String,
-    content_type: String,
-    size: i64,
-    secret: &str,
-) -> Result<String> {
-    // Limit up to 1 hour only
-    let exp = Utc::now() + Duration::hours(1);
-
+pub fn create_upload_token(upload: &UploadDto, secret: &str) -> Result<String> {
+    // Retain metadata for compatibility with older API instances.
     let claims = FileUploadClaims {
         sub: "upload".to_string(),
-        orig_filename: orig_filename,
-        new_filename: new_filename,
-        content_type: content_type,
-        size,
-        exp: exp.timestamp() as usize,
+        upload_id: upload.id.clone(),
+        orig_filename: upload.original_filename.clone(),
+        new_filename: upload.filename.clone(),
+        content_type: upload.content_type.clone(),
+        size: upload.size,
+        exp: upload.expires_at as usize,
     };
 
     let Ok(token) = encode(
@@ -90,6 +77,46 @@ pub fn verify_upload_token(token: &str, secret: &str) -> Result<FileUploadClaims
         return Err(Error::UploadToken);
     };
 
-    ensure!(!decoded.claims.sub.is_empty(), UploadTokenSnafu);
+    ensure!(
+        decoded.claims.sub == "upload" && !decoded.claims.upload_id.trim().is_empty(),
+        UploadTokenSnafu
+    );
     Ok(decoded.claims)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn upload_token_requires_nonempty_upload_id() {
+        let secret = "test-secret";
+        let mut claims = json!({
+            "sub": "upload",
+            "orig_filename": "photo.jpg",
+            "new_filename": "stored-photo.jpg",
+            "content_type": "image/jpeg",
+            "size": 10,
+            "exp": (chrono::Utc::now() + chrono::Duration::hours(1)).timestamp(),
+        });
+
+        for upload_id in [None, Some(""), Some("   "), Some("upl_test")] {
+            if let Some(upload_id) = upload_id {
+                claims["upload_id"] = json!(upload_id);
+            }
+            let token = encode(
+                &Header::default(),
+                &claims,
+                &EncodingKey::from_secret(secret.as_bytes()),
+            )
+            .unwrap();
+            let result = verify_upload_token(&token, secret);
+            if upload_id == Some("upl_test") {
+                assert_eq!(result.unwrap().upload_id, "upl_test");
+            } else {
+                assert!(matches!(result, Err(Error::UploadToken)));
+            }
+        }
+    }
 }

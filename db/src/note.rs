@@ -182,12 +182,15 @@ impl NoteRepo {
                 next_revision,
                 checksum,
                 created_at
-            FROM notes
-            WHERE file_id = :file_id AND next_revision = :next_revision
-            ORDER BY id DESC
+            FROM
+                notes
+            WHERE
+                file_id = :file_id
+                AND next_revision = :next_revision
+            ORDER BY
+                id DESC
             LIMIT 1
-        "#
-        .to_string();
+        "#;
 
         let mut q_params = new_query_params();
         q_params.push(text_param(":file_id", file_id.to_owned()));
@@ -209,11 +212,13 @@ impl NoteRepo {
                 next_revision,
                 checksum,
                 created_at
-            FROM notes
-            WHERE file_id = :file_id AND id = :revision_id
+            FROM
+                notes
+            WHERE
+                file_id = :file_id
+                AND id = :revision_id
             LIMIT 1
-        "#
-        .to_string();
+        "#;
 
         let mut q_params = new_query_params();
         q_params.push(text_param(":file_id", file_id.to_owned()));
@@ -235,9 +240,13 @@ impl NoteRepo {
                 next_revision,
                 checksum,
                 created_at
-            FROM notes
-            WHERE file_id = :file_id
-            ORDER BY created_at DESC, id DESC
+            FROM
+                notes
+            WHERE
+                file_id = :file_id
+            ORDER BY
+                created_at DESC,
+                id DESC
             LIMIT 50
         "#
         .to_string();
