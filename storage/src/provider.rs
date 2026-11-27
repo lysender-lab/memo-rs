@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::SystemTime;
 
 use memo::dir::DirMeta;
 use memo::file::FileDto;
@@ -30,12 +31,9 @@ pub struct DownloadRequest<'a> {
 
 pub struct UploadUrlRequest<'a> {
     pub bucket_name: &'a str,
-    pub org_id: &'a str,
-    pub dir_type: &'a str,
-    pub dir_name: &'a str,
-    pub version: &'a str,
-    pub filename: &'a str,
+    pub storage_key: &'a str,
     pub content_type: &'a str,
+    pub deadline: SystemTime,
 }
 
 pub enum ProviderClient {

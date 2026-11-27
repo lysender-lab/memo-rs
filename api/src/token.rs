@@ -1,7 +1,6 @@
 use base64::prelude::*;
-use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
-use memo::file::ALLOWED_IMAGE_TYPES;
+use memo::file::{ALLOWED_IMAGE_TYPES, UploadDto};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use snafu::ensure;
@@ -51,23 +50,15 @@ impl FileUploadClaims {
     }
 }
 
-pub fn create_upload_token(
-    orig_filename: String,
-    new_filename: String,
-    content_type: String,
-    size: i64,
-    secret: &str,
-) -> Result<String> {
-    // Limit up to 1 hour only
-    let exp = Utc::now() + Duration::hours(1);
-
+pub fn create_upload_token(upload: &UploadDto, secret: &str) -> Result<String> {
+    // File creation still reads metadata directly from the token.
     let claims = FileUploadClaims {
         sub: "upload".to_string(),
-        orig_filename: orig_filename,
-        new_filename: new_filename,
-        content_type: content_type,
-        size,
-        exp: exp.timestamp() as usize,
+        orig_filename: upload.original_filename.clone(),
+        new_filename: upload.filename.clone(),
+        content_type: upload.content_type.clone(),
+        size: upload.size,
+        exp: upload.expires_at as usize,
     };
 
     let Ok(token) = encode(

@@ -104,10 +104,12 @@ without a job; storage failures are retried using the metadata in the job.
 
 ## Uploads
 
-**Planned; not yet implemented.** Today, the API signs a direct S3 upload URL
-and returns a token containing the upload metadata. File creation trusts that
-metadata and assumes the upload succeeded. Upload reservations and abandoned
-upload cleanup are not yet wired into the API.
+**Partially implemented.** The API persists a pending reservation before
+returning a direct S3 upload URL and a token, both with a one-hour deadline.
+Apply migration `15-create-uploads.sql` before deploying this change. File
+creation still reads metadata from the token and assumes the upload succeeded.
+It does not consume reservations yet, so abandoned-upload cleanup must remain
+disabled until finalization can distinguish captured files from abandoned uploads.
 
 The intended lifecycle uses the `uploads` table as the authoritative reservation:
 
@@ -121,7 +123,6 @@ The intended lifecycle uses the `uploads` table as the authoritative reservation
    (`upload`), and expiry. The token and S3 PUT URL must expire no later than
    `expires_at`; calculate the URL lifetime from the time remaining. Do not
    return the URL if the reservation could not be persisted or has expired.
-   The current token and PUT URL lifetimes differ and must be aligned.
 3. After uploading, the client requests file creation with the token. Verify its
    signature, purpose, and expiry; load the reservation; and check its status,
    expiry, organization, and directory against the authorized request. Confirm

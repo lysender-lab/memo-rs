@@ -1,14 +1,12 @@
 use std::fs::File;
 use std::path::PathBuf;
+use std::time::{Duration, UNIX_EPOCH};
 
 use chrono::{DateTime, NaiveDateTime};
 use exif::{In, Tag};
 use image::DynamicImage;
 use image::ImageReader;
 use image::imageops;
-use memo::file::UploadDto;
-use memo::file::UploadStatus;
-use memo::utils::IdPrefix::Upload;
 use snafu::ResultExt;
 use tracing::error;
 
@@ -30,12 +28,15 @@ use memo::file::{
     ALLOWED_IMAGE_TYPES, FileDto, ImgDimension, ImgVersion, ImgVersionDto, MAX_DIMENSION,
     MAX_PREVIEW_DIMENSION, MAX_THUMB_DIMENSION, ORIGINAL_PATH,
 };
-use memo::file::{FileStatus, FileType};
+use memo::file::{FileStatus, FileType, UploadDto, UploadStatus};
 use memo::utils::IdPrefix;
 use memo::utils::generate_prefixed_id;
 use memo::utils::slugify_prefixed;
 use memo::utils::truncate_string;
 use storage::DownloadedFile;
+use storage::original_object_key;
+
+const UPLOAD_LIFETIME_SECONDS: i64 = 60 * 60;
 
 #[derive(Debug, Clone)]
 pub struct PhotoExif {
@@ -141,18 +142,17 @@ pub async fn generate_upload_url_svc(
     dir: &DirDto,
     data: &RemoteUploadDto,
 ) -> Result<SignedFileUploadDto> {
+    if data.size < 0 {
+        return ValidationSnafu {
+            msg: "File size must not be negative",
+        }
+        .fail();
+    }
     if data.size > MAX_FILE_SIZE {
         return Err(Error::Validation {
             msg: "File size exceeds maximum allowed".to_string(),
         });
     }
-
-    let dir_meta = DirMeta {
-        bucket_name: state.config.cloud.bucket,
-        org_id: dir.org_id.clone(),
-        dir_type: dir.dir_type.clone(),
-        dir_name: dir.name.clone(),
-    };
 
     // Limit the number of files per dir
     let count = state
@@ -185,46 +185,53 @@ pub async fn generate_upload_url_svc(
         .fail();
     }
 
-    // Low chance of collision but higher than the full uuid v7 string
-    // Prefer a shorter filename for better readability
-    let uniq_filename = slugify_prefixed(&data.filename);
-    let now_ts = chrono::Utc::now();
-
-    // Reserve filename in the uploads record
-    let upload_id = generate_prefixed_id(IdPrefix::Upload);
+    let dir_meta = DirMeta {
+        bucket_name: state.config.cloud.bucket,
+        org_id: dir.org_id.clone(),
+        dir_type: dir.dir_type.clone(),
+        dir_name: dir.name.clone(),
+    };
+    let filename = slugify_prefixed(&data.filename);
+    let storage_key = original_object_key(&dir_meta, &filename);
+    let created_at = chrono::Utc::now().timestamp();
     let upload = UploadDto {
-        id: upload_id,
+        id: generate_prefixed_id(IdPrefix::Upload),
         org_id: dir.org_id.clone(),
         dir_id: dir.id.clone(),
         original_filename: data.filename.clone(),
-        filename: uniq_filename.clone(),
+        filename,
         content_type: data.content_type.clone(),
         size: data.size,
-        storage_key: "".to_string(),
+        storage_key,
         status: UploadStatus::Pending,
-        created_at: now_ts.timestamp(),
-        expires_at: now_ts.timestamp(),
+        created_at,
+        expires_at: created_at + UPLOAD_LIFETIME_SECONDS,
     };
 
-    let token = create_upload_token(
-        data.filename.clone(),
-        uniq_filename.clone(),
-        data.content_type.clone(),
-        data.size,
-        &state.config.jwt_secret,
-    )?;
-
+    let token = create_upload_token(&upload, &state.config.jwt_secret)?;
+    let deadline = UNIX_EPOCH + Duration::from_secs(upload.expires_at as u64);
     let upload_url = state
         .storage_client
-        .generate_upload_url(&dir_meta, ORIGINAL_PATH, &uniq_filename, &data.content_type)
+        .generate_upload_url(
+            &dir_meta.bucket_name,
+            &upload.storage_key,
+            &upload.content_type,
+            deadline,
+        )
         .await
         .context(StorageSnafu)?;
 
+    // Neither signed credential leaves the API until the reservation is durable.
+    state.db.uploads.reserve(&upload).await.context(DbSnafu)?;
+    if chrono::Utc::now().timestamp() >= upload.expires_at {
+        return Err("Upload reservation expired before the URL could be returned".into());
+    }
+
     Ok(SignedFileUploadDto {
-        orig_filename: data.filename.clone(),
-        new_filename: uniq_filename,
-        content_type: data.content_type.clone(),
-        size: data.size,
+        orig_filename: upload.original_filename,
+        new_filename: upload.filename,
+        content_type: upload.content_type,
+        size: upload.size,
         url: upload_url,
         token,
     })

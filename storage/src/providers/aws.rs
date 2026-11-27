@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use aws_config::BehaviorVersion;
 use aws_sdk_s3::Client as S3Client;
@@ -11,7 +11,7 @@ use tokio::{fs::File, fs::create_dir_all, io::AsyncWriteExt};
 
 use crate::error::{CreateFileSnafu, ReadFileSnafu, UploadDirSnafu, UploadFileSnafu};
 use crate::provider::{DownloadRequest, DownloadedFile, UploadUrlRequest};
-use crate::{Error, Result};
+use crate::{Error, Result, original_object_key};
 use memo::dir::DirMeta;
 use memo::file::{FileDto, FileType, ImgVersion, ImgVersionDto, ORIGINAL_PATH};
 
@@ -110,12 +110,7 @@ impl AwsStorageProvider {
         let data = tokio::fs::read(local_path).await.context(ReadFileSnafu {
             path: local_path.to_path_buf(),
         })?;
-        let key = original_object_key(
-            &dir.org_id,
-            &dir.dir_type.to_string(),
-            &dir.dir_name,
-            filename,
-        );
+        let key = original_object_key(dir, filename);
 
         let res = self
             .client
@@ -194,12 +189,7 @@ impl AwsStorageProvider {
                     self.delete_object_by_path(&dir.bucket_name, &path).await?;
                 }
             } else {
-                let path = original_object_key(
-                    &dir.org_id,
-                    &dir.dir_type.to_string(),
-                    &dir.dir_name,
-                    &file.filename,
-                );
+                let path = original_object_key(dir, &file.filename);
                 self.delete_object_by_path(&dir.bucket_name, &path).await?;
             }
         } else {
@@ -267,12 +257,32 @@ impl AwsStorageProvider {
     }
 
     pub async fn generate_upload_url(&self, req: UploadUrlRequest<'_>) -> Result<String> {
-        let file_path = format!(
-            "{}/{}/{}/{}/{}",
-            req.org_id, req.dir_type, req.dir_name, req.version, req.filename
-        );
-        generate_upload_signed_url(&self.client, req.bucket_name, &file_path, req.content_type)
+        let start_time = SystemTime::now();
+        let expires_in = req.deadline.duration_since(start_time).unwrap_or_default();
+        // SigV4 represents the lifetime in whole seconds.
+        if expires_in.as_secs() == 0 {
+            return Err("Not enough time remains to sign the upload URL".into());
+        }
+        let presign_config = PresigningConfig::builder()
+            .start_time(start_time)
+            .expires_in(Duration::from_secs(expires_in.as_secs()))
+            .build()
+            .map_err(|err| Error::Whatever {
+                msg: format!("Failed to create signed URL config: {err}"),
+            })?;
+
+        let url = self
+            .client
+            .put_object()
+            .bucket(req.bucket_name)
+            .key(req.storage_key)
+            .content_type(req.content_type)
+            .presigned(presign_config)
             .await
+            .map_err(|err| Error::Whatever {
+                msg: format!("Failed to sign upload URL: {err}"),
+            })?;
+        Ok(url.uri().to_string())
     }
 }
 
@@ -284,19 +294,23 @@ fn derivative_content_type(original: &str) -> &str {
     }
 }
 
-fn original_object_key(org_id: &str, dir_type: &str, dir_name: &str, filename: &str) -> String {
-    format!("{org_id}/{dir_type}/{dir_name}/{ORIGINAL_PATH}/{filename}")
-}
-
 #[cfg(test)]
 mod tests {
+    use memo::dir::{DirMeta, DirType};
+
     use super::{derivative_content_type, original_object_key};
 
     #[test]
     fn original_key_uses_original_version_and_stored_filename() {
+        let dir = DirMeta {
+            bucket_name: "bucket".into(),
+            org_id: "org".into(),
+            dir_type: DirType::Photos,
+            dir_name: "dir".into(),
+        };
         assert_eq!(
-            original_object_key("org", "images", "dir", "photo.jpg"),
-            "org/images/dir/orig/photo.jpg"
+            original_object_key(&dir, "photo.jpg"),
+            "org/photos/dir/orig/photo.jpg"
         );
     }
 
@@ -340,33 +354,6 @@ async fn generate_signed_url(
         Ok(url) => Ok(url.uri().to_string()),
         Err(err) => Err(Error::Whatever {
             msg: format!("Failed to sign object URL: {err}"),
-        }),
-    }
-}
-
-async fn generate_upload_signed_url(
-    client: &S3Client,
-    bucket_name: &str,
-    file_path: &str,
-    content_type: &str,
-) -> Result<String> {
-    let expires = Duration::from_hours(1);
-    let presign_config = PresigningConfig::expires_in(expires).map_err(|err| Error::Whatever {
-        msg: format!("Failed to create signed URL config: {err}"),
-    })?;
-
-    let res = client
-        .put_object()
-        .bucket(bucket_name)
-        .key(file_path)
-        .content_type(content_type)
-        .presigned(presign_config)
-        .await;
-
-    match res {
-        Ok(url) => Ok(url.uri().to_string()),
-        Err(err) => Err(Error::Whatever {
-            msg: format!("Failed to sign upload URL: {err}"),
         }),
     }
 }
