@@ -88,12 +88,14 @@ impl JobRepo {
             }
             .fail();
         }
+
         if serde_json::from_str::<serde_json::Value>(&input.payload).is_err() {
             return ValidationSnafu {
                 msg: "Job payload must be valid JSON".to_string(),
             }
             .fail();
         }
+
         let timestamp = now();
         let job = JobDto {
             id: generate_prefixed_id(IdPrefix::Job),
@@ -109,10 +111,35 @@ impl JobRepo {
             created_at: timestamp,
             updated_at: timestamp,
         };
-        let sql = "INSERT INTO jobs (id, job_type, payload, status, attempts, max_attempts, \
-                   available_at, created_at, updated_at) \
-                   VALUES (:id, :job_type, :payload, 'pending', 0, :max_attempts, \
-                   :available_at, :now, :now)";
+
+        let sql = r#"
+            INSERT INTO
+                jobs
+                (
+                    id,
+                    job_type,
+                    payload,
+                    status,
+                    attempts,
+                    max_attempts,
+                    available_at,
+                    created_at,
+                    updated_at
+                )
+            VALUES
+                (
+                    :id,
+                    :job_type,
+                    :payload,
+                    'pending',
+                    0,
+                    :max_attempts,
+                    :available_at,
+                    :now,
+                    :now
+                )
+        "#;
+
         let mut stmt = conn.prepare(sql).await.context(DbPrepareSnafu)?;
         stmt.execute(vec![
             text_param(":id", job.id.clone()),
@@ -164,10 +191,20 @@ impl JobRepo {
 
     async fn complete_once(&self, job_id: &str, lease_token: &str) -> Result<bool> {
         let conn = self.db_pool.acquire().await?;
-        let sql = "UPDATE jobs SET status = 'completed', lease_token = NULL, \
-                   lease_expires_at = NULL, updated_at = :now \
-                   WHERE id = :id AND status = 'running' AND lease_token = :token \
-                   AND lease_expires_at > :now";
+        let sql = r#"
+            UPDATE
+                jobs
+            SET
+                status = 'completed',
+                lease_token = NULL,
+                lease_expires_at = NULL,
+                updated_at = :now
+            WHERE
+                id = :id
+                AND status = 'running'
+                AND lease_token = :token
+                AND lease_expires_at > :now
+        "#;
         let mut stmt = conn.prepare(sql).await.context(DbPrepareSnafu)?;
         let affected = stmt
             .execute(vec![
@@ -204,10 +241,30 @@ impl JobRepo {
     ) -> Result<bool> {
         let conn = self.db_pool.acquire().await?;
         let timestamp = now();
-        let sql = "UPDATE jobs SET status = CASE WHEN attempts < max_attempts THEN 'pending' ELSE 'failed' END, \
-                   available_at = CASE WHEN attempts < max_attempts THEN :retry_at ELSE available_at END, \
-                   last_error = :error, lease_token = NULL, lease_expires_at = NULL, updated_at = :now \
-                   WHERE id = :id AND status = 'running' AND lease_token = :token AND lease_expires_at > :now";
+        let sql = r#"
+            UPDATE
+                jobs
+            SET
+                status = CASE
+                    WHEN attempts < max_attempts
+                        THEN 'pending'
+                        ELSE 'failed'
+                    END,
+                available_at = CASE
+                    WHEN attempts < max_attempts
+                        THEN :retry_at
+                        ELSE available_at
+                    END,
+                last_error = :error,
+                lease_token = NULL,
+                lease_expires_at = NULL,
+                updated_at = :now
+            WHERE
+                id = :id
+                AND status = 'running'
+                AND lease_token = :token
+                AND lease_expires_at > :now
+        "#;
         let mut stmt = conn.prepare(sql).await.context(DbPrepareSnafu)?;
         let affected = stmt
             .execute(vec![
@@ -244,8 +301,18 @@ impl JobRepo {
         let conn = self.db_pool.acquire().await?;
         let timestamp = now();
         let expiry = lease_expiry(timestamp, lease_duration)?;
-        let sql = "UPDATE jobs SET lease_expires_at = :expiry, updated_at = :now \
-                   WHERE id = :id AND status = 'running' AND lease_token = :token AND lease_expires_at > :now";
+        let sql = r#"
+            UPDATE
+                jobs
+            SET
+                lease_expires_at = :expiry,
+                updated_at = :now
+            WHERE
+                id = :id
+                AND status = 'running'
+                AND lease_token = :token
+                AND lease_expires_at > :now
+        "#;
         let mut stmt = conn.prepare(sql).await.context(DbPrepareSnafu)?;
         let affected = stmt
             .execute(vec![
@@ -267,10 +334,27 @@ impl JobRepo {
     async fn recover_expired_once(&self) -> Result<u64> {
         let conn = self.db_pool.acquire().await?;
         let timestamp = now();
-        let sql = "UPDATE jobs SET status = CASE WHEN attempts < max_attempts THEN 'pending' ELSE 'failed' END, \
-                   available_at = CASE WHEN attempts < max_attempts THEN :now ELSE available_at END, \
-                   lease_token = NULL, lease_expires_at = NULL, updated_at = :now \
-                   WHERE status = 'running' AND lease_expires_at <= :now";
+        let sql = r#"
+            UPDATE
+                jobs
+            SET
+                status = CASE
+                    WHEN attempts < max_attempts
+                        THEN 'pending'
+                        ELSE 'failed'
+                    END,
+                available_at = CASE
+                    WHEN attempts < max_attempts
+                        THEN :now
+                        ELSE available_at
+                    END,
+                lease_token = NULL,
+                lease_expires_at = NULL,
+                updated_at = :now
+            WHERE
+                status = 'running'
+                AND lease_expires_at <= :now
+        "#;
         let mut stmt = conn.prepare(sql).await.context(DbPrepareSnafu)?;
         let affected = stmt
             .execute(vec![integer_param(":now", timestamp)])

@@ -42,9 +42,24 @@ impl UploadRepo {
 
     pub async fn get(&self, id: &str) -> Result<Option<UploadDto>> {
         let conn = self.db_pool.acquire().await?;
-        let sql = "SELECT id, org_id, dir_id, original_filename, filename, content_type, \
-                   size, storage_key, status, created_at, expires_at \
-                   FROM uploads WHERE id = :id";
+        let sql = r#"
+            SELECT
+                id,
+                org_id,
+                dir_id,
+                original_filename,
+                filename,
+                content_type,
+                size,
+                storage_key,
+                status,
+                created_at,
+                expires_at
+            FROM
+                uploads
+            WHERE
+                id = :id
+        "#;
         let mut stmt = conn.prepare(sql).await.context(DbPrepareSnafu)?;
         collect_row(stmt.query_row(vec![text_param(":id", id.to_owned())]).await)
     }
@@ -65,10 +80,37 @@ impl UploadRepo {
 
     async fn reserve_once(&self, upload: &UploadDto) -> Result<()> {
         let conn = self.db_pool.acquire().await?;
-        let sql = "INSERT INTO uploads (id, org_id, dir_id, original_filename, filename, \
-                   content_type, size, storage_key, status, created_at, expires_at) \
-                   VALUES (:id, :org_id, :dir_id, :original_filename, :filename, \
-                   :content_type, :size, :storage_key, 'pending', :created_at, :expires_at)";
+        let sql = r#"
+            INSERT INTO
+                uploads
+                (
+                    id,
+                    org_id,
+                    dir_id,
+                    original_filename,
+                    filename,
+                    content_type,
+                    size,
+                    storage_key,
+                    status,
+                    created_at,
+                    expires_at
+                )
+            VALUES
+                (
+                    :id,
+                    :org_id,
+                    :dir_id,
+                    :original_filename,
+                    :filename,
+                    :content_type,
+                    :size,
+                    :storage_key,
+                    'pending',
+                    :created_at,
+                    :expires_at
+                )
+        "#;
 
         let mut stmt = conn.prepare(sql).await.context(DbPrepareSnafu)?;
 

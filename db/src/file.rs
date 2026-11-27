@@ -226,9 +226,20 @@ impl FileRepo {
 
     /// Find stale processing files and interrupted cleanup claims.
     pub async fn list_stale_processing_ids(&self, cutoff: i64) -> Result<Vec<String>> {
-        let query = "SELECT id FROM files WHERE deleted_at IS NULL AND status IN ('processing', 'cleaning') AND created_at <= :cutoff ORDER BY created_at ASC";
+        let query = r#"
+            SELECT
+                id
+            FROM
+                files
+            WHERE
+                deleted_at IS NULL
+                AND status IN ('processing', 'cleaning')
+                AND created_at <= :cutoff ORDER BY created_at ASC
+        "#;
+
         let mut params = new_query_params();
         params.push(integer_param(":cutoff", cutoff));
+
         let conn = self.db_pool.acquire().await?;
         let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         let mut rows = stmt.query(params).await.context(DbStatementSnafu)?;
@@ -245,7 +256,19 @@ impl FileRepo {
     }
 
     async fn claim_processing_cleanup_once(&self, id: &str, cutoff: i64) -> Result<bool> {
-        let query = "UPDATE files SET status = 'cleaning', updated_at = :now WHERE id = :id AND status = 'processing' AND created_at <= :cutoff AND deleted_at IS NULL";
+        let query = r#"
+            UPDATE
+                files
+            SET
+                status = 'cleaning',
+                updated_at = :now
+            WHERE
+                id = :id
+                AND status = 'processing'
+                AND created_at <= :cutoff
+                AND deleted_at IS NULL
+        "#;
+
         let mut params = new_query_params();
         params.push(text_param(":id", id.to_owned()));
         params.push(integer_param(":cutoff", cutoff));
@@ -271,7 +294,17 @@ impl FileRepo {
     }
 
     pub async fn listing_count(&self, dir_id: &str, params: &ListFilesParams) -> Result<i64> {
-        let mut query = "SELECT COUNT(*) AS total_count FROM files WHERE dir_id = :dir_id AND status = :active_status".to_string();
+        let mut query = r#"
+            SELECT
+                COUNT(*) AS total_count
+            FROM
+                files
+            WHERE
+                dir_id = :dir_id
+                AND status = :active_status
+        "#
+        .to_string();
+
         let mut q_params = new_query_params();
         q_params.push(text_param(":dir_id", dir_id.to_owned()));
         q_params.push(text_param(":active_status", FileStatus::Active.to_string()));
@@ -878,8 +911,7 @@ impl FileRepo {
             FROM files
             WHERE dir_id = :dir_id AND name = :name
             LIMIT 1
-        "#
-        .to_string();
+        "#;
 
         let mut q_params = new_query_params();
         q_params.push(text_param(":dir_id", dir_id.to_owned()));
