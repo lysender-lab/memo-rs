@@ -149,6 +149,7 @@ pub async fn generate_upload_url_svc(
         }
         .fail();
     }
+
     if data.size > MAX_FILE_SIZE {
         return Err(Error::Validation {
             msg: "File size exceeds maximum allowed".to_string(),
@@ -192,9 +193,11 @@ pub async fn generate_upload_url_svc(
         dir_type: dir.dir_type.clone(),
         dir_name: dir.name.clone(),
     };
+
     let filename = slugify_prefixed(&data.filename);
     let storage_key = original_object_key(&dir_meta, &filename);
     let created_at = chrono::Utc::now().timestamp();
+
     let upload = UploadDto {
         id: generate_prefixed_id(IdPrefix::Upload),
         org_id: dir.org_id.clone(),
@@ -220,6 +223,7 @@ pub async fn generate_upload_url_svc(
         )
         .await
         .context(StorageSnafu)?;
+
     let response = signed_upload_response(&upload, upload_url, &state.config.jwt_secret)?;
 
     // Neither signed credential leaves the API until the reservation is durable.

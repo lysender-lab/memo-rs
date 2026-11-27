@@ -64,7 +64,9 @@ impl UploadRepo {
                    content_type, size, storage_key, status, created_at, expires_at) \
                    VALUES (:id, :org_id, :dir_id, :original_filename, :filename, \
                    :content_type, :size, :storage_key, 'pending', :created_at, :expires_at)";
+
         let mut stmt = conn.prepare(sql).await.context(DbPrepareSnafu)?;
+
         stmt.execute(vec![
             text_param(":id", upload.id.clone()),
             text_param(":org_id", upload.org_id.clone()),
