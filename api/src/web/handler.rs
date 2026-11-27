@@ -311,13 +311,16 @@ pub async fn create_file_handler(
         .await
         .context(DbSnafu)?
         .context(UploadTokenSnafu)?;
+
     let actor = actor.actor.expect("Actor must be present");
+
     let dir_meta = DirMeta {
         bucket_name: state.config.cloud.bucket.clone(),
         org_id: actor.org_id,
         dir_type: dir.dir_type.clone(),
         dir_name: dir.name.clone(),
     };
+
     ensure!(
         upload.org_id == dir_meta.org_id
             && upload.org_id == dir.org_id

@@ -473,12 +473,11 @@ impl FileRepo {
             let mut stmt = tx
                 .prepare(
                     "DELETE FROM uploads WHERE id = :id AND org_id = :org_id AND dir_id = :dir_id \
-                     AND status = 'pending' AND expires_at > :now \
-                     AND EXISTS (SELECT 1 FROM dirs WHERE id = :dir_id AND org_id = :org_id \
-                                 AND deleted_at IS NULL)",
+                     AND status = 'pending' AND expires_at > :now",
                 )
                 .await
                 .context(DbPrepareSnafu)?;
+
             let consumed = stmt
                 .execute(vec![
                     text_param(":id", upload_id.to_owned()),
@@ -488,13 +487,17 @@ impl FileRepo {
                 ])
                 .await
                 .context(DbStatementSnafu)?;
+
             if consumed == 0 {
                 return Ok(None);
             }
+
             let file = Self::create_on(&tx, file).await?;
+
             if let Some(job) = job {
                 JobRepo::enqueue_on(&tx, job).await?;
             }
+
             Ok(Some(file))
         }
         .await;
@@ -509,6 +512,7 @@ impl FileRepo {
                 .map(|_| Some(file)),
             other => other,
         };
+
         if !tx.is_autocommit().context(DbTransactionSnafu)? {
             tx.rollback().await.context(DbTransactionSnafu)?;
         } else {

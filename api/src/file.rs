@@ -474,6 +474,7 @@ pub async fn create_remote_file_svc(
         }
         .fail();
     }
+
     let file = FileDto {
         id: generate_prefixed_id(IdPrefix::File),
         org_id: upload.org_id.clone(),
@@ -530,6 +531,7 @@ pub async fn create_remote_file_svc(
     }
 
     let job = is_image.then(|| crate::job::create_image_versions_job(file.id.clone()));
+
     let file = state
         .db
         .files
