@@ -1,13 +1,15 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use snafu::{ResultExt, ensure};
+use tokio::time::sleep;
 use turso::Row;
 
-use crate::Result;
 use crate::db_pool::DbPool;
 use crate::error::{DbPrepareSnafu, DbStatementSnafu, ValidationSnafu};
 use crate::turso_decode::{FromTursoRow, collect_row, row_integer, row_text};
 use crate::turso_params::{integer_param, text_param};
+use crate::{Error, Result};
 use memo::file::{UploadDto, UploadStatus};
 
 impl FromTursoRow for UploadDto {
@@ -59,6 +61,27 @@ impl UploadRepo {
             }
         );
 
+        let mut delay = Duration::from_millis(100);
+        let mut attempt = 1;
+        loop {
+            match self.reserve_once(upload).await {
+                Err(Error::DbPrepare { ref source } | Error::DbStatement { ref source })
+                    if attempt < 5
+                        && matches!(
+                            source,
+                            turso::Error::Busy(_) | turso::Error::BusySnapshot(_)
+                        ) =>
+                {
+                    sleep(delay).await;
+                    delay *= 2;
+                    attempt += 1;
+                }
+                result => return result,
+            }
+        }
+    }
+
+    async fn reserve_once(&self, upload: &UploadDto) -> Result<()> {
         let conn = self.db_pool.acquire().await?;
         let sql = "INSERT INTO uploads (id, org_id, dir_id, original_filename, filename, \
                    content_type, size, storage_key, status, created_at, expires_at) \
@@ -88,16 +111,13 @@ impl UploadRepo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Error, dir::NewDir, test::TestCtx};
+    use crate::{dir::NewDir, test::TestCtx};
     use memo::dir::DirType;
     use memo::file::{FileDto, FileStatus, FileType};
     use memo::job::NewJobDto;
-    use std::time::Duration;
 
-    #[tokio::test]
-    async fn reserve_rejects_duplicate_storage_keys() -> Result<()> {
-        let ctx = TestCtx::new("reserve_upload").await?;
-        let mut upload = UploadDto {
+    fn pending_upload() -> UploadDto {
+        UploadDto {
             id: "upload-first".into(),
             org_id: "org".into(),
             dir_id: "dir".into(),
@@ -109,13 +129,56 @@ mod tests {
             status: UploadStatus::Pending,
             created_at: 100,
             expires_at: 3700,
-        };
+        }
+    }
+
+    #[tokio::test]
+    async fn reserve_rejects_duplicate_storage_keys() -> Result<()> {
+        let ctx = TestCtx::new("reserve_upload").await?;
+        let mut upload = pending_upload();
         ctx.db.uploads.reserve(&upload).await?;
         upload.id = "upload-second".into();
         assert!(matches!(
             ctx.db.uploads.reserve(&upload).await,
             Err(Error::DbStatement { .. })
         ));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn reserve_retries_write_contention() -> Result<()> {
+        let ctx = TestCtx::new("reserve_upload_contention").await?;
+        let repo = &ctx.db.uploads;
+        let upload = pending_upload();
+        let blocker = repo.db_pool.acquire().await?;
+        blocker
+            .execute("BEGIN IMMEDIATE", ())
+            .await
+            .context(DbStatementSnafu)?;
+
+        assert!(matches!(
+            repo.reserve(&upload).await,
+            Err(Error::DbPrepare { source } | Error::DbStatement { source })
+                if matches!(source, turso::Error::Busy(_) | turso::Error::BusySnapshot(_))
+        ));
+        assert!(repo.get(&upload.id).await?.is_none());
+
+        let reservation = repo.reserve(&upload);
+        tokio::pin!(reservation);
+        tokio::select! {
+            biased;
+            result = &mut reservation => panic!("reservation completed while write was blocked: {result:?}"),
+            _ = sleep(Duration::from_millis(50)) => {}
+        }
+        blocker
+            .execute("ROLLBACK", ())
+            .await
+            .context(DbStatementSnafu)?;
+
+        reservation.await?;
+        let saved = repo.get(&upload.id).await?.unwrap();
+        assert_eq!(saved.status, UploadStatus::Pending);
+        assert_eq!(saved.storage_key, upload.storage_key);
         Ok(())
     }
 
