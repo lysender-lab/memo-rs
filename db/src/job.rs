@@ -4,15 +4,16 @@ use std::time::Duration;
 use memo::job::{JobDto, JobStatus, NewJobDto};
 use memo::utils::{IdPrefix, generate_id, generate_prefixed_id};
 use snafu::ResultExt;
+use tokio::time::sleep;
 use turso::{Connection, Row};
 
-use crate::Result;
 use crate::db_pool::DbPool;
 use crate::error::{DbPrepareSnafu, DbStatementSnafu, ValidationSnafu};
 use crate::turso_decode::{
     FromTursoRow, collect_row, opt_row_integer, opt_row_text, row_integer, row_text,
 };
 use crate::turso_params::{integer_param, text_param};
+use crate::{Error, Result};
 
 const COLUMNS: &str = "id, job_type, payload, status, attempts, max_attempts, available_at, \
     lease_token, lease_expires_at, last_error, created_at, updated_at";
@@ -183,8 +184,28 @@ impl JobRepo {
 
     /// Complete a job if the lease token still matches and has not expired.
     pub async fn complete(&self, job_id: &str, lease_token: &str) -> Result<bool> {
+        let mut delay = Duration::from_millis(100);
+        let mut attempt = 1;
+        loop {
+            match self.complete_once(job_id, lease_token).await {
+                Err(Error::DbPrepare { ref source } | Error::DbStatement { ref source })
+                    if attempt < 5
+                        && matches!(
+                            source,
+                            turso::Error::Busy(_) | turso::Error::BusySnapshot(_)
+                        ) =>
+                {
+                    sleep(delay).await;
+                    delay *= 2;
+                    attempt += 1;
+                }
+                result => return result,
+            }
+        }
+    }
+
+    async fn complete_once(&self, job_id: &str, lease_token: &str) -> Result<bool> {
         let conn = self.db_pool.acquire().await?;
-        let timestamp = now();
         let sql = "UPDATE jobs SET status = 'completed', lease_token = NULL, \
                    lease_expires_at = NULL, updated_at = :now \
                    WHERE id = :id AND status = 'running' AND lease_token = :token \
@@ -192,7 +213,7 @@ impl JobRepo {
         let mut stmt = conn.prepare(sql).await.context(DbPrepareSnafu)?;
         let affected = stmt
             .execute(vec![
-                integer_param(":now", timestamp),
+                integer_param(":now", now()),
                 text_param(":id", job_id.to_owned()),
                 text_param(":token", lease_token.to_owned()),
             ])
@@ -453,6 +474,86 @@ mod tests {
             1
         );
         assert!(repo.get(&future.id).await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn complete_retries_write_contention() -> Result<()> {
+        let ctx = TestCtx::new("jobs-complete-contention").await?;
+        let repo = &ctx.db.jobs;
+        repo.enqueue(input(2, now())).await?;
+        let job = repo.claim_next(Duration::from_secs(60)).await?.unwrap();
+        let token = job.lease_token.as_deref().unwrap();
+        let blocker = repo.db_pool.acquire().await?;
+        blocker
+            .execute("BEGIN IMMEDIATE", ())
+            .await
+            .context(DbStatementSnafu)?;
+
+        assert!(matches!(
+            repo.complete(&job.id, token).await,
+            Err(Error::DbPrepare { source } | Error::DbStatement { source })
+                if matches!(source, turso::Error::Busy(_) | turso::Error::BusySnapshot(_))
+        ));
+        assert_eq!(repo.get(&job.id).await?.unwrap().status, JobStatus::Running);
+
+        let completion = repo.complete(&job.id, token);
+        tokio::pin!(completion);
+        tokio::select! {
+            biased;
+            result = &mut completion => panic!("completion returned while write was blocked: {result:?}"),
+            _ = sleep(Duration::from_millis(50)) => {}
+        }
+        blocker
+            .execute("ROLLBACK", ())
+            .await
+            .context(DbStatementSnafu)?;
+
+        assert!(completion.await?);
+        let completed = repo.get(&job.id).await?.unwrap();
+        assert_eq!(completed.status, JobStatus::Completed);
+        assert_eq!(completed.attempts, job.attempts);
+        assert!(completed.lease_token.is_none() && completed.lease_expires_at.is_none());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn complete_rechecks_lease_after_write_contention() -> Result<()> {
+        let ctx = TestCtx::new("jobs-complete-expiry").await?;
+        let repo = &ctx.db.jobs;
+        repo.enqueue(input(2, now())).await?;
+        let job = repo.claim_next(Duration::from_secs(60)).await?.unwrap();
+        let token = job.lease_token.as_deref().unwrap();
+        let blocker = repo.db_pool.acquire().await?;
+        blocker
+            .execute("BEGIN IMMEDIATE", ())
+            .await
+            .context(DbStatementSnafu)?;
+
+        let completion = repo.complete(&job.id, token);
+        tokio::pin!(completion);
+        tokio::select! {
+            biased;
+            result = &mut completion => panic!("completion returned while write was blocked: {result:?}"),
+            _ = sleep(Duration::from_millis(50)) => {}
+        }
+        blocker
+            .execute(
+                "UPDATE jobs SET lease_expires_at = :expiry WHERE id = :id",
+                vec![
+                    integer_param(":expiry", now()),
+                    text_param(":id", job.id.clone()),
+                ],
+            )
+            .await
+            .context(DbStatementSnafu)?;
+        blocker
+            .execute("COMMIT", ())
+            .await
+            .context(DbStatementSnafu)?;
+
+        assert!(!completion.await?);
+        assert_eq!(repo.get(&job.id).await?.unwrap().status, JobStatus::Running);
+        Ok(())
     }
 
     #[tokio::test]
