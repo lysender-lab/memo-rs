@@ -419,47 +419,25 @@ pub async fn create_file_svc(
 
 pub async fn delete_file_svc(state: AppState, dir_meta: &DirMeta, file: &FileDto) -> Result<()> {
     if file.file_type == FileType::Note {
-        state.db.files.delete(&file.id).await.context(DbSnafu)?;
-        state.file_cache.remove(&file.id);
-        // Also delete all note revisions
-        state
-            .db
-            .notes
-            .delete_revisions(&file.id)
-            .await
-            .context(DbSnafu)?;
-    } else {
-        if !state
-            .db
-            .files
-            .mark_inactive(&file.id)
-            .await
-            .context(DbSnafu)?
-        {
-            return ValidationSnafu {
-                msg: "Only active files can be deleted".to_string(),
-            }
-            .fail();
-        }
-        state.file_cache.remove(&file.id);
-        // Read after the transition so the payload includes completed image metadata.
-        let current = state
-            .db
-            .files
-            .get(&file.id)
-            .await
-            .context(DbSnafu)?
-            .ok_or_else(|| Error::NotFound {
-                msg: "File not found".to_string(),
-            })?;
-        crate::job::enqueue(
-            &state.db,
-            crate::job::delete_file_job(current, dir_meta.clone()),
-        )
-        .await
-        .context(DbSnafu)?;
+        return crate::note::delete_note_svc(&state, &file.id).await;
     }
 
+    if !state
+        .db
+        .files
+        .enqueue_delete(&file.id, |current| {
+            crate::job::delete_file_job(current, dir_meta.clone())
+        })
+        .await
+        .context(DbSnafu)?
+    {
+        return ValidationSnafu {
+            msg: "Only active files can be deleted".to_string(),
+        }
+        .fail();
+    }
+
+    state.file_cache.remove(&file.id);
     Ok(())
 }
 

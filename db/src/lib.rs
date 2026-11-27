@@ -6,6 +6,7 @@ mod error;
 pub mod file;
 pub mod job;
 pub mod note;
+mod retry;
 #[cfg(test)]
 mod test;
 mod turso_decode;

@@ -7,13 +7,14 @@ use std::time::Duration;
 use tokio::time::sleep;
 use turso::{
     Connection, Row,
-    transaction::{DropBehavior, TransactionBehavior},
+    transaction::{DropBehavior, Transaction, TransactionBehavior},
 };
 use validator::Validate;
 
 use crate::db_pool::DbPool;
 use crate::error::{DbPrepareSnafu, DbStatementSnafu, DbTransactionSnafu, ValidationSnafu};
 use crate::job::JobRepo;
+use crate::retry::{WRITE_ATTEMPTS, retry_contention};
 use crate::turso_decode::{
     FromTursoRow, collect_count, collect_row, collect_rows, opt_row_integer, opt_row_text,
     row_integer, row_text,
@@ -237,6 +238,13 @@ impl FileRepo {
 
     /// Prevent image finalization while an abandoned file is being cleaned up.
     pub async fn claim_processing_cleanup(&self, id: &str, cutoff: i64) -> Result<bool> {
+        retry_contention(WRITE_ATTEMPTS, || {
+            self.claim_processing_cleanup_once(id, cutoff)
+        })
+        .await
+    }
+
+    async fn claim_processing_cleanup_once(&self, id: &str, cutoff: i64) -> Result<bool> {
         let query = "UPDATE files SET status = 'cleaning', updated_at = :now WHERE id = :id AND status = 'processing' AND created_at <= :cutoff AND deleted_at IS NULL";
         let mut params = new_query_params();
         params.push(text_param(":id", id.to_owned()));
@@ -248,6 +256,10 @@ impl FileRepo {
     }
 
     pub async fn delete_cleaning(&self, id: &str) -> Result<bool> {
+        retry_contention(WRITE_ATTEMPTS, || self.delete_cleaning_once(id)).await
+    }
+
+    async fn delete_cleaning_once(&self, id: &str) -> Result<bool> {
         let mut params = new_query_params();
         params.push(text_param(":id", id.to_owned()));
         let conn = self.db_pool.acquire().await?;
@@ -432,30 +444,10 @@ impl FileRepo {
         file: &FileDto,
         job: Option<NewJobDto>,
     ) -> Result<Option<FileDto>> {
-        let mut delay = Duration::from_millis(100);
-        let mut attempt = 1;
-        loop {
-            match self
-                .finalize_upload_once(upload_id, file, job.clone())
-                .await
-            {
-                Err(
-                    Error::DbStatement { ref source }
-                    | Error::DbTransaction { ref source }
-                    | Error::DbPrepare { ref source },
-                ) if attempt < 5
-                    && matches!(
-                        source,
-                        turso::Error::Busy(_) | turso::Error::BusySnapshot(_)
-                    ) =>
-                {
-                    sleep(delay).await;
-                    delay *= 2;
-                    attempt += 1;
-                }
-                result => return result,
-            }
-        }
+        retry_contention(WRITE_ATTEMPTS, || {
+            self.finalize_upload_once(upload_id, file, job.clone())
+        })
+        .await
     }
 
     async fn finalize_upload_once(
@@ -465,7 +457,7 @@ impl FileRepo {
         job: Option<NewJobDto>,
     ) -> Result<Option<FileDto>> {
         let mut conn = self.db_pool.acquire().await?;
-        let mut tx = conn
+        let tx = conn
             .transaction_with_behavior(TransactionBehavior::Concurrent)
             .await
             .context(DbTransactionSnafu)?;
@@ -502,23 +494,11 @@ impl FileRepo {
         }
         .await;
 
-        // Resolve the transaction before returning the connection to the pool.
-        // Prepared statements on a reused Turso connection do not run deferred rollback.
-        let result = match result {
-            Ok(Some(file)) => tx
-                .execute("COMMIT", ())
-                .await
-                .context(DbTransactionSnafu)
-                .map(|_| Some(file)),
-            other => other,
-        };
-
-        if !tx.is_autocommit().context(DbTransactionSnafu)? {
+        if matches!(result, Ok(None)) {
             tx.rollback().await.context(DbTransactionSnafu)?;
-        } else {
-            tx.set_drop_behavior(DropBehavior::Ignore);
+            return result;
         }
-        result
+        finish_transaction(tx, result).await
     }
 
     pub async fn retry_create(&self, file_dto: FileDto, max_retries: usize) -> Result<FileDto> {
@@ -558,43 +538,10 @@ impl FileRepo {
         checksum: String,
         max_retries: usize,
     ) -> Result<FileDto> {
-        let mut attempts = 0;
-        let mut delay = Duration::from_millis(100);
-        let max_delay = Duration::from_secs(2);
-
-        loop {
-            match self
-                .create_note(file.clone(), cipher_content.clone(), checksum.clone())
-                .await
-            {
-                Ok(result) => return Ok(result),
-                Err(Error::DbStatement { source }) => match source {
-                    turso::Error::Busy(..) => {
-                        attempts += 1;
-                        if attempts >= max_retries {
-                            return Err(Error::DbStatement { source });
-                        }
-
-                        sleep(delay).await;
-                        delay = min(delay.saturating_mul(2), max_delay);
-                    }
-                    _ => return Err(Error::DbStatement { source }),
-                },
-                Err(Error::DbTransaction { source }) => match source {
-                    turso::Error::Busy(..) => {
-                        attempts += 1;
-                        if attempts >= max_retries {
-                            return Err(Error::DbTransaction { source });
-                        }
-
-                        sleep(delay).await;
-                        delay = min(delay.saturating_mul(2), max_delay);
-                    }
-                    _ => return Err(Error::DbTransaction { source }),
-                },
-                Err(error) => return Err(error),
-            }
-        }
+        retry_contention(max_retries, || {
+            self.create_note(file.clone(), cipher_content.clone(), checksum.clone())
+        })
+        .await
     }
 
     async fn create_note(
@@ -654,19 +601,20 @@ impl FileRepo {
         note_params.push(text_param(":checksum", note.checksum));
         note_params.push(integer_param(":created_at", note.created_at));
 
-        let conn = self.db_pool.acquire().await?;
-        conn.execute("BEGIN CONCURRENT", ())
+        let mut conn = self.db_pool.acquire().await?;
+        let tx = conn
+            .transaction_with_behavior(TransactionBehavior::Concurrent)
             .await
             .context(DbTransactionSnafu)?;
 
         let operation: Result<()> = async {
-            let mut file_stmt = conn.prepare(file_query).await.context(DbPrepareSnafu)?;
+            let mut file_stmt = tx.prepare(file_query).await.context(DbPrepareSnafu)?;
             file_stmt
                 .execute(file_params)
                 .await
                 .context(DbStatementSnafu)?;
 
-            let mut note_stmt = conn.prepare(note_query).await.context(DbPrepareSnafu)?;
+            let mut note_stmt = tx.prepare(note_query).await.context(DbPrepareSnafu)?;
             note_stmt
                 .execute(note_params)
                 .await
@@ -676,21 +624,7 @@ impl FileRepo {
         }
         .await;
 
-        if let Err(error) = operation {
-            conn.execute("ROLLBACK", ())
-                .await
-                .context(DbTransactionSnafu)?;
-            return Err(error);
-        }
-
-        if let Err(error) = conn.execute("COMMIT", ()).await.context(DbTransactionSnafu) {
-            conn.execute("ROLLBACK", ())
-                .await
-                .context(DbTransactionSnafu)?;
-            return Err(error);
-        }
-
-        Ok(file)
+        finish_transaction(tx, operation.map(|()| file)).await
     }
 
     pub async fn update_note(
@@ -743,13 +677,14 @@ impl FileRepo {
         update_file_params.push(integer_param(":updated_at", updated_at));
         update_file_params.push(text_param(":id", file_id));
 
-        let conn = self.db_pool.acquire().await?;
-        conn.execute("BEGIN CONCURRENT", ())
+        let mut conn = self.db_pool.acquire().await?;
+        let tx = conn
+            .transaction_with_behavior(TransactionBehavior::Concurrent)
             .await
             .context(DbTransactionSnafu)?;
 
         let operation: Result<()> = async {
-            let mut update_revision_stmt = conn
+            let mut update_revision_stmt = tx
                 .prepare(update_revision_query)
                 .await
                 .context(DbPrepareSnafu)?;
@@ -758,7 +693,7 @@ impl FileRepo {
                 .await
                 .context(DbStatementSnafu)?;
 
-            let mut insert_revision_stmt = conn
+            let mut insert_revision_stmt = tx
                 .prepare(insert_revision_query)
                 .await
                 .context(DbPrepareSnafu)?;
@@ -767,7 +702,7 @@ impl FileRepo {
                 .await
                 .context(DbStatementSnafu)?;
 
-            let mut update_file_stmt = conn
+            let mut update_file_stmt = tx
                 .prepare(update_file_query)
                 .await
                 .context(DbPrepareSnafu)?;
@@ -780,21 +715,7 @@ impl FileRepo {
         }
         .await;
 
-        if let Err(error) = operation {
-            conn.execute("ROLLBACK", ())
-                .await
-                .context(DbTransactionSnafu)?;
-            return Err(error);
-        }
-
-        if let Err(error) = conn.execute("COMMIT", ()).await.context(DbTransactionSnafu) {
-            conn.execute("ROLLBACK", ())
-                .await
-                .context(DbTransactionSnafu)?;
-            return Err(error);
-        }
-
-        Ok(note)
+        finish_transaction(tx, operation.map(|()| note)).await
     }
 
     pub async fn retry_update_note(
@@ -806,65 +727,79 @@ impl FileRepo {
         updated_at: i64,
         max_retries: usize,
     ) -> Result<NoteDto> {
-        let mut attempts = 0;
-        let mut delay = Duration::from_millis(100);
-        let max_delay = Duration::from_secs(2);
-
-        loop {
-            match self
-                .update_note(
-                    file_id.clone(),
-                    cipher_content.clone(),
-                    checksum.clone(),
-                    size,
-                    updated_at,
-                )
-                .await
-            {
-                Ok(result) => return Ok(result),
-                Err(Error::DbStatement { source }) => match source {
-                    turso::Error::Busy(..) => {
-                        attempts += 1;
-                        if attempts >= max_retries {
-                            return Err(Error::DbStatement { source });
-                        }
-
-                        sleep(delay).await;
-                        delay = min(delay.saturating_mul(2), max_delay);
-                    }
-                    _ => return Err(Error::DbStatement { source }),
-                },
-                Err(Error::DbTransaction { source }) => match source {
-                    turso::Error::Busy(..) => {
-                        attempts += 1;
-                        if attempts >= max_retries {
-                            return Err(Error::DbTransaction { source });
-                        }
-
-                        sleep(delay).await;
-                        delay = min(delay.saturating_mul(2), max_delay);
-                    }
-                    _ => return Err(Error::DbTransaction { source }),
-                },
-                Err(error) => return Err(error),
-            }
-        }
+        retry_contention(max_retries, || {
+            self.update_note(
+                file_id.clone(),
+                cipher_content.clone(),
+                checksum.clone(),
+                size,
+                updated_at,
+            )
+        })
+        .await
     }
 
     /// Reserve an active file for deletion.
     pub async fn mark_inactive(&self, id: &str) -> Result<bool> {
+        retry_contention(WRITE_ATTEMPTS, || async {
+            let conn = self.db_pool.acquire().await?;
+            Self::mark_inactive_on(&conn, id).await
+        })
+        .await
+    }
+
+    async fn mark_inactive_on(conn: &Connection, id: &str) -> Result<bool> {
         let query = "UPDATE files SET status = 'inactive', updated_at = :updated_at WHERE id = :id AND status = 'active' AND deleted_at IS NULL";
         let mut params = new_query_params();
         params.push(text_param(":id", id.to_owned()));
         params.push(integer_param(":updated_at", chrono::Utc::now().timestamp()));
-        let conn = self.db_pool.acquire().await?;
         let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         let affected = stmt.execute(params).await.context(DbStatementSnafu)?;
         Ok(affected > 0)
     }
 
+    /// Hide an active file and enqueue deletion atomically. The job builder may
+    /// be called again if the transaction is retried.
+    pub async fn enqueue_delete(
+        &self,
+        id: &str,
+        build_job: impl Fn(FileDto) -> NewJobDto,
+    ) -> Result<bool> {
+        retry_contention(WRITE_ATTEMPTS, || self.enqueue_delete_once(id, &build_job)).await
+    }
+
+    async fn enqueue_delete_once(
+        &self,
+        id: &str,
+        build_job: &impl Fn(FileDto) -> NewJobDto,
+    ) -> Result<bool> {
+        let mut conn = self.db_pool.acquire().await?;
+        let tx = conn
+            .transaction_with_behavior(TransactionBehavior::Concurrent)
+            .await
+            .context(DbTransactionSnafu)?;
+
+        let result = async {
+            if !Self::mark_inactive_on(&tx, id).await? {
+                return Ok(false);
+            }
+            let file = Self::get_on(&tx, id)
+                .await?
+                .ok_or_else(|| Error::from("File missing after marking it inactive"))?;
+            JobRepo::enqueue_on(&tx, build_job(file)).await?;
+            Ok(true)
+        }
+        .await;
+
+        finish_transaction(tx, result).await
+    }
+
     /// Finalize an image only if it still exists and is awaiting processing.
     pub async fn finish_image_processing(&self, file: &FileDto) -> Result<bool> {
+        retry_contention(WRITE_ATTEMPTS, || self.finish_image_processing_once(file)).await
+    }
+
+    async fn finish_image_processing_once(&self, file: &FileDto) -> Result<bool> {
         let row: FileRow = file.clone().into();
         let query = r#"
             UPDATE files
@@ -887,6 +822,11 @@ impl FileRepo {
     }
 
     pub async fn get(&self, id: &str) -> Result<Option<FileDto>> {
+        let conn = self.db_pool.acquire().await?;
+        Self::get_on(&conn, id).await
+    }
+
+    async fn get_on(conn: &Connection, id: &str) -> Result<Option<FileDto>> {
         let query = r#"
             SELECT
                 id,
@@ -912,7 +852,6 @@ impl FileRepo {
         let mut q_params = new_query_params();
         q_params.push(text_param(":id", id.to_owned()));
 
-        let conn = self.db_pool.acquire().await?;
         let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         let row_result = stmt.query_row(q_params).await;
         let dto: Option<FileDto> = collect_row(row_result)?;
@@ -1003,6 +942,10 @@ impl FileRepo {
     }
 
     pub async fn delete_note(&self, file_id: &str) -> Result<()> {
+        retry_contention(WRITE_ATTEMPTS, || self.delete_note_once(file_id)).await
+    }
+
+    async fn delete_note_once(&self, file_id: &str) -> Result<()> {
         let delete_revisions_query = "DELETE FROM notes WHERE file_id = :file_id";
         let delete_file_query = "DELETE FROM files WHERE id = :id";
 
@@ -1012,13 +955,14 @@ impl FileRepo {
         let mut file_params = new_query_params();
         file_params.push(text_param(":id", file_id.to_owned()));
 
-        let conn = self.db_pool.acquire().await?;
-        conn.execute("BEGIN CONCURRENT", ())
+        let mut conn = self.db_pool.acquire().await?;
+        let tx = conn
+            .transaction_with_behavior(TransactionBehavior::Concurrent)
             .await
             .context(DbTransactionSnafu)?;
 
         let operation: Result<()> = async {
-            let mut revisions_stmt = conn
+            let mut revisions_stmt = tx
                 .prepare(delete_revisions_query)
                 .await
                 .context(DbPrepareSnafu)?;
@@ -1027,7 +971,7 @@ impl FileRepo {
                 .await
                 .context(DbStatementSnafu)?;
 
-            let mut file_stmt = conn
+            let mut file_stmt = tx
                 .prepare(delete_file_query)
                 .await
                 .context(DbPrepareSnafu)?;
@@ -1040,24 +984,14 @@ impl FileRepo {
         }
         .await;
 
-        if let Err(error) = operation {
-            conn.execute("ROLLBACK", ())
-                .await
-                .context(DbTransactionSnafu)?;
-            return Err(error);
-        }
-
-        if let Err(error) = conn.execute("COMMIT", ()).await.context(DbTransactionSnafu) {
-            conn.execute("ROLLBACK", ())
-                .await
-                .context(DbTransactionSnafu)?;
-            return Err(error);
-        }
-
-        Ok(())
+        finish_transaction(tx, operation).await
     }
 
     pub async fn delete(&self, id: &str) -> Result<()> {
+        retry_contention(WRITE_ATTEMPTS, || self.delete_once(id)).await
+    }
+
+    async fn delete_once(&self, id: &str) -> Result<()> {
         let query = "DELETE FROM files WHERE id = :id".to_string();
         let mut q_params = new_query_params();
         q_params.push(text_param(":id", id.to_owned()));
@@ -1068,6 +1002,26 @@ impl FileRepo {
 
         Ok(())
     }
+}
+
+async fn finish_transaction<T>(mut tx: Transaction<'_>, result: Result<T>) -> Result<T> {
+    let result = match result {
+        Ok(value) => tx
+            .execute("COMMIT", ())
+            .await
+            .context(DbTransactionSnafu)
+            .map(|_| value),
+        Err(error) => Err(error),
+    };
+
+    // Resolve the transaction before reusing the connection. A failed operation
+    // or commit may already have caused Turso to roll it back.
+    if !tx.is_autocommit().context(DbTransactionSnafu)? {
+        tx.rollback().await.context(DbTransactionSnafu)?;
+    } else {
+        tx.set_drop_behavior(DropBehavior::Ignore);
+    }
+    result
 }
 
 #[cfg(test)]
@@ -1257,6 +1211,61 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
+    }
+
+    #[tokio::test]
+    async fn enqueue_delete_rolls_back_on_job_failure_and_queues_only_once() -> Result<()> {
+        let ctx = TestCtx::new("enqueue-file-delete").await?;
+        let mut file = note_file();
+        file.file_type = FileType::Image;
+        file.img_taken_at = Some(42);
+        ctx.db.files.create(file.clone()).await?;
+
+        let build_job = |file: FileDto| NewJobDto {
+            job_type: "delete_file".into(),
+            payload: serde_json::to_string(&file).unwrap(),
+            max_attempts: 3,
+            available_at: 0,
+        };
+        assert!(matches!(
+            ctx.db
+                .files
+                .enqueue_delete(&file.id, |file| NewJobDto {
+                    payload: "invalid JSON".into(),
+                    ..build_job(file)
+                })
+                .await,
+            Err(Error::Validation { .. })
+        ));
+        assert_eq!(
+            ctx.db.files.get(&file.id).await?.unwrap().status,
+            FileStatus::Active
+        );
+
+        assert!(ctx.db.files.enqueue_delete(&file.id, build_job).await?);
+        assert!(!ctx.db.files.enqueue_delete(&file.id, build_job).await?);
+        let job = ctx
+            .db
+            .jobs
+            .claim_next(Duration::from_secs(60))
+            .await?
+            .unwrap();
+        let payload: FileDto = serde_json::from_str(&job.payload).unwrap();
+        assert_eq!(payload.id, file.id);
+        assert_eq!(payload.status, FileStatus::Inactive);
+        assert_eq!(payload.img_taken_at, Some(42));
+        assert_eq!(
+            ctx.db.files.get(&file.id).await?.unwrap().status,
+            FileStatus::Inactive
+        );
+        assert!(
+            ctx.db
+                .jobs
+                .claim_next(Duration::from_secs(60))
+                .await?
+                .is_none()
+        );
+        Ok(())
     }
 
     #[tokio::test]

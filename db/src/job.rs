@@ -4,16 +4,16 @@ use std::time::Duration;
 use memo::job::{JobDto, JobStatus, NewJobDto};
 use memo::utils::{IdPrefix, generate_id, generate_prefixed_id};
 use snafu::ResultExt;
-use tokio::time::sleep;
 use turso::{Connection, Row};
 
+use crate::Result;
 use crate::db_pool::DbPool;
 use crate::error::{DbPrepareSnafu, DbStatementSnafu, ValidationSnafu};
+use crate::retry::{WRITE_ATTEMPTS, retry_contention};
 use crate::turso_decode::{
     FromTursoRow, collect_row, opt_row_integer, opt_row_text, row_integer, row_text,
 };
 use crate::turso_params::{integer_param, text_param};
-use crate::{Error, Result};
 
 const COLUMNS: &str = "id, job_type, payload, status, attempts, max_attempts, available_at, \
     lease_token, lease_expires_at, last_error, created_at, updated_at";
@@ -74,8 +74,11 @@ impl JobRepo {
 
     /// Enqueue a new pending job.
     pub async fn enqueue(&self, input: NewJobDto) -> Result<JobDto> {
-        let conn = self.db_pool.acquire().await?;
-        Self::enqueue_on(&conn, input).await
+        retry_contention(WRITE_ATTEMPTS, || async {
+            let conn = self.db_pool.acquire().await?;
+            Self::enqueue_on(&conn, input.clone()).await
+        })
+        .await
     }
 
     pub(crate) async fn enqueue_on(conn: &Connection, input: NewJobDto) -> Result<JobDto> {
@@ -126,82 +129,37 @@ impl JobRepo {
 
     /// Conditionally claim the next eligible job, or return None if none is available.
     pub async fn claim_next(&self, lease_duration: Duration) -> Result<Option<JobDto>> {
+        retry_contention(WRITE_ATTEMPTS, || self.claim_next_once(lease_duration)).await
+    }
+
+    async fn claim_next_once(&self, lease_duration: Duration) -> Result<Option<JobDto>> {
         let conn = self.db_pool.acquire().await?;
-        // Validate even when there is no eligible job.
-        lease_expiry(now(), lease_duration)?;
-        let timestamp = now();
-        let select = format!(
-            "SELECT {COLUMNS} FROM jobs WHERE status = 'pending' \
-             AND available_at <= :now AND attempts < max_attempts \
-             ORDER BY available_at, created_at, id LIMIT 1"
-        );
-        let candidate: Option<JobDto> = {
-            let mut stmt = conn.prepare(select).await.context(DbPrepareSnafu)?;
-            collect_row(stmt.query_row(vec![integer_param(":now", timestamp)]).await)?
-        };
-        let Some(candidate) = candidate else {
-            return Ok(None);
-        };
         let timestamp = now();
         let expiry = lease_expiry(timestamp, lease_duration)?;
         let token = generate_id();
-        let sql = "UPDATE jobs SET status = 'running', attempts = attempts + 1, \
+        let sql = format!(
+            "UPDATE jobs SET status = 'running', attempts = attempts + 1, \
              lease_token = :token, lease_expires_at = :expiry, updated_at = :now \
-             WHERE id = :id AND status = 'pending' AND available_at <= :now \
-             AND attempts < max_attempts";
-        let affected = {
-            let mut stmt = conn.prepare(sql).await.context(DbPrepareSnafu)?;
-            stmt.execute(vec![
-                text_param(":id", candidate.id.clone()),
-                text_param(":token", token.clone()),
+             WHERE id = (SELECT id FROM jobs WHERE status = 'pending' \
+                         AND available_at <= :now AND attempts < max_attempts \
+                         ORDER BY available_at, created_at, id LIMIT 1) \
+               AND status = 'pending' AND available_at <= :now AND attempts < max_attempts \
+             RETURNING {COLUMNS}"
+        );
+        let mut stmt = conn.prepare(sql).await.context(DbPrepareSnafu)?;
+        collect_row(
+            stmt.query_row(vec![
+                text_param(":token", token),
                 integer_param(":expiry", expiry),
                 integer_param(":now", timestamp),
             ])
-            .await
-            .context(DbStatementSnafu)?
-        };
-        if affected == 0 {
-            return Ok(None);
-        }
-        let query = format!(
-            "SELECT {COLUMNS} FROM jobs WHERE id = :id AND status = 'running' \
-             AND lease_token = :token AND lease_expires_at > :now"
-        );
-        let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
-        let claimed = collect_row(
-            stmt.query_row(vec![
-                text_param(":id", candidate.id),
-                text_param(":token", token),
-                integer_param(":now", now()),
-            ])
             .await,
-        )?;
-        match claimed {
-            Some(job) => Ok(Some(job)),
-            None => Err("Claimed job could not be retrieved with its unexpired lease".into()),
-        }
+        )
     }
 
     /// Complete a job if the lease token still matches and has not expired.
     pub async fn complete(&self, job_id: &str, lease_token: &str) -> Result<bool> {
-        let mut delay = Duration::from_millis(100);
-        let mut attempt = 1;
-        loop {
-            match self.complete_once(job_id, lease_token).await {
-                Err(Error::DbPrepare { ref source } | Error::DbStatement { ref source })
-                    if attempt < 5
-                        && matches!(
-                            source,
-                            turso::Error::Busy(_) | turso::Error::BusySnapshot(_)
-                        ) =>
-                {
-                    sleep(delay).await;
-                    delay *= 2;
-                    attempt += 1;
-                }
-                result => return result,
-            }
-        }
+        retry_contention(WRITE_ATTEMPTS, || self.complete_once(job_id, lease_token)).await
     }
 
     async fn complete_once(&self, job_id: &str, lease_token: &str) -> Result<bool> {
@@ -225,6 +183,19 @@ impl JobRepo {
     /// Retry at the specified Unix timestamp, or mark failed if attempts are exhausted.
     /// Returns false if the lease token no longer matches or has expired.
     pub async fn fail(
+        &self,
+        job_id: &str,
+        lease_token: &str,
+        error: &str,
+        retry_at: i64,
+    ) -> Result<bool> {
+        retry_contention(WRITE_ATTEMPTS, || {
+            self.fail_once(job_id, lease_token, error, retry_at)
+        })
+        .await
+    }
+
+    async fn fail_once(
         &self,
         job_id: &str,
         lease_token: &str,
@@ -258,6 +229,18 @@ impl JobRepo {
         lease_token: &str,
         lease_duration: Duration,
     ) -> Result<bool> {
+        retry_contention(WRITE_ATTEMPTS, || {
+            self.extend_lease_once(job_id, lease_token, lease_duration)
+        })
+        .await
+    }
+
+    async fn extend_lease_once(
+        &self,
+        job_id: &str,
+        lease_token: &str,
+        lease_duration: Duration,
+    ) -> Result<bool> {
         let conn = self.db_pool.acquire().await?;
         let timestamp = now();
         let expiry = lease_expiry(timestamp, lease_duration)?;
@@ -278,6 +261,10 @@ impl JobRepo {
 
     /// Recover expired leases, returning the number of jobs changed.
     pub async fn recover_expired(&self) -> Result<u64> {
+        retry_contention(WRITE_ATTEMPTS, || self.recover_expired_once()).await
+    }
+
+    async fn recover_expired_once(&self) -> Result<u64> {
         let conn = self.db_pool.acquire().await?;
         let timestamp = now();
         let sql = "UPDATE jobs SET status = CASE WHEN attempts < max_attempts THEN 'pending' ELSE 'failed' END, \
@@ -294,6 +281,10 @@ impl JobRepo {
 
     /// Delete completed and failed jobs updated before the Unix timestamp cutoff.
     pub async fn delete_finished_before(&self, cutoff: i64) -> Result<u64> {
+        retry_contention(WRITE_ATTEMPTS, || self.delete_finished_before_once(cutoff)).await
+    }
+
+    async fn delete_finished_before_once(&self, cutoff: i64) -> Result<u64> {
         let conn = self.db_pool.acquire().await?;
         let mut stmt = conn
             .prepare(
@@ -325,7 +316,9 @@ impl JobRepo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Error;
     use crate::test::TestCtx;
+    use tokio::time::sleep;
     use turso::Value;
 
     fn input(max_attempts: i64, available_at: i64) -> NewJobDto {
@@ -513,6 +506,40 @@ mod tests {
         assert_eq!(completed.status, JobStatus::Completed);
         assert_eq!(completed.attempts, job.attempts);
         assert!(completed.lease_token.is_none() && completed.lease_expires_at.is_none());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn claim_retries_write_contention_without_consuming_an_attempt() -> Result<()> {
+        let ctx = TestCtx::new("jobs-claim-contention").await?;
+        let repo = &ctx.db.jobs;
+        let job = repo.enqueue(input(2, now())).await?;
+        let blocker = repo.db_pool.acquire().await?;
+        blocker
+            .execute("BEGIN IMMEDIATE", ())
+            .await
+            .context(DbStatementSnafu)?;
+
+        let claim = repo.claim_next(Duration::from_secs(60));
+        tokio::pin!(claim);
+        tokio::select! {
+            biased;
+            result = &mut claim => panic!("claim returned while write was blocked: {result:?}"),
+            _ = sleep(Duration::from_millis(50)) => {}
+        }
+        blocker
+            .execute("ROLLBACK", ())
+            .await
+            .context(DbStatementSnafu)?;
+
+        let claimed = claim.await?.unwrap();
+        assert_eq!(claimed.id, job.id);
+        assert_eq!(claimed.attempts, 1);
+        assert_eq!(claimed.status, JobStatus::Running);
+        assert_eq!(
+            repo.get(&job.id).await?.unwrap().lease_token,
+            claimed.lease_token
+        );
         Ok(())
     }
 

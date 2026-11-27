@@ -1,15 +1,14 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use snafu::{ResultExt, ensure};
-use tokio::time::sleep;
 use turso::Row;
 
+use crate::Result;
 use crate::db_pool::DbPool;
 use crate::error::{DbPrepareSnafu, DbStatementSnafu, ValidationSnafu};
+use crate::retry::{WRITE_ATTEMPTS, retry_contention};
 use crate::turso_decode::{FromTursoRow, collect_row, row_integer, row_text};
 use crate::turso_params::{integer_param, text_param};
-use crate::{Error, Result};
 use memo::file::{UploadDto, UploadStatus};
 
 impl FromTursoRow for UploadDto {
@@ -61,24 +60,7 @@ impl UploadRepo {
             }
         );
 
-        let mut delay = Duration::from_millis(100);
-        let mut attempt = 1;
-        loop {
-            match self.reserve_once(upload).await {
-                Err(Error::DbPrepare { ref source } | Error::DbStatement { ref source })
-                    if attempt < 5
-                        && matches!(
-                            source,
-                            turso::Error::Busy(_) | turso::Error::BusySnapshot(_)
-                        ) =>
-                {
-                    sleep(delay).await;
-                    delay *= 2;
-                    attempt += 1;
-                }
-                result => return result,
-            }
-        }
+        retry_contention(WRITE_ATTEMPTS, || self.reserve_once(upload)).await
     }
 
     async fn reserve_once(&self, upload: &UploadDto) -> Result<()> {
@@ -110,11 +92,14 @@ impl UploadRepo {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
-    use crate::{dir::NewDir, test::TestCtx};
+    use crate::{Error, dir::NewDir, test::TestCtx};
     use memo::dir::DirType;
     use memo::file::{FileDto, FileStatus, FileType};
     use memo::job::NewJobDto;
+    use tokio::time::sleep;
 
     fn pending_upload() -> UploadDto {
         UploadDto {
