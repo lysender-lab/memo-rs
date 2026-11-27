@@ -93,6 +93,20 @@ impl ProviderClient {
         }
     }
 
+    pub async fn generate_download_url(
+        &self,
+        bucket_name: &str,
+        storage_key: &str,
+    ) -> Result<String> {
+        match self {
+            Self::Aws(provider) => {
+                provider
+                    .generate_download_url(bucket_name, storage_key)
+                    .await
+            }
+        }
+    }
+
     pub async fn generate_upload_url(&self, req: UploadUrlRequest<'_>) -> Result<String> {
         match self {
             Self::Aws(provider) => provider.generate_upload_url(req).await,

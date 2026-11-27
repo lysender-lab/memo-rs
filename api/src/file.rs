@@ -7,14 +7,15 @@ use exif::{In, Tag};
 use image::DynamicImage;
 use image::ImageReader;
 use image::imageops;
-use snafu::ResultExt;
+use snafu::{OptionExt, ResultExt};
 use tracing::error;
 
 use crate::error::DbSnafu;
 use crate::error::TokioJoinSnafu;
-use crate::error::{ExifInfoSnafu, StorageSnafu, UploadFileSnafu, ValidationSnafu};
+use crate::error::{
+    ExifInfoSnafu, StorageSnafu, UploadFileSnafu, UploadTokenSnafu, ValidationSnafu,
+};
 use crate::state::AppState;
-use crate::token::FileUploadClaims;
 use crate::token::create_upload_token;
 use crate::{Error, Result};
 use db::file::MAX_FILES;
@@ -458,16 +459,15 @@ pub async fn delete_file_svc(state: AppState, dir_meta: &DirMeta, file: &FileDto
     Ok(())
 }
 
-/// Creates a file record relying completely from upload metadata
-/// Assumes that the file has been uploaded already
+/// Records a completed upload using reservation metadata.
 pub async fn create_remote_file_svc(
-    state: AppState,
+    state: &AppState,
     dir: &DirDto,
-    data: &FileUploadClaims,
+    upload: &UploadDto,
 ) -> Result<FileDto> {
     let today = chrono::Utc::now().timestamp();
 
-    let is_image = data.is_image();
+    let is_image = ALLOWED_IMAGE_TYPES.contains(&upload.content_type.as_str());
     if dir.dir_type == DirType::Photos && !is_image {
         return ValidationSnafu {
             msg: "Only photos are allowed".to_string(),
@@ -476,8 +476,8 @@ pub async fn create_remote_file_svc(
     }
     let file = FileDto {
         id: generate_prefixed_id(IdPrefix::File),
-        org_id: dir.org_id.clone(),
-        dir_id: dir.id.clone(),
+        org_id: upload.org_id.clone(),
+        dir_id: upload.dir_id.clone(),
         file_type: if is_image {
             FileType::Image
         } else {
@@ -488,10 +488,10 @@ pub async fn create_remote_file_svc(
         } else {
             FileStatus::Active
         },
-        name: data.orig_filename.clone(),
-        filename: data.new_filename.clone(),
-        content_type: data.content_type.clone(),
-        size: data.size,
+        name: upload.original_filename.clone(),
+        filename: upload.filename.clone(),
+        content_type: upload.content_type.clone(),
+        size: upload.size,
         url: None,
         img_versions: None,
         img_taken_at: None,
@@ -517,41 +517,37 @@ pub async fn create_remote_file_svc(
     if state
         .db
         .files
-        .find_by_name(&dir.id, &data.orig_filename)
+        .find_by_name(&dir.id, &upload.original_filename)
         .await
         .context(DbSnafu)?
         .is_some()
     {
         // Show error but ensure name is not too long
-        let short_name = truncate_string(&data.orig_filename, 20);
+        let short_name = truncate_string(&upload.original_filename, 20);
         return Err(Error::Validation {
             msg: format!("{} already exists", short_name),
         });
     }
 
-    // Save to database
-    let create_res = state.db.files.retry_create(file, 5).await.context(DbSnafu);
+    let job = is_image.then(|| crate::job::create_image_versions_job(file.id.clone()));
+    let file = state
+        .db
+        .files
+        .finalize_upload(&upload.id, &file, job)
+        .await
+        .context(DbSnafu)?
+        .context(UploadTokenSnafu)?;
 
-    match create_res {
-        Ok(file) => {
-            // Also update dir
-            let today = chrono::Utc::now().timestamp();
-            let dir_result = state
-                .db
-                .dirs
-                .retry_update_timestamp(&dir.id, today, 5)
-                .await
-                .context(DbSnafu);
-
-            if let Err(e) = dir_result {
-                // Can't afford to fail here, we will just log the error...
-                error!("{}", e);
-            }
-
-            Ok(file)
-        }
-        Err(e) => Err(e),
+    if let Err(error) = state
+        .db
+        .dirs
+        .retry_update_timestamp(&dir.id, chrono::Utc::now().timestamp(), 5)
+        .await
+        .context(DbSnafu)
+    {
+        error!("{}", error);
     }
+    Ok(file)
 }
 
 fn cleanup_temp_uploads(data: &DownloadedFile, file: Option<&FileDto>) -> Result<()> {

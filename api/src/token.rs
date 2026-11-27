@@ -1,6 +1,6 @@
 use base64::prelude::*;
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
-use memo::file::{ALLOWED_IMAGE_TYPES, UploadDto};
+use memo::file::UploadDto;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use snafu::ensure;
@@ -45,14 +45,8 @@ pub struct FileUploadClaims {
     pub exp: usize,
 }
 
-impl FileUploadClaims {
-    pub fn is_image(&self) -> bool {
-        ALLOWED_IMAGE_TYPES.contains(&self.content_type.as_str())
-    }
-}
-
 pub fn create_upload_token(upload: &UploadDto, secret: &str) -> Result<String> {
-    // File creation still reads metadata directly from the token.
+    // Retain metadata for compatibility with older API instances.
     let claims = FileUploadClaims {
         sub: "upload".to_string(),
         upload_id: upload.id.clone(),
@@ -84,7 +78,7 @@ pub fn verify_upload_token(token: &str, secret: &str) -> Result<FileUploadClaims
     };
 
     ensure!(
-        !decoded.claims.sub.is_empty() && !decoded.claims.upload_id.trim().is_empty(),
+        decoded.claims.sub == "upload" && !decoded.claims.upload_id.trim().is_empty(),
         UploadTokenSnafu
     );
     Ok(decoded.claims)

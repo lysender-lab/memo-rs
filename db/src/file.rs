@@ -5,11 +5,15 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
-use turso::Row;
+use turso::{
+    Connection, Row,
+    transaction::{DropBehavior, TransactionBehavior},
+};
 use validator::Validate;
 
 use crate::db_pool::DbPool;
 use crate::error::{DbPrepareSnafu, DbStatementSnafu, DbTransactionSnafu, ValidationSnafu};
+use crate::job::JobRepo;
 use crate::turso_decode::{
     FromTursoRow, collect_count, collect_row, collect_rows, opt_row_integer, opt_row_text,
     row_integer, row_text,
@@ -20,6 +24,7 @@ use crate::turso_params::{
 use crate::{Error, Result};
 use memo::dir::DirDto;
 use memo::file::{FileDto, FileStatus, FileType, ImgVersionDto};
+use memo::job::NewJobDto;
 use memo::note::NoteDto;
 use memo::pagination::Paginated;
 use memo::utils::{IdPrefix, generate_prefixed_id};
@@ -354,6 +359,11 @@ impl FileRepo {
     }
 
     pub async fn create(&self, data: FileDto) -> Result<FileDto> {
+        let conn = self.db_pool.acquire().await?;
+        Self::create_on(&conn, &data).await
+    }
+
+    async fn create_on(conn: &Connection, data: &FileDto) -> Result<FileDto> {
         let file: FileRow = data.clone().into();
 
         let query = r#"
@@ -409,11 +419,102 @@ impl FileRepo {
         q_params.push(integer_param(":created_at", file.created_at));
         q_params.push(integer_param(":updated_at", file.updated_at));
 
-        let conn = self.db_pool.acquire().await?;
         let mut stmt = conn.prepare(query).await.context(DbPrepareSnafu)?;
         stmt.execute(q_params).await.context(DbStatementSnafu)?;
 
         file.try_into()
+    }
+
+    /// Consume a reservation only if the file and any processing job can be committed.
+    pub async fn finalize_upload(
+        &self,
+        upload_id: &str,
+        file: &FileDto,
+        job: Option<NewJobDto>,
+    ) -> Result<Option<FileDto>> {
+        let mut delay = Duration::from_millis(100);
+        let mut attempt = 1;
+        loop {
+            match self
+                .finalize_upload_once(upload_id, file, job.clone())
+                .await
+            {
+                Err(
+                    Error::DbStatement { ref source }
+                    | Error::DbTransaction { ref source }
+                    | Error::DbPrepare { ref source },
+                ) if attempt < 5
+                    && matches!(
+                        source,
+                        turso::Error::Busy(_) | turso::Error::BusySnapshot(_)
+                    ) =>
+                {
+                    sleep(delay).await;
+                    delay *= 2;
+                    attempt += 1;
+                }
+                result => return result,
+            }
+        }
+    }
+
+    async fn finalize_upload_once(
+        &self,
+        upload_id: &str,
+        file: &FileDto,
+        job: Option<NewJobDto>,
+    ) -> Result<Option<FileDto>> {
+        let mut conn = self.db_pool.acquire().await?;
+        let mut tx = conn
+            .transaction_with_behavior(TransactionBehavior::Concurrent)
+            .await
+            .context(DbTransactionSnafu)?;
+        let result = async {
+            let mut stmt = tx
+                .prepare(
+                    "DELETE FROM uploads WHERE id = :id AND org_id = :org_id AND dir_id = :dir_id \
+                     AND status = 'pending' AND expires_at > :now \
+                     AND EXISTS (SELECT 1 FROM dirs WHERE id = :dir_id AND org_id = :org_id \
+                                 AND deleted_at IS NULL)",
+                )
+                .await
+                .context(DbPrepareSnafu)?;
+            let consumed = stmt
+                .execute(vec![
+                    text_param(":id", upload_id.to_owned()),
+                    text_param(":org_id", file.org_id.clone()),
+                    text_param(":dir_id", file.dir_id.clone()),
+                    integer_param(":now", chrono::Utc::now().timestamp()),
+                ])
+                .await
+                .context(DbStatementSnafu)?;
+            if consumed == 0 {
+                return Ok(None);
+            }
+            let file = Self::create_on(&tx, file).await?;
+            if let Some(job) = job {
+                JobRepo::enqueue_on(&tx, job).await?;
+            }
+            Ok(Some(file))
+        }
+        .await;
+
+        // Resolve the transaction before returning the connection to the pool.
+        // Prepared statements on a reused Turso connection do not run deferred rollback.
+        let result = match result {
+            Ok(Some(file)) => tx
+                .execute("COMMIT", ())
+                .await
+                .context(DbTransactionSnafu)
+                .map(|_| Some(file)),
+            other => other,
+        };
+        if !tx.is_autocommit().context(DbTransactionSnafu)? {
+            tx.rollback().await.context(DbTransactionSnafu)?;
+        } else {
+            tx.set_drop_behavior(DropBehavior::Ignore);
+        }
+        result
     }
 
     pub async fn retry_create(&self, file_dto: FileDto, max_retries: usize) -> Result<FileDto> {

@@ -256,6 +256,14 @@ impl AwsStorageProvider {
         format_file_single(&self.client, dir, file).await
     }
 
+    pub async fn generate_download_url(
+        &self,
+        bucket_name: &str,
+        storage_key: &str,
+    ) -> Result<String> {
+        generate_signed_url(&self.client, bucket_name, storage_key).await
+    }
+
     pub async fn generate_upload_url(&self, req: UploadUrlRequest<'_>) -> Result<String> {
         let start_time = SystemTime::now();
         let expires_in = req.deadline.duration_since(start_time).unwrap_or_default();

@@ -86,6 +86,16 @@ impl StorageClient {
         self.provider.attach_url(dir, file).await
     }
 
+    pub async fn generate_download_url(
+        &self,
+        bucket_name: &str,
+        storage_key: &str,
+    ) -> Result<String> {
+        self.provider
+            .generate_download_url(bucket_name, storage_key)
+            .await
+    }
+
     pub async fn generate_upload_url(
         &self,
         bucket_name: &str,

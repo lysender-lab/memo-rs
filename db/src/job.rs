@@ -4,7 +4,7 @@ use std::time::Duration;
 use memo::job::{JobDto, JobStatus, NewJobDto};
 use memo::utils::{IdPrefix, generate_id, generate_prefixed_id};
 use snafu::ResultExt;
-use turso::Row;
+use turso::{Connection, Row};
 
 use crate::Result;
 use crate::db_pool::DbPool;
@@ -73,6 +73,11 @@ impl JobRepo {
 
     /// Enqueue a new pending job.
     pub async fn enqueue(&self, input: NewJobDto) -> Result<JobDto> {
+        let conn = self.db_pool.acquire().await?;
+        Self::enqueue_on(&conn, input).await
+    }
+
+    pub(crate) async fn enqueue_on(conn: &Connection, input: NewJobDto) -> Result<JobDto> {
         if input.job_type.trim().is_empty() || input.max_attempts <= 0 {
             return ValidationSnafu {
                 msg: "Job type must be nonempty and max_attempts must be positive".to_string(),
@@ -85,7 +90,6 @@ impl JobRepo {
             }
             .fail();
         }
-        let conn = self.db_pool.acquire().await?;
         let timestamp = now();
         let job = JobDto {
             id: generate_prefixed_id(IdPrefix::Job),

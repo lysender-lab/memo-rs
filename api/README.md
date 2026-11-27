@@ -94,8 +94,9 @@ Image uploads create a file record with status `processing` and enqueue a
 `create_image_versions` job. The response is returned before image versions
 are available. A worker downloads the original, generates and uploads versions,
 and marks the file `active`. Failed jobs are retried by the queue; a file stays
-in `processing` if all attempts fail or enqueueing fails. Workers must be enabled
-for images to be processed.
+in `processing` if all attempts fail. If enqueueing fails, file creation rolls
+back and the upload reservation remains available. Workers must be enabled for
+images to be processed.
 
 Deleting a non-note file marks an active file `inactive` and queues a
 `delete_file` job. The worker deletes the record and then its storage objects.
@@ -110,9 +111,12 @@ The upload-URL response and signed token both include the required `upload_id`.
 Deploy the updated API before the updated website. Tokens issued before this
 change cannot finalize, so let in-flight uploads finish before the API cutover.
 Apply migration `15-create-uploads.sql` before deploying this change. File
-creation still reads metadata from the token and assumes the upload succeeded.
-It does not consume reservations yet, so abandoned-upload cleanup must remain
-disabled until finalization can distinguish captured files from abandoned uploads.
+creation validates the reservation against the authorized directory and uses
+its metadata. It consumes the reservation in the same transaction as creating
+the file and enqueuing any image-processing job. The API still assumes the S3
+upload succeeded. Abandoned-upload cleanup has not been implemented.
+Reservations left by older API instances may already have a corresponding
+file record. Reconcile those rows before enabling abandoned-upload cleanup.
 
 The intended lifecycle uses the `uploads` table as the authoritative reservation:
 
