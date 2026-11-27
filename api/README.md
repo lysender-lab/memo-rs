@@ -106,6 +106,9 @@ without a job; storage failures are retried using the metadata in the job.
 
 **Partially implemented.** The API persists a pending reservation before
 returning a direct S3 upload URL and a token, both with a one-hour deadline.
+The upload-URL response and signed token both include the required `upload_id`.
+Deploy the updated API before the updated website. Tokens issued before this
+change cannot finalize, so let in-flight uploads finish before the API cutover.
 Apply migration `15-create-uploads.sql` before deploying this change. File
 creation still reads metadata from the token and assumes the upload succeeded.
 It does not consume reservations yet, so abandoned-upload cleanup must remain

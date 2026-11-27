@@ -208,7 +208,6 @@ pub async fn generate_upload_url_svc(
         expires_at: created_at + UPLOAD_LIFETIME_SECONDS,
     };
 
-    let token = create_upload_token(&upload, &state.config.jwt_secret)?;
     let deadline = UNIX_EPOCH + Duration::from_secs(upload.expires_at as u64);
     let upload_url = state
         .storage_client
@@ -220,6 +219,7 @@ pub async fn generate_upload_url_svc(
         )
         .await
         .context(StorageSnafu)?;
+    let response = signed_upload_response(&upload, upload_url, &state.config.jwt_secret)?;
 
     // Neither signed credential leaves the API until the reservation is durable.
     state.db.uploads.reserve(&upload).await.context(DbSnafu)?;
@@ -227,12 +227,22 @@ pub async fn generate_upload_url_svc(
         return Err("Upload reservation expired before the URL could be returned".into());
     }
 
+    Ok(response)
+}
+
+fn signed_upload_response(
+    upload: &UploadDto,
+    url: String,
+    secret: &str,
+) -> Result<SignedFileUploadDto> {
+    let token = create_upload_token(upload, secret)?;
     Ok(SignedFileUploadDto {
-        orig_filename: upload.original_filename,
-        new_filename: upload.filename,
-        content_type: upload.content_type,
+        upload_id: upload.id.clone(),
+        orig_filename: upload.original_filename.clone(),
+        new_filename: upload.filename.clone(),
+        content_type: upload.content_type.clone(),
         size: upload.size,
-        url: upload_url,
+        url,
         token,
     })
 }
@@ -862,6 +872,36 @@ fn parse_exif_info(path: &PathBuf) -> Result<PhotoExif> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::token::verify_upload_token;
+
+    #[test]
+    fn signed_upload_response_matches_token_reservation_id() {
+        let created_at = chrono::Utc::now().timestamp();
+        let reservation = UploadDto {
+            id: generate_prefixed_id(IdPrefix::Upload),
+            org_id: "org".into(),
+            dir_id: "dir".into(),
+            original_filename: "photo.jpg".into(),
+            filename: "stored-photo.jpg".into(),
+            content_type: "image/jpeg".into(),
+            size: 10,
+            storage_key: "org/photos/dir/orig/stored-photo.jpg".into(),
+            status: UploadStatus::Pending,
+            created_at,
+            expires_at: created_at + UPLOAD_LIFETIME_SECONDS,
+        };
+        let secret = "test-secret";
+        let response =
+            signed_upload_response(&reservation, "https://example.com/upload".into(), secret)
+                .unwrap();
+        let json = serde_json::to_value(response).unwrap();
+        assert_eq!(json["upload_id"].as_str(), Some(reservation.id.as_str()));
+
+        // The website decodes this JSON using the same shared DTO.
+        let response: SignedFileUploadDto = serde_json::from_value(json).unwrap();
+        let claims = verify_upload_token(&response.token, secret).unwrap();
+        assert_eq!(response.upload_id, claims.upload_id);
+    }
 
     #[test]
     fn jpeg_with_avif_filename_generates_jpeg_versions() {

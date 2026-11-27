@@ -310,6 +310,7 @@ pub struct SignedRemoteUploadDto {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedFileUploadDto {
+    pub upload_id: String,
     pub orig_filename: String,
     pub new_filename: String,
     pub content_type: String,
